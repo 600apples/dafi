@@ -6,16 +6,17 @@ from tempfile import gettempdir
 from typing import Any, NoReturn, Optional
 
 from filelock import FileLock
-from dafi.interface import BackEnd
+
+from dafi.interface import BackEndI
 
 
 class BackEndKeys:
-    MASTER_STATUS = "master_status"
-    MASTER_NAME = "master_name"
-    MASTER_HEALTHCHECK_TS = "master_healthcheck_ts"
+    CONTROLLER_STATUS = "controller_status"
+    CONTROLLER_NAME = "controller_name"
+    CONTROLLER_HEALTHCHECK_TS = "controller_healthcheck_ts"
 
 
-class LocalBackEnd(BackEnd):
+class LocalBackEnd(BackEndI):
     IPC_STORAGE = Path(gettempdir()) / "ipc"
 
     @property
@@ -36,7 +37,10 @@ class LocalBackEnd(BackEnd):
 
     def read(self, key: str, default: Optional[Any] = None) -> Any:
         with self.store as backend_store:
-            return backend_store.get(key, default)
+            try:
+                return backend_store[key]
+            except (AttributeError, KeyError):
+                return default
 
     def write(self, key: str, value: Any) -> NoReturn:
         with self.lock, self.store as backend_store:
@@ -54,4 +58,3 @@ class LocalBackEnd(BackEnd):
                 del backend_store[key]
             except KeyError:
                 ...
-

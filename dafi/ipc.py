@@ -1,100 +1,188 @@
 import time
+from inspect import iscoroutinefunction
+from threading import Thread, Event
+from typing import NoReturn, Dict, Union, Optional, Callable, Any, Tuple
+
+from anyio import EndOfStream
 from anyio.from_thread import start_blocking_portal
 
-from threading import Thread, Event
-from dafi.backend import BackEndKeys, BackEnd
+from dafi.async_result import AsyncResult
+from dafi.backend import BackEndKeys, BackEndI
+from dafi.components import ControllerStatus
+from dafi.components.controller import Controller
+from dafi.components.node import Node
 from dafi.exceptions import InitializationError, GlobalContextError
-from dafi.components import MasterStatus
-from dafi.components.unix import UnixSocketMaster, UnixSocketNode
+from dafi.message import Message, MessageFlag
 from dafi.signals import set_signal_handler
-from dafi.messaging import Message, MessageFlag
+from dafi.utils.misc import resilent
+from dafi.utils.func_validation import pretty_callbacks
+from dafi.utils.mappings import NODE_CALLBACK_MAPPING, search_cb_info_in_mapping
 
 
-class Ipc:
-
-    def __init__(self, process_name: str, backend: BackEnd, init_master: bool, init_node: bool):
-        self.start_event = Event()
-        self.stop_event = Event()
-        self.worker_thread = None
-        self.master = self.node = None
-
+class Ipc(Thread):
+    def __init__(self, process_name: str, backend: BackEndI, init_controller: bool, init_node: bool, stop_event: Event):
+        super().__init__()
         self.process_name = process_name
         self.backend = backend
-        self.init_master = init_master
+        self.init_controller = init_controller
         self.init_node = init_node
+        self.stop_event = stop_event
 
-        if not (self.init_master or self.init_node):
-            raise InitializationError("At least one of 'init_master' or 'init_node' must be True.")
+        self.daemon = True
+        self.start_event = Event()
+        self.controller = self.node = None
+
+        if not (self.init_controller or self.init_node):
+            raise InitializationError("At least one of 'init_controller' or 'init_node' must be True.")
 
         set_signal_handler(self.stop)
 
-    def call(self, func_name):
-        def dec(*args, **kwargs):
-            if not self.node:
-                raise GlobalContextError(
-                    "The node has not been initialized in the current process."
-                    " Make sure you passed 'init_node' = True in Global object."
-                )
-            msg = Message(
-                flag=MessageFlag.REQUEST,
-                transmitter=self.process_name,
-                func_name=func_name,
-                args=args,
-                kwargs=kwargs
-            )
-            self.node.send(msg.dumps())
-        return dec
+    @property
+    def is_running(self) -> bool:
+        return self.start_event.is_set()
 
-    def start(self):
-        self.worker_thread = Thread(target=self._start, daemon=True)
-        self.worker_thread.start()
-        # Wait initialization of Master and Node
+    def wait(self) -> NoReturn:
         self.start_event.wait()
 
-    def _start(self):
+    def call(
+        self,
+        func_name,
+        args: Tuple,
+        kwargs: Dict,
+        timeout: Optional[Union[int, float]] = None,
+        async_: Optional[bool] = False,
+        eta: Optional[Union[int, float]] = 0,
+        return_result: Optional[bool] = True,
+    ):
+        if not self.node:
+            raise GlobalContextError(
+                "Support for invoking remote calls is not enabled"
+                " The node has not been initialized in the current process."
+                " Make sure you passed 'init_node' = True in Global object."
+            )
 
-        if self.init_master:
-            master_status = self.backend.read(BackEndKeys.MASTER_STATUS)
-            master_hc_ts = self.backend.read(BackEndKeys.MASTER_HEALTHCHECK_TS)
+        assert func_name is not None
+        data = search_cb_info_in_mapping(NODE_CALLBACK_MAPPING, func_name, exclude=self.process_name)
+        if not data:
+            if NODE_CALLBACK_MAPPING.get(self.process_name, {}).get(func_name):
+                raise GlobalContextError(
+                    f"function {func_name} not found on remote processes but found locally."
+                    f" Communication between local node and the controller is prohibited."
+                    f" You can always call the callback locally via regular python syntax as usual function."
+                )
+            else:
+                # Get all callbacks without local
+                available_callbacks = pretty_callbacks(exclude_proc=self.process_name, format="string")
+                raise GlobalContextError(
+                    f"function {func_name} not found on remote\n."
+                    f"Available registered callbacks:\n {available_callbacks}"
+                )
+
+        _, cb_info = data
+
+        result = None
+        msg = Message(
+            flag=MessageFlag.REQUEST,
+            transmitter=self.process_name,
+            func_name=func_name,
+            func_args=args,
+            func_kwargs=kwargs,
+            return_result=return_result,
+        )
+
+        if return_result:
+            result = AsyncResult(
+                func_name=func_name,
+                uuid=msg.uuid,
+            )
+        self.node.register_result(result)
+        self.node.send(msg.dumps(), eta)
+
+        if not async_ and return_result:
+            result = result.get(timeout=timeout)
+        return result
+
+    def run(self) -> NoReturn:
+        if self.init_controller:
+            controller_status = self.backend.read(BackEndKeys.CONTROLLER_STATUS)
+            controller_hc_ts = self.backend.read(BackEndKeys.CONTROLLER_HEALTHCHECK_TS)
+
             if (
-                    master_status != MasterStatus.RUNNING
-                    or
-                    not master_hc_ts
-                    or
-                    (time.time() - master_hc_ts) > UnixSocketMaster.TIMEOUT
+                controller_status != ControllerStatus.RUNNING
+                or not controller_hc_ts
+                or (time.time() - controller_hc_ts) > Controller.TIMEOUT
             ):
-                self.backend.delete_key(BackEndKeys.MASTER_HEALTHCHECK_TS)
-                self.backend.delete_key(BackEndKeys.MASTER_STATUS)
+                self.backend.delete_key(BackEndKeys.CONTROLLER_HEALTHCHECK_TS)
+                self.backend.delete_key(BackEndKeys.CONTROLLER_STATUS)
             try:
-                self.backend.write_if_not_exist(BackEndKeys.MASTER_STATUS, MasterStatus.RUNNING)
-                self.master = UnixSocketMaster(self.process_name, self.backend, self.stop_event)
+                self.backend.write_if_not_exist(BackEndKeys.CONTROLLER_STATUS, ControllerStatus.RUNNING)
+                self.controller = Controller(self.process_name, self.backend, self.stop_event)
             except ValueError:
-                # Master has been initialized by other process
+                # Controller has been initialized by other process
                 ...
 
         if self.init_node:
-            self.node = UnixSocketNode(self.process_name, self.backend, self.stop_event)
+            self.node = Node(self.process_name, self.backend, self.stop_event)
 
-        if self.node or self.master:
-            m_future = n_future = wait_future = None
-            with start_blocking_portal() as portal:
-                if self.master:
-                    m_future = portal.start_task_soon(self.master.handle)
-                    wait_future, _ = portal.start_task(self.master.wait)
-                if self.node:
-                    n_future = portal.start_task_soon(self.node.handle)
+        if self.node or self.controller:
+            c_future = n_future = None
 
-                self.start_event.set()
-                self.stop_event.wait()
-                for future in filter(None, (wait_future, m_future, n_future)):
-                    try:
-                        future.cancel()
-                    except RuntimeError:
-                        ...
+            with resilent((RuntimeError, EndOfStream)):
+                with start_blocking_portal() as portal:
+                    if self.controller:
+                        c_future, _ = portal.start_task(self.controller.handle, name=Controller.__class__.__name__)
+
+                    if self.node:
+                        n_future, _ = portal.start_task(self.node.handle, name=Node.__class__.__name__)
+
+                    self.start_event.set()
+                    self.stop_event.wait()
+                    # Wait pending futures to complete their tasks
+                    time.sleep(1.5)
+                    for future in filter(None, (c_future, n_future)):
+                        if not future.done():
+                            future.cancel()
+
+    def update_callbacks(self, func_info: Dict[str, "CallbackInfo"]) -> NoReturn:
+        self.node.send(
+            Message(
+                flag=MessageFlag.UPDATE_CALLBACKS,
+                transmitter=self.process_name,
+                func_args=(func_info,),
+            ).dumps()
+        )
+
+    def transfer_and_call(self, remote_process: str, func: Callable[..., Any], *args, **kwargs) -> Any:
+        if not callable(func):
+            raise InitializationError("Provided func is not callable.")
+
+        if remote_process not in NODE_CALLBACK_MAPPING:
+            raise InitializationError(f"Seems process {remote_process!r} is not running.")
+
+        func_name = "__async_transfer_and_call" if iscoroutinefunction(func) else "__transfer_and_call"
+        msg = Message(
+            flag=MessageFlag.REQUEST,
+            transmitter=self.process_name,
+            receiver=remote_process,
+            func_name=func_name,
+            func_args=(func, *args),
+            func_kwargs=kwargs,
+        )
+        result = AsyncResult(
+            func_name=func_name,
+            uuid=msg.uuid,
+        )
+        self.node.register_result(result)
+
+        self.node.send(msg.dumps(), 0)
+        return result.get()
 
     def stop(self, *args, **kwargs):
         self.stop_event.set()
-        if self.master:
-            self.backend.delete_key(BackEndKeys.MASTER_HEALTHCHECK_TS)
-            self.backend.write(BackEndKeys.MASTER_STATUS, MasterStatus.UNAVAILABLE)
-        self.worker_thread.join()
+        for msg_uuid, ares in AsyncResult._awaited_results.items():
+            AsyncResult._awaited_results[msg_uuid] = None
+            if isinstance(ares, AsyncResult):
+                ares._ready.set()
+        if self.controller:
+            self.backend.delete_key(BackEndKeys.CONTROLLER_HEALTHCHECK_TS)
+            self.backend.write(BackEndKeys.CONTROLLER_STATUS, ControllerStatus.UNAVAILABLE)

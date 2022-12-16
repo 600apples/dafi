@@ -38,7 +38,10 @@ dependencies = [
     "anyio>=3.6.2",
     "dill>=0.3.6",
     "filelock>=3.8.2",
+    "tenacity>=8.1.0",
     "typing_extensions>=4.4.0",
+    "tblib==1.7.0",
+    "colorama>=0.4.6; sys.platform == 'win32'"
 ]
 dynamic = [
     "version",
@@ -85,3 +88,6 @@ exclude_lines = [
   "if __name__ == .__main__.:",
   "if TYPE_CHECKING:",
 ]
+
+[tool.black]
+line-length = 120

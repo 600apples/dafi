@@ -1,0 +1,29 @@
+"""
+Consumer is the process that consumes available remote functions.
+"""
+
+import asyncio
+from dafi import Global, FG
+
+
+async def main():
+    # Process name is not required argument and will be generated automatically if not provided.
+    g = Global()
+
+    print("Wait for publisher process to be started...")
+    await g.wait_function("static_method")
+
+    res = g.call.static_method(foo="bar") & FG
+    print(res)
+
+    res = g.call.method1() & FG
+    print(res)
+
+    res = g.call.method2(foo="bar") & FG
+    print(res)
+
+    g.stop()
+
+
+if __name__ == "__main__":
+    asyncio.run(main())
