@@ -57,8 +57,8 @@ path = "dafi/__about__.py"
 
 [tool.hatch.envs.default]
 dependencies = [
-  "pytest",
-  "pytest-cov",
+    "pytest",
+    "pytest-cov",
 ]
 [tool.hatch.envs.default.scripts]
 cov = "pytest --cov-report=term-missing --cov-config=pyproject.toml --cov=dafi --cov=tests {args}"
@@ -66,7 +66,9 @@ no-cov = "cov --no-cov {args}"
 
 [tool.hatch.envs.docs]
 dependencies = [
-  "mkdocs"
+    "mkdocs==1.4.2",
+    "mkdocs-material==8.5.9",
+    "mkdocs-section-index==0.3.4",
 ]
 [tool.hatch.envs.docs.scripts]
 build = "mkdocs build --clean --strict"

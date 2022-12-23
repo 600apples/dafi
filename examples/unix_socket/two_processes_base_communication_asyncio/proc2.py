@@ -16,7 +16,7 @@ async def cheers2():
 
 async def main():
     remote_proc = "Async White Rabbit"
-    g = Global(process_name=PROC_NAME)
+    g = Global(process_name=PROC_NAME, init_controller=False)
 
     print(f"wait for {remote_proc} process to be started...")
     await g.wait_process(remote_proc)
