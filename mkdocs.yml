@@ -22,8 +22,6 @@ theme:
         name: Switch to light mode
 nav:
   - Home: index.md
-  - Installation:
-      - Prepare your environment: installation/prepare-your-environment.md
 
 plugins:
   - search
