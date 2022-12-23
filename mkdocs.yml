@@ -1,5 +1,5 @@
 site_name: dafi
-site_url: ""
+site_url: https://600apples.github.io/dafi/
 site_dir: mkdocs_files
 extra_css:
   - stylesheets/extra.css
