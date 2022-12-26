@@ -64,8 +64,8 @@ class ClassCallbackInfo(NamedTuple):
 @dataclass
 class Global(metaclass=Singleton):
     process_name: Optional[str] = field(default_factory=uuid)
-    init_controller: Optional[bool] = True
-    init_node: Optional[bool] = True
+    init_controller: Optional[bool] = False
+    init_node: Optional[bool] = False
     """
     Args:
         process_name: Global process name. If specified it is used as reference key for callback response.
@@ -73,6 +73,13 @@ class Global(metaclass=Singleton):
     """
 
     def __post_init__(self):
+        if not (self.init_controller or self.init_node):
+            raise InitializationError(
+                "No components were found in current process."
+                "Provide at least one required argument"
+                " `init_controller=True` or `init_node=True`."
+            )
+
         self._stop_event = Event()
         self.ipc = Ipc(
             process_name=self.process_name,

@@ -41,7 +41,7 @@ class Node(UnixComponentBase):
     @with_debug_trace
     async def handle(self, *, task_status: TaskStatus = TASK_STATUS_IGNORED):
         self.loop = asyncio.get_running_loop()
-        self.item_store = Queue(loop=self.loop)
+        self.item_store = Queue()
 
         self.operations = NodeOperations()
         async for attempt in AsyncRetrying(

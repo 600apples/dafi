@@ -11,7 +11,7 @@ PROC_NAME = "White Rabbit"
 
 def main():
     # Process name is not required argument and will be generated automatically if not provided.
-    g = Global(process_name=PROC_NAME)
+    g = Global(process_name=PROC_NAME, init_node=True, init_controller=True)
     time.sleep(120)
     print("Exit.")
     g.stop()

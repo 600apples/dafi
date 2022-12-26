@@ -12,7 +12,7 @@ async def some_func() -> None:
 
 def main():
     # Process name is not required argument and will be generated automatically if not provided.
-    Global()
+    Global(init_node=True, init_controller=True)
 
     # Note:
     #   This process will be running infinitely.

@@ -1,5 +1,5 @@
 from trio import sleep, run
-from dafi import Global, callback, GlobalContextError
+from dafi import Global, callback, RemoteStoppedUnexpectedly
 
 PROC_NAME = "Trio Brown Fox"
 
@@ -16,7 +16,7 @@ async def cheers2():
 
 async def main():
     remote_proc = "Trio White Rabbit"
-    g = Global(process_name=PROC_NAME, init_controller=False)
+    g = Global(process_name=PROC_NAME, init_node=True)
 
     print(f"wait for {remote_proc} process to be started...")
     await g.wait_process(remote_proc)
@@ -30,9 +30,10 @@ async def main():
             res = g.call.greeting2().fg()
             print(res)
             await sleep(2)
-        except GlobalContextError:
-            # We need to handle GlobalContextError in order one process exit earlier.
+        except RemoteStoppedUnexpectedly as e:
+            # We need to handle RemoteStoppedUnexpectedly in order one process exit earlier.
             # It means remote callbacks becomes unavailable.
+            print(e)
             break
 
     g.stop()

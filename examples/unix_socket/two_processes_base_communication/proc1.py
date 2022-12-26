@@ -1,5 +1,5 @@
 import time
-from dafi import Global, callback, GlobalContextError
+from dafi import Global, callback, RemoteStoppedUnexpectedly
 
 PROC_NAME = "White Rabbit"
 
@@ -18,21 +18,26 @@ def greeting2():
 
 def main():
     remote_proc = "Brown Fox"
-    g = Global(process_name=PROC_NAME)
+    g = Global(process_name=PROC_NAME, init_node=True, init_controller=True)
 
     print(f"wait for {remote_proc} process to be started...")
     g.wait_process(remote_proc)
 
-    try:
-        while True:
+    for _ in range(10):
+        try:
             res = g.call.cheers1("foo", "bar").fg()
             print(res)
             time.sleep(2)
             res = g.call.cheers2().fg()
             print(res)
             time.sleep(2)
-    except GlobalContextError as e:
-        print(e)
+        except RemoteStoppedUnexpectedly as e:
+            # We need to handle GlobalContextError in order one process exit earlier.
+            # It means remote callbacks becomes unavailable.
+            print(e)
+            break
+
+    g.stop()
 
 
 if __name__ == "__main__":

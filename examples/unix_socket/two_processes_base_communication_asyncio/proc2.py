@@ -1,5 +1,5 @@
 from asyncio import sleep, run
-from dafi import Global, callback, GlobalContextError
+from dafi import Global, callback, RemoteStoppedUnexpectedly
 
 PROC_NAME = "Async Brown Fox"
 
@@ -16,21 +16,26 @@ async def cheers2():
 
 async def main():
     remote_proc = "Async White Rabbit"
-    g = Global(process_name=PROC_NAME, init_controller=False)
+    g = Global(process_name=PROC_NAME, init_node=True)
 
     print(f"wait for {remote_proc} process to be started...")
     await g.wait_process(remote_proc)
 
-    try:
-        while True:
+    for _ in range(10):
+        try:
             res = g.call.greeting1("foo", "bar").fg()  # another syntax: g.call.greeting1("foo", "bar") & FG
             print(res)
             await sleep(2)
             res = g.call.greeting2().fg()
             print(res)
             await sleep(2)
-    except GlobalContextError as e:
-        print(e)
+        except RemoteStoppedUnexpectedly as e:
+            # We need to handle GlobalContextError in order one process exit earlier.
+            # It means remote callbacks becomes unavailable.
+            print(e)
+            break
+
+    g.stop()
 
 
 if __name__ == "__main__":

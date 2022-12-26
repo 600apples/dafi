@@ -19,7 +19,7 @@ def subtract(arg1: int, arg2: int) -> int:
 
 def main():
     # Process name is not required argument and will be generated automatically if not provided.
-    g = Global()
+    g = Global(init_node=True, init_controller=True)
     time.sleep(120)
     print("Exit.")
     g.stop()

@@ -8,7 +8,7 @@ from dafi import Global, GlobalContextError, NO_RETURN
 
 def main():
     # Process name is not required argument and will be generated automatically if not provided.
-    g = Global(init_controller=False)
+    g = Global(init_node=True)
 
     print("Wait for publisher process to be started...")
     g.wait_function("some_func")
