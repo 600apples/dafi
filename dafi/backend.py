@@ -17,7 +17,7 @@ class BackEndKeys:
 
 
 class LocalBackEnd(BackEndI):
-    IPC_STORAGE = Path(gettempdir()) / "ipc"
+    IPC_STORAGE = Path(gettempdir()) / "dafi"
 
     @property
     def store(self):

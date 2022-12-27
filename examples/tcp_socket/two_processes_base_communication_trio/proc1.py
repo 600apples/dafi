@@ -18,7 +18,7 @@ async def greeting2():
 
 async def main():
     remote_proc = "Trio Brown Fox"
-    g = Global(process_name=PROC_NAME, init_controller=True)
+    g = Global(process_name=PROC_NAME, init_controller=True, host="localhost", port=8888)
 
     print(f"wait for {remote_proc} process to be started...")
     await g.wait_process(remote_proc)

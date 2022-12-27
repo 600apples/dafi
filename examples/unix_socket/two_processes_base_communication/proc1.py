@@ -18,7 +18,7 @@ def greeting2():
 
 def main():
     remote_proc = "Brown Fox"
-    g = Global(process_name=PROC_NAME, init_node=True, init_controller=True)
+    g = Global(process_name=PROC_NAME, init_controller=True)
 
     print(f"wait for {remote_proc} process to be started...")
     g.wait_process(remote_proc)

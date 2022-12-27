@@ -1,16 +1,17 @@
 import time
+import asyncio
 from dataclasses import dataclass, field
 from datetime import timedelta
 from threading import Event
-from typing import Optional, Union, NoReturn, Callable, Any, Coroutine
+from typing import Optional, Union, NoReturn, Callable, Coroutine
 
 from anyio import to_thread
 from dafi.async_result import AsyncResult
 from dafi.exceptions import GlobalContextError
 from dafi.utils.timeparse import timeparse
 from dafi.utils.custom_types import P, RemoteResult
-from dafi.utils.mappings import search_cb_info_in_mapping, NODE_CALLBACK_MAPPING
-from dafi.utils.misc import async_library
+from dafi.utils.mappings import search_remote_callback_in_mapping, NODE_CALLBACK_MAPPING
+from dafi.utils.misc import async_library, sync_to_async
 
 
 @dataclass
@@ -35,6 +36,7 @@ class RemoteCall:
     func_name: Optional[str] = None
     args: P.args = field(default_factory=tuple)
     kwargs: P.kwargs = field(default_factory=dict)
+    _inside_callback_context: Optional[bool] = field(repr=False, default=False)
 
     def __str__(self):
         sep = ", "
@@ -47,16 +49,21 @@ class RemoteCall:
         return self
 
     def __await__(self):
+        self._awaitable = True
         return self.__self_await__().__await__()
 
-    def __and__(self, other) -> RemoteResult:
+    def __and__(self, other) -> Union[RemoteResult, Coroutine]:
         if type(other) == type:
             other = other()
 
         if isinstance(other, (FG, type(FG))):
+            if self._inside_callback_context:
+                raise GlobalContextError("FG is not available inside callback context. Use .fg instead.")
             return self.fg(timeout=other.timeout)
 
         elif isinstance(other, (BG, type(BG))):
+            if self._inside_callback_context:
+                return sync_to_async(self.bg)(timeout=other.timeout, eta=other.eta)
             return self.bg(timeout=other.timeout, eta=other.eta)
 
         elif isinstance(other, (NO_RETURN, type(NO_RETURN))):
@@ -70,8 +77,8 @@ class RemoteCall:
         return self.fg(timeout=timeout)
 
     @property
-    def info(self) -> Optional["CallbackInfo"]:
-        data = search_cb_info_in_mapping(NODE_CALLBACK_MAPPING, self.func_name)
+    def info(self) -> Optional["RemoteCallback"]:
+        data = search_remote_callback_in_mapping(NODE_CALLBACK_MAPPING, self.func_name)
         if data:
             return data[1]
 
@@ -88,6 +95,7 @@ class RemoteCall:
             timeout=timeout,
             async_=False,
             return_result=True,
+            inside_callback_context=self._inside_callback_context,
         )
 
     def bg(
@@ -103,11 +111,22 @@ class RemoteCall:
             eta=eta,
             async_=True,
             return_result=True,
+            inside_callback_context=self._inside_callback_context,
         )
 
     def no_return(self, eta: Optional[Union[timedelta, int, float, str]] = None) -> NoReturn:
         eta = self._get_duration(eta, "eta", 0)
-        self._ipc.call(self.func_name, args=self.args, kwargs=self.kwargs, eta=eta, async_=True, return_result=False)
+        res = self._ipc.call(
+            self.func_name,
+            args=self.args,
+            kwargs=self.kwargs,
+            eta=eta,
+            async_=True,
+            return_result=False,
+            inside_callback_context=self._inside_callback_context,
+        )
+        if asyncio.iscoroutine(res) and self._inside_callback_context:
+            asyncio.create_task(res)
 
     def _get_duration(
         self, val: Union[timedelta, int, float, str], arg_name: str, default: Optional[int] = None
@@ -131,30 +150,34 @@ class RemoteCall:
 class LazyRemoteCall:
     _ipc: "Ipc" = field(repr=False)
     _stop_event: Event = field(repr=False)
-    func_name: Optional[str] = None
+    _func_name: Optional[str] = field(repr=False, default=None)
+    _inside_callback_context: Optional[bool] = field(repr=False, default=False)
+
+    def __str__(self):
+        return self.__class__.__name__ if not self._func_name else f"{self.__class__.__name__}({self._func_name})"
 
     @property
-    def info(self):
-        if not self.func_name:
+    def _info(self):
+        if not self._func_name:
             raise GlobalContextError(
                 "Not allowed in current context."
                 " Use `Global.call.func_name(*args, **kwargs)` to build RemoteCall instance."
             )
-        return RemoteCall(_ipc=self._ipc, func_name=self.func_name).info
+        return RemoteCall(_ipc=self._ipc, func_name=self._func_name).info
 
     @property
-    def exist(self) -> bool:
-        return bool(self.info)
+    def _exist(self) -> bool:
+        return bool(self._info)
 
-    def wait_function(self) -> Union[NoReturn, Coroutine]:
+    def _wait_function(self) -> Union[NoReturn, Coroutine]:
         interval = 0.5
-        condition_executable = lambda: self.exist
+        condition_executable = lambda: self._exist
         if async_library():
             return to_thread.run_sync(self._wait, condition_executable, interval)
         else:
             self._wait(condition_executable, interval)
 
-    def wait_process(self, process_name: str) -> Union[NoReturn, Coroutine]:
+    def _wait_process(self, process_name: str) -> Union[NoReturn, Coroutine]:
         interval = 0.5
         condition_executable = lambda: process_name in NODE_CALLBACK_MAPPING
         if async_library():
@@ -163,16 +186,22 @@ class LazyRemoteCall:
             self._wait(condition_executable, interval)
 
     def __call__(__self__, *args, **kwargs) -> RemoteCall:
-        if not __self__.func_name:
+        if not __self__._func_name:
             raise GlobalContextError(
                 "Invalid syntax. Use `Global.call.func_name(*args, **kwargs)` to build RemoteCall instance."
             )
-        return RemoteCall(_ipc=__self__._ipc, func_name=__self__.func_name, args=args, kwargs=kwargs)
+        return RemoteCall(
+            _ipc=__self__._ipc,
+            func_name=__self__._func_name,
+            args=args,
+            kwargs=kwargs,
+            _inside_callback_context=__self__._inside_callback_context,
+        )
 
     def __getattr__(self, item) -> RemoteCall:
         if self._stop_event.is_set():
             raise GlobalContextError("Global can no longer accept remote calls because it was stopped")
-        self.func_name = item
+        self._func_name = item
         return self
 
     def _wait(self, condition_executable: Callable, interval: float) -> NoReturn:

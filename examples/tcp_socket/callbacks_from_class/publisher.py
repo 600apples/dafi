@@ -26,6 +26,9 @@ class Foo:
     def static_method(*args, **kwargs):
         return f"triggered staticmethod with arguments: {args}, {kwargs}"
 
+    def method_with_access_to_g_object(self, g):
+        return f"triggered method_with_access_to_g_object: G = {g}"
+
 
 def main():
     # Init instance of "Foo" in order to have access to instance methods
@@ -33,7 +36,7 @@ def main():
     Foo()
 
     # Process name is not required argument and will be generated automatically if not provided.
-    g = Global(init_controller=True)
+    g = Global(init_controller=True, host="localhost", port=8888)
     time.sleep(120)
     print("Exit.")
     g.stop()

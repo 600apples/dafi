@@ -3,31 +3,38 @@ import logging
 import pickle
 import asyncio
 from asyncio import Queue
-from typing import Union, Optional, NoReturn
+from threading import Event as thEvent
+from typing import Union, Optional, NoReturn, Any
 
 from anyio import (
     sleep,
     create_task_group,
-    connect_unix,
     move_on_after,
     TASK_STATUS_IGNORED,
     EndOfStream,
     BrokenResourceError,
+    BusyResourceError,
 )
 from anyio._backends._asyncio import TaskGroup
 from anyio.abc import TaskStatus
 from anyio.abc._sockets import SocketStream
-from tenacity import AsyncRetrying, wait_fixed, retry_if_exception_type
 
 from dafi.utils import colors
+from dafi.utils.misc import AsyncDeque
 from dafi.utils.logger import patch_logger
 from dafi.async_result import AsyncResult
-from dafi.components import UnixComponentBase
+from dafi.components import ComponentsBase
 from dafi.message import Message, MessageFlag, RemoteError
 from dafi.utils.debug import with_debug_trace
+from dafi.utils.retry import stoppable_retry, RetryInfo
 
 from dafi.exceptions import UnableToFindCandidate, RemoteStoppedUnexpectedly
-from dafi.utils.mappings import LOCAL_CALLBACK_MAPPING, NODE_CALLBACK_MAPPING
+from dafi.utils.mappings import (
+    LOCAL_CALLBACK_MAPPING,
+    NODE_CALLBACK_MAPPING,
+    WELL_KNOWN_CALLBACKS,
+    search_remote_callback_in_mapping,
+)
 
 import tblib.pickling_support
 
@@ -37,30 +44,35 @@ tblib.pickling_support.install()
 logger = patch_logger(logging.getLogger(__name__), colors.green)
 
 
-class Node(UnixComponentBase):
-    @with_debug_trace
-    async def handle(self, *, task_status: TaskStatus = TASK_STATUS_IGNORED):
+async def send_to_stream(stream: SocketStream, item: Any):
+    attempts = 20
+    for _ in range(attempts):
+        try:
+            await stream.send(item)
+            break
+        except BusyResourceError:
+            await sleep(0.1)
+    else:
+        logger.error(f"Failed to send item {item} during {attempts} attempts.")
+
+
+class Node(ComponentsBase):
+    @stoppable_retry(wait=3, acceptable=(ConnectionRefusedError, EndOfStream, BrokenResourceError, OSError))
+    async def handle(self, stop_event: thEvent, retry_info: RetryInfo, task_status: TaskStatus = TASK_STATUS_IGNORED):
+        self.stop_event = stop_event
         self.loop = asyncio.get_running_loop()
         self.item_store = Queue()
+        self.item_mediator_store = AsyncDeque()
 
         self.operations = NodeOperations()
-        async for attempt in AsyncRetrying(
-            wait=wait_fixed(3),
-            retry=retry_if_exception_type((ConnectionRefusedError, EndOfStream, BrokenResourceError)),
-        ):
-            if self.stop_event.is_set():
-                break
 
-            with attempt:
+        if retry_info.attempt == 2 or not retry_info.attempt % 5:
+            logger.error("Unable to connect node. retrying...")
 
-                if not attempt.retry_state.attempt_number % 5:
-                    logger.error("Unable to connect node. retrying...")
-
-                async with await connect_unix(self.socket) as stream:
-                    async with create_task_group() as sg:
-
-                        sg.start_soon(self._write_commands, stream, sg)
-                        sg.start_soon(self._read_commands, stream, task_status, sg)
+        async with self.connect_listener() as stream:
+            async with create_task_group() as sg:
+                sg.start_soon(self._write_commands, stream, sg)
+                sg.start_soon(self._read_commands, stream, task_status, sg)
 
     @with_debug_trace
     async def _read_commands(self, stream: SocketStream, task_status: TaskStatus, sg: TaskGroup):
@@ -68,7 +80,7 @@ class Node(UnixComponentBase):
             with move_on_after(1) as scope:
                 try:
                     raw_msglen = await stream.receive(4)
-                except EndOfStream:
+                except (EndOfStream, BrokenResourceError):
                     await sg.cancel_scope.cancel()
                     raise
 
@@ -79,7 +91,7 @@ class Node(UnixComponentBase):
             msg = Message.loads(await stream.receive(msglen))
 
             if msg.flag in (MessageFlag.HANDSHAKE, MessageFlag.UPDATE_CALLBACKS):
-                await self.operations.on_handshake(msg, task_status, self.process_name)
+                await self.operations.on_handshake(msg, task_status, self.process_name, self.info)
 
             elif msg.flag == MessageFlag.REQUEST:
                 await self.operations.on_request(msg, stream, sg, self.process_name)
@@ -100,31 +112,31 @@ class Node(UnixComponentBase):
 
     @with_debug_trace
     async def _write_commands(self, stream: SocketStream, sg: TaskGroup):
-        await stream.send(
+        await send_to_stream(
+            stream,
             Message(
                 flag=MessageFlag.HANDSHAKE,
                 transmitter=self.process_name,
                 func_args=(LOCAL_CALLBACK_MAPPING,),
-            ).dumps()
+            ).dumps(),
         )
+
         while not self.stop_event.is_set():
             item, eta = await self.item_store.get()
-            sg.start_soon(self._send_item, item, eta, stream, sg)
+            sg.start_soon(self._send_item, item, eta, stream)
         await stream.aclose()
 
     @with_debug_trace
-    async def _send_item(self, item: bytes, eta: Union[int, float], stream: SocketStream, sg: TaskGroup):
+    async def _send_item(self, item: bytes, eta: Union[int, float], stream: SocketStream):
         await sleep(eta)
-        try:
-            await stream.send(item)
-        except BrokenResourceError:
-            await sg.cancel_scope.cancel()
+        await send_to_stream(stream, item)
 
     @with_debug_trace
-    def send(self, message: bytes, eta: Union[int, float]):
+    def send_threadsave(self, message: bytes, eta: Union[int, float]):
         asyncio.run_coroutine_threadsafe(self.item_store.put((message, eta)), self.loop).result()
 
-        # self.item_store.put_nowait((message, eta))
+    def send(self, message: bytes, eta: Union[int, float]):
+        self.item_store.put_nowait((message, eta))
 
     @with_debug_trace
     def register_result(self, result: Optional[AsyncResult]) -> NoReturn:
@@ -135,23 +147,43 @@ class Node(UnixComponentBase):
 class NodeOperations:
     """Node operations specification object"""
 
+    def __init__(self):
+        AsyncResult.fold_results()
+        self.initial_log_shown = False
+
     @with_debug_trace
-    async def on_handshake(self, msg: Message, task_status: TaskStatus, process_name: str):
+    async def on_handshake(self, msg: Message, task_status: TaskStatus, process_name: str, info: str):
         NODE_CALLBACK_MAPPING.clear()
         NODE_CALLBACK_MAPPING.update(msg.func_args[0])
         if task_status._future._state == "PENDING":
             # Consider Node to be started only after handshake response is received.
             task_status.started("STARTED")
-            logger.info(f"Node has been started successfully. Process name: {process_name!r}")
+
+        if not self.initial_log_shown:
+            self.initial_log_shown = True
+            logger.info(f"Node has been started successfully. Process name: {process_name!r}. Connection info: {info}")
+
+        for func_name in set(LOCAL_CALLBACK_MAPPING).difference(WELL_KNOWN_CALLBACKS):
+            data = search_remote_callback_in_mapping(
+                func_name=func_name, exclude=process_name, mapping=NODE_CALLBACK_MAPPING
+            )
+            if data:
+                proc, _ = data
+                logger.warning(
+                    f"A remote callback named {func_name!r} is already registered in the {proc!r} process."
+                    f" 2 callbacks with the same name can lead to undesirable consequences, since"
+                    f" when calling a callback from a remote process, only one of them will be executed"
+                )
 
     @with_debug_trace
     async def on_request(self, msg: Message, stream: SocketStream, sg: TaskGroup, process_name: str):
 
-        cb_info = LOCAL_CALLBACK_MAPPING.get(msg.func_name)
-        if not cb_info:
+        remote_callback = LOCAL_CALLBACK_MAPPING.get(msg.func_name)
+        if not remote_callback:
             info = f"Function {msg.func_name!r} is not registered as callback locally. Make sure python loaded module where callback is located."
             sg.start_soon(
-                stream.send,
+                send_to_stream,
+                stream,
                 Message(
                     flag=MessageFlag.SUCCESS,
                     transmitter=process_name,
@@ -168,7 +200,7 @@ class NodeOperations:
             sg.start_soon(
                 self._remote_func_executor,
                 stream,
-                cb_info,
+                remote_callback,
                 msg,
                 process_name,
             )
@@ -176,6 +208,7 @@ class NodeOperations:
     @with_debug_trace
     async def on_success(self, msg: Message):
         error = msg.error
+
         if msg.return_result:
             try:
                 ares = AsyncResult._awaited_results[msg.uuid]
@@ -200,27 +233,28 @@ class NodeOperations:
     @with_debug_trace
     async def on_unable_to_find(self, msg):
         if msg.return_result:
-            ares = AsyncResult._awaited_results[msg.uuid]
-            AsyncResult._awaited_results[msg.uuid] = msg.error
-            ares._ready.set()
+            ares = AsyncResult._awaited_results.get(msg.uuid)
+            if ares:
+                AsyncResult._awaited_results[msg.uuid] = msg.error
+                ares._ready.set()
         else:
             logger.error(msg.error.info)
 
     @with_debug_trace
     async def _remote_func_executor(
-        self, stream: SocketStream, cb_info: "CallbackInfo", message: Message, process_name: str
+        self, stream: SocketStream, remote_callback: "RemoteCallback", message: Message, process_name: str
     ):
         result = error = None
         args = message.func_args
         kwargs = message.func_kwargs
 
         try:
-            result = cb_info.callback(*args, **kwargs)
-            if cb_info.is_async:
+            result = remote_callback(*args, **kwargs)
+            if remote_callback.is_async:
                 result = await result
         except TypeError as e:
             if "were given" in str(e) or "got an unexpected" in str(e) or "missing" in str(e):
-                info = f"{e}. Function signature is: {message.func_name}{cb_info.signature}: ..."
+                info = f"{e}. Function signature is: {message.func_name}{remote_callback.signature}: ..."
             else:
                 info = f"Exception while processing function {message.func_name!r} on remote executor."
             error = RemoteError(info=info, traceback=pickle.dumps(sys.exc_info()))
@@ -254,4 +288,4 @@ class NodeOperations:
                 error=error,
             ).dumps()
 
-        await stream.send(message_to_return)
+        await send_to_stream(stream, message_to_return)

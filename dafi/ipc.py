@@ -6,7 +6,7 @@ from typing import NoReturn, Dict, Union, Optional, Callable, Any, Tuple
 from anyio import EndOfStream
 from anyio.from_thread import start_blocking_portal
 
-from dafi.async_result import AsyncResult
+from dafi.async_result import AsyncResult, AwaitableAsyncResult
 from dafi.backend import BackEndKeys, BackEndI
 from dafi.components import ControllerStatus
 from dafi.components.controller import Controller
@@ -14,19 +14,30 @@ from dafi.components.node import Node
 from dafi.exceptions import InitializationError, GlobalContextError
 from dafi.message import Message, MessageFlag
 from dafi.signals import set_signal_handler
-from dafi.utils.misc import resilent
+from dafi.utils.retry import resilent
 from dafi.utils.func_validation import pretty_callbacks
-from dafi.utils.mappings import NODE_CALLBACK_MAPPING, search_cb_info_in_mapping
+from dafi.utils.mappings import NODE_CALLBACK_MAPPING, search_remote_callback_in_mapping
 
 
 class Ipc(Thread):
-    def __init__(self, process_name: str, backend: BackEndI, init_controller: bool, init_node: bool, stop_event: Event):
+    def __init__(
+        self,
+        process_name: str,
+        backend: BackEndI,
+        init_controller: bool,
+        init_node: bool,
+        stop_event: Event,
+        host: Optional[str] = None,
+        port: Optional[int] = None,
+    ):
         super().__init__()
         self.process_name = process_name
         self.backend = backend
         self.init_controller = init_controller
         self.init_node = init_node
         self.stop_event = stop_event
+        self.host = host
+        self.port = port
 
         self.daemon = True
         self.start_event = Event()
@@ -53,6 +64,7 @@ class Ipc(Thread):
         async_: Optional[bool] = False,
         eta: Optional[Union[int, float]] = 0,
         return_result: Optional[bool] = True,
+        inside_callback_context: Optional[bool] = False,
     ):
         if not self.node:
             raise GlobalContextError(
@@ -62,7 +74,7 @@ class Ipc(Thread):
             )
 
         assert func_name is not None
-        data = search_cb_info_in_mapping(NODE_CALLBACK_MAPPING, func_name, exclude=self.process_name)
+        data = search_remote_callback_in_mapping(NODE_CALLBACK_MAPPING, func_name, exclude=self.process_name)
         if not data:
             if NODE_CALLBACK_MAPPING.get(self.process_name, {}).get(func_name):
                 raise GlobalContextError(
@@ -74,11 +86,13 @@ class Ipc(Thread):
                 # Get all callbacks without local
                 available_callbacks = pretty_callbacks(exclude_proc=self.process_name, format="string")
                 raise GlobalContextError(
-                    f"function {func_name} not found on remote\n."
-                    f"Available registered callbacks:\n {available_callbacks}"
+                    f"function {func_name} not found on remote.\n"
+                    + f"Available registered callbacks:\n {available_callbacks}"
+                    if available_callbacks
+                    else ""
                 )
 
-        _, cb_info = data
+        _, remote_callback = data
 
         result = None
         msg = Message(
@@ -90,13 +104,20 @@ class Ipc(Thread):
             return_result=return_result,
         )
 
+        if inside_callback_context:
+            result_class = AwaitableAsyncResult
+            send_to_node_func = self.node.send
+        else:
+            result_class = AsyncResult
+            send_to_node_func = self.node.send_threadsave
+
         if return_result:
-            result = AsyncResult(
+            result = result_class(
                 func_name=func_name,
                 uuid=msg.uuid,
             )
         self.node.register_result(result)
-        self.node.send(msg.dumps(), eta)
+        send_to_node_func(msg.dumps(), eta)
 
         if not async_ and return_result:
             result = result.get(timeout=timeout)
@@ -116,13 +137,13 @@ class Ipc(Thread):
                 self.backend.delete_key(BackEndKeys.CONTROLLER_STATUS)
             try:
                 self.backend.write_if_not_exist(BackEndKeys.CONTROLLER_STATUS, ControllerStatus.RUNNING)
-                self.controller = Controller(self.process_name, self.backend, self.stop_event)
+                self.controller = Controller(self.process_name, self.backend, self.host, self.port)
             except ValueError:
                 # Controller has been initialized by other process
                 ...
 
         if self.init_node:
-            self.node = Node(self.process_name, self.backend, self.stop_event)
+            self.node = Node(self.process_name, self.backend, self.host, self.port)
 
         if self.node or self.controller:
             c_future = n_future = None
@@ -130,10 +151,12 @@ class Ipc(Thread):
             with resilent((RuntimeError, EndOfStream)):
                 with start_blocking_portal() as portal:
                     if self.controller:
-                        c_future, _ = portal.start_task(self.controller.handle, name=Controller.__class__.__name__)
+                        c_future, _ = portal.start_task(
+                            self.controller.handle, self.stop_event, name=Controller.__class__.__name__
+                        )
 
                     if self.node:
-                        n_future, _ = portal.start_task(self.node.handle, name=Node.__class__.__name__)
+                        n_future, _ = portal.start_task(self.node.handle, self.stop_event, name=Node.__class__.__name__)
 
                     self.start_event.set()
                     self.stop_event.wait()
@@ -143,7 +166,7 @@ class Ipc(Thread):
                         if not future.done():
                             future.cancel()
 
-    def update_callbacks(self, func_info: Dict[str, "CallbackInfo"]) -> NoReturn:
+    def update_callbacks(self, func_info: Dict[str, "RemoteCallback"]) -> NoReturn:
         self.node.send(
             Message(
                 flag=MessageFlag.UPDATE_CALLBACKS,
@@ -174,8 +197,33 @@ class Ipc(Thread):
         )
         self.node.register_result(result)
 
-        self.node.send(msg.dumps(), 0)
+        self.node.send_threadsave(msg.dumps(), 0)
         return result.get()
+
+    async def async_transfer_and_call(self, remote_process: str, func: Callable[..., Any], *args, **kwargs) -> Any:
+        if not callable(func):
+            raise InitializationError("Provided func is not callable.")
+
+        if remote_process not in NODE_CALLBACK_MAPPING:
+            raise InitializationError(f"Seems process {remote_process!r} is not running.")
+
+        func_name = "__async_transfer_and_call" if iscoroutinefunction(func) else "__transfer_and_call"
+        msg = Message(
+            flag=MessageFlag.REQUEST,
+            transmitter=self.process_name,
+            receiver=remote_process,
+            func_name=func_name,
+            func_args=(func, *args),
+            func_kwargs=kwargs,
+        )
+        result = AwaitableAsyncResult(
+            func_name=func_name,
+            uuid=msg.uuid,
+        )
+        self.node.register_result(result)
+
+        self.node.send(msg.dumps(), 0)
+        return await result.get()
 
     def stop(self, *args, **kwargs):
         self.stop_event.set()

@@ -20,7 +20,7 @@ async def func_to_transfer():
 def main():
     remote_proc = "White Rabbit"
 
-    g = Global()
+    g = Global(host="localhost", port=8888)
     print(f"wait for {remote_proc} process to be started...")
     g.wait_process(remote_proc)
 

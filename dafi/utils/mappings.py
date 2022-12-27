@@ -9,12 +9,14 @@ LOCAL_CALLBACK_MAPPING: Dict[K, GlobalCallback] = dict()
 NODE_CALLBACK_MAPPING: DefaultDict[K, Dict[K, GlobalCallback]] = defaultdict()
 CONTROLLER_CALLBACK_MAPPING: DefaultDict[K, Dict[K, GlobalCallback]] = defaultdict()
 
+WELL_KNOWN_CALLBACKS: Set[str] = {"__transfer_and_call", "__async_transfer_and_call"}
 
-def search_cb_info_in_mapping(
+
+def search_remote_callback_in_mapping(
     mapping: DefaultDict[K, Dict[K, GlobalCallback]],
     func_name: str,
     exclude: Optional[Union[str, Sequence]] = None,
-) -> Optional[Tuple[str, "CallbackInfo"]]:
+) -> Optional[Tuple[str, "RemoteCallback"]]:
 
     if isinstance(exclude, str):
         exclude = [exclude]
@@ -22,6 +24,6 @@ def search_cb_info_in_mapping(
 
     for proc, func_mapping in mapping.items():
         if proc not in exclude:
-            cb_info = func_mapping.get(func_name)
-            if cb_info:
-                return proc, cb_info
+            remote_callback = func_mapping.get(func_name)
+            if remote_callback:
+                return proc, remote_callback

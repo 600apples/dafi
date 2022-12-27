@@ -1,7 +1,7 @@
-from trio import sleep, run
+from asyncio import sleep, run
 from dafi import Global, callback, RemoteStoppedUnexpectedly
 
-PROC_NAME = "Trio White Rabbit"
+PROC_NAME = "Async White Rabbit"
 
 
 @callback
@@ -17,8 +17,8 @@ async def greeting2():
 
 
 async def main():
-    remote_proc = "Trio Brown Fox"
-    g = Global(process_name=PROC_NAME, init_controller=True)
+    remote_proc = "Async Brown Fox"
+    g = Global(process_name=PROC_NAME, init_controller=False, host="localhost", port=8888)
 
     print(f"wait for {remote_proc} process to be started...")
     await g.wait_process(remote_proc)
@@ -28,7 +28,6 @@ async def main():
             res = g.call.cheers1("foo", "bar").fg()  # another syntax: g.call.cheers1("foo", "bar") & FG
             print(res)
             await sleep(2)
-
             res = g.call.cheers2().fg()
             print(res)
             await sleep(2)
@@ -42,4 +41,4 @@ async def main():
 
 
 if __name__ == "__main__":
-    run(main)
+    run(main())

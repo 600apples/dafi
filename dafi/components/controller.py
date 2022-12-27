@@ -1,15 +1,14 @@
 import logging
-import os
 import time
 from functools import partial
 from collections import defaultdict
+from threading import Event as thEvent
 from typing import NoReturn, ClassVar, Dict
 
 from anyio import (
     create_task_group,
     sleep,
     move_on_after,
-    create_unix_listener,
     TASK_STATUS_IGNORED,
     EndOfStream,
     BrokenResourceError,
@@ -20,26 +19,29 @@ from anyio.abc._sockets import SocketStream
 from dafi.utils import colors
 from dafi.backend import BackEndKeys
 from dafi.utils.logger import patch_logger
-from dafi.components import UnixComponentBase
+from dafi.components import ComponentsBase
 from dafi.message import Message, MessageFlag, RemoteError
 from dafi.utils.debug import with_debug_trace
-from dafi.utils.mappings import CONTROLLER_CALLBACK_MAPPING, AWAITED_PROCS, search_cb_info_in_mapping
+from dafi.utils.retry import stoppable_retry, RetryInfo
+from dafi.utils.mappings import CONTROLLER_CALLBACK_MAPPING, AWAITED_PROCS, search_remote_callback_in_mapping
 
 
 logger = patch_logger(logging.getLogger(__name__), colors.blue)
 
 
-class Controller(UnixComponentBase):
-    @with_debug_trace
-    async def handle(self, *, task_status=TASK_STATUS_IGNORED):
+class Controller(ComponentsBase):
+    @stoppable_retry(wait=3)
+    async def handle(self, stop_event: thEvent, retry_info: RetryInfo, task_status=TASK_STATUS_IGNORED):
+        self.stop_event = stop_event
         self.operations = ControllerOperations()
 
-        if os.path.exists(self.socket):
-            os.remove(self.socket)
+        if retry_info.attempt == 2 or not retry_info.attempt % 5:
+            logger.error(f"Unable to connect controller. Error = {retry_info.prev_error} retrying...")
 
         async with create_task_group() as sg:
-            self.listener = await create_unix_listener(self.socket)
-            task_status.started("STARTED")
+            self.listener = await self.create_listener()
+            if task_status._future._state == "PENDING":
+                task_status.started("STARTED")
             sg.start_soon(self.healthcheck)
             sg.start_soon(self.listener.serve, partial(self._handle_commands, sg=sg), sg)
             logger.info(f"Controller has been started successfully. Process name: {self.process_name!r}")
@@ -163,8 +165,11 @@ class ControllerOperations:
     @with_debug_trace
     async def on_request(self, msg: Message, stream: SocketStream, sg: TaskGroup):
         receiver = msg.receiver
+
         if not receiver:
-            data = search_cb_info_in_mapping(CONTROLLER_CALLBACK_MAPPING, msg.func_name, exclude=msg.transmitter)
+            data = search_remote_callback_in_mapping(
+                CONTROLLER_CALLBACK_MAPPING, msg.func_name, exclude=msg.transmitter
+            )
             if data:
                 receiver, _ = data
 

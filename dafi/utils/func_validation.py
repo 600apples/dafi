@@ -2,7 +2,7 @@ import os
 import inspect
 from typing import Callable, Any
 from dafi.utils.custom_types import P
-from dafi.utils.mappings import NODE_CALLBACK_MAPPING
+from dafi.utils.mappings import NODE_CALLBACK_MAPPING, WELL_KNOWN_CALLBACKS
 
 
 def get_class_methods(klass):
@@ -24,7 +24,7 @@ def is_class_or_static_method(klass: type, name: str):
                 ...
 
     Args:
-        :klass: the class
+        :klass: class type
         :name: attribute name
     """
 
@@ -42,11 +42,9 @@ def is_class_or_static_method(klass: type, name: str):
 
 def pretty_callbacks(exclude_proc, format: str):
     res = "" if format == "string" else dict()
-    build_in_callbacks = ("__transfer_and_call", "__async_transfer_and_call")
-
     for proc, func_mapping in NODE_CALLBACK_MAPPING.items():
         if proc != exclude_proc:
-            available_functions = [fn for fn in func_mapping if fn not in build_in_callbacks]
+            available_functions = [fn for fn in func_mapping if fn not in WELL_KNOWN_CALLBACKS]
             if format == "string":
                 res += f"process: {proc}\n"
                 res += f"  - [ {', '.join(available_functions) or '<< no registered callbacks >>'} ]\n"

@@ -9,7 +9,7 @@ from dafi import Global, GlobalContextError, BG, UnableToFindCandidate
 
 async def main():
     # Process name is not required argument and will be generated automatically if not provided.
-    g = Global()
+    g = Global(host="localhost", port=8888)
 
     print("Wait for publisher process to be started...")
     await g.wait_function("add")

@@ -16,7 +16,7 @@ def cheers2():
 
 def main():
     remote_proc = "White Rabbit"
-    g = Global(process_name=PROC_NAME, init_node=True)
+    g = Global(process_name=PROC_NAME)
 
     print(f"wait for {remote_proc} process to be started...")
     g.wait_process(remote_proc)

@@ -1,17 +1,25 @@
 """
 Publisher is the process that declares available remote functions
-Make sure you started this process first.
 """
 import time
 from dafi import Global, callback
 
 
-PROC_NAME = "White Rabbit"
+@callback
+async def add(arg1: int, arg2: int) -> int:
+    """Used by 'consumer.py' process."""
+    return arg1 + arg2
+
+
+@callback
+def subtract(arg1: int, arg2: int) -> int:
+    """Not used. Just for example."""
+    return arg1 - arg2
 
 
 def main():
     # Process name is not required argument and will be generated automatically if not provided.
-    g = Global(process_name=PROC_NAME, init_controller=True)
+    g = Global(init_controller=True, host="localhost", port=8888)
     time.sleep(120)
     print("Exit.")
     g.stop()
