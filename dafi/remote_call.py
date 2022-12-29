@@ -158,11 +158,13 @@ class LazyRemoteCall:
 
     @property
     def _info(self):
-        if not self._func_name:
+        if self._func_name is None:
             raise GlobalContextError(
                 "Not allowed in current context."
                 " Use `Global.call.func_name(*args, **kwargs)` to build RemoteCall instance."
             )
+        elif self._func_name == "":
+            raise GlobalContextError("Empty function name is not allowed.")
         return RemoteCall(_ipc=self._ipc, func_name=self._func_name).info
 
     @property

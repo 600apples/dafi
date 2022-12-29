@@ -6,12 +6,11 @@ RUN apk --update --upgrade add --no-cache  gcc musl-dev jpeg-dev zlib-dev libffi
 
 RUN python3 -m pip install --upgrade pip
 
-RUN python3 -m pip install Flask==2.2.2
 
-EXPOSE 5000 8888
+EXPOSE 8888
 
 COPY . .
 
 #RUN python3 -m pip install dafi-0.0.1-py3-none-any.whl # TODO release package
 
-CMD [ "python3", "-u", "app.py" ]
+CMD [ "python3", "-u", "main.py" ]

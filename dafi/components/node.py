@@ -57,7 +57,9 @@ async def send_to_stream(stream: SocketStream, item: Any):
 
 
 class Node(ComponentsBase):
-    @stoppable_retry(wait=3, acceptable=(ConnectionRefusedError, EndOfStream, BrokenResourceError, OSError))
+    @stoppable_retry(
+        wait=3, acceptable=(ConnectionRefusedError, ConnectionResetError, EndOfStream, BrokenResourceError, OSError)
+    )
     async def handle(self, stop_event: thEvent, retry_info: RetryInfo, task_status: TaskStatus = TASK_STATUS_IGNORED):
         self.stop_event = stop_event
         self.loop = asyncio.get_running_loop()
@@ -80,7 +82,7 @@ class Node(ComponentsBase):
             with move_on_after(1) as scope:
                 try:
                     raw_msglen = await stream.receive(4)
-                except (EndOfStream, BrokenResourceError):
+                except (EndOfStream, BrokenResourceError, ConnectionResetError):
                     await sg.cancel_scope.cancel()
                     raise
 

@@ -51,8 +51,9 @@ class AsyncRetry:
             kwargs["retry_info"] = RetryInfo(attempt=attempt, prev_error=prev_error)
 
             is_stop = asyncio.create_task(self.stop_event_observer(), name=stop_event_observer)
+            process = asyncio.create_task(self.fn(*args, **kwargs))
             done, pending = chain.from_iterable(
-                await asyncio.wait([self.fn(*args, **kwargs), is_stop], return_when=asyncio.FIRST_COMPLETED)
+                await asyncio.wait([process, is_stop], return_when=asyncio.FIRST_COMPLETED)
             )
 
             pending.cancel()

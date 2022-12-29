@@ -35,7 +35,7 @@ def patch_logger(logger: logging.Logger, color: Callable):
 
     logger.setLevel(logging.DEBUG)
 
-    ch.setLevel(logging.INFO)
+    ch.setLevel(logging.DEBUG)
     formatter = ColoredFormatter("%(app)s: %(message)s")
     ch.setFormatter(formatter)
     logger.logger.addHandler(ch)

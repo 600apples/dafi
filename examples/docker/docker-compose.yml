@@ -1,0 +1,24 @@
+version: "3"
+
+x-common-env: &common-env
+  DAFI_HOST: email_processor # [ web or colorizer ] to change dafi controller process.
+  DAFI_PORT: 8888
+
+services:
+  web:
+    build: web
+    ports:
+      - "5000:5000"
+    environment: *common-env
+    depends_on:
+      - email_processor
+
+  colorizer:
+    build: colorizer
+    environment: *common-env
+    depends_on:
+      - email_processor
+
+  email_processor:
+    build: email_processor
+    environment: *common-env
