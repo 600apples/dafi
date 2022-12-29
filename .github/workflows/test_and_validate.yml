@@ -1,5 +1,4 @@
 name: Test and validate
-
 on:
   push:
     branches:
@@ -84,6 +83,22 @@ jobs:
         find . -name "*.pyc" -delete
         hatch run coverage:report-xml -i
         hatch run coverage:report-uncovered-html -i
+        hatch run coverage:report-json -i
+        export TOTAL=$(python -c "import json;print(json.load(open('coverage.json'))['totals']['percent_covered_display'])")
+        echo "total=$TOTAL" >> $GITHUB_ENV
+        echo "### Total coverage: ${TOTAL}%" >> $GITHUB_STEP_SUMMARY
+
+    - name: Make badge
+      uses: schneegans/dynamic-badges-action@v1.4.0
+      with:
+        auth: ${{ secrets.GIST_TOKEN }}
+        gistID: c64b2cee548575858e40834754432018
+        filename: covbadge.json
+        label: Coverage
+        message: ${{ env.total }}%
+        minColorRange: 50
+        maxColorRange: 90
+        valColorRange: ${{ env.total }}
 
     - name: Upload uncovered HTML report
       uses: actions/upload-artifact@v3

@@ -1,8 +1,7 @@
 # dafi
-
-[![PyPI - Version](https://img.shields.io/pypi/v/dafi.svg)](https://pypi.org/project/dafi)
-[![PyPI - Python Version](https://img.shields.io/pypi/pyversions/dafi.svg)](https://pypi.org/project/dafi)
-
+![test and validate](https://github.com/600apples/dafi/actions/workflows/test_and_validate.yml/badge.svg)
+![publish docs](https://github.com/600apples/dafi/actions/workflows/publish_docs.yml/badge.svg)
+![coverage](https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/600apples/c64b2cee548575858e40834754432018/raw/covbadge.json)
 -----
 
 **Table of Contents**
