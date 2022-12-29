@@ -2,7 +2,7 @@ import pickle
 import traceback
 from logging import Logger
 from dataclasses import dataclass, field
-from functools import cached_property
+from cached_property import cached_property
 from types import TracebackType
 from typing import Optional, NoReturn, Type
 

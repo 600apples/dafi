@@ -4,11 +4,13 @@ import types
 import asyncio
 from collections import deque
 from random import choices
+from functools import partial
 from typing import Callable, Any, NamedTuple, List, Optional
 
 import sniffio
-from anyio import sleep
+from anyio import sleep, to_thread
 
+from dafi.utils.custom_types import SchedulerTaskType
 from dafi.exceptions import InitializationError
 
 
@@ -42,6 +44,13 @@ class Period(NamedTuple):
                 "Provided 'period' timestamp is less then 0."
                 " Make sure you pass period that allows scheduler to execute task periodically"
             )
+
+    @property
+    def scheduler_type(self) -> SchedulerTaskType:
+        if self.at_time:
+            return "at_time"
+        else:
+            return "period"
 
 
 class Singleton(type):
@@ -96,3 +105,10 @@ def sync_to_async(fn: Callable[..., Any]):
             result = await result
 
     return dec
+
+
+async def run_in_threadpool(func: Callable[..., Any], *args, **kwargs) -> Any:
+    if kwargs:  # pragma: no cover
+        # run_sync doesn't accept 'kwargs', so bind them in here
+        func = partial(func, **kwargs)
+    return await to_thread.run_sync(func, *args)

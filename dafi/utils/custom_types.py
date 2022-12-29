@@ -8,3 +8,4 @@ GlobalCallback = TypeVar("GlobalCallback")
 RemoteResult = TypeVar("RemoteResult")
 
 TimeUnits = Union[int, float, str, datetime, timedelta]
+SchedulerTaskType = Union["at_time", "period"]

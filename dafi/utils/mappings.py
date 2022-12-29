@@ -1,6 +1,7 @@
 import asyncio
+from random import choice
 from collections import defaultdict
-from typing import Dict, DefaultDict, Optional, Tuple, Union, Sequence, Set
+from typing import Dict, DefaultDict, Optional, Tuple, Union, Sequence, Set, List
 from dafi.utils.custom_types import GlobalCallback, K
 
 
@@ -10,8 +11,9 @@ LOCAL_CALLBACK_MAPPING: Dict[K, GlobalCallback] = dict()
 NODE_CALLBACK_MAPPING: DefaultDict[K, Dict[K, GlobalCallback]] = defaultdict()
 CONTROLLER_CALLBACK_MAPPING: DefaultDict[K, Dict[K, GlobalCallback]] = defaultdict()
 SCHEDULER_PERIODICAL_TASKS: Dict[str, asyncio.Task] = dict()
+SCHEDULER_AT_TIME_TASKS: Dict[str, List[asyncio.Task]] = dict()
 
-WELL_KNOWN_CALLBACKS: Set[str] = {"__transfer_and_call", "__async_transfer_and_call"}
+WELL_KNOWN_CALLBACKS: Set[str] = {"__transfer_and_call", "__async_transfer_and_call", "__cancel_scheduled_task"}
 
 
 def search_remote_callback_in_mapping(
@@ -23,9 +25,14 @@ def search_remote_callback_in_mapping(
     if isinstance(exclude, str):
         exclude = [exclude]
     exclude = exclude or []
+    found = []
 
     for proc, func_mapping in mapping.items():
         if proc not in exclude:
             remote_callback = func_mapping.get(func_name)
             if remote_callback:
-                return proc, remote_callback
+                found.append((proc, remote_callback))
+    try:
+        return choice(found)
+    except IndexError:
+        ...

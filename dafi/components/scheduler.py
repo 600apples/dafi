@@ -14,8 +14,9 @@ from dafi.utils import colors
 from dafi.message import Message, RemoteError, MessageFlag
 from dafi.utils.logger import patch_logger
 from dafi.components import send_to_stream
+from dafi.utils.misc import run_in_threadpool
 from dafi.utils.debug import with_debug_trace
-from dafi.utils.mappings import LOCAL_CALLBACK_MAPPING, SCHEDULER_PERIODICAL_TASKS
+from dafi.utils.mappings import LOCAL_CALLBACK_MAPPING, SCHEDULER_PERIODICAL_TASKS, SCHEDULER_AT_TIME_TASKS
 
 
 logger = patch_logger(logging.getLogger(__name__), colors.magenta)
@@ -37,8 +38,9 @@ class Scheduler:
             )
 
         elif msg.period.at_time:
-            for ts in msg.period.at_time:
-                self.sg.start_soon(self.on_at_time, ts, stream, msg)
+            SCHEDULER_AT_TIME_TASKS[msg.uuid] = [
+                asyncio.create_task(self.on_at_time(ts, stream, msg)) for ts in msg.period.at_time
+            ]
 
     @with_debug_trace
     async def on_error(self, msg: Message):
@@ -96,9 +98,10 @@ class Scheduler:
         kwargs = message.func_kwargs
 
         try:
-            result = remote_callback(*args, **kwargs)
             if remote_callback.is_async:
-                await result
+                await remote_callback(*args, **kwargs)
+            else:
+                await run_in_threadpool(remote_callback, *args, **kwargs)
             logger.info(f"Callback {message.func_name!r} was completed successfully (condition={condition!r}).")
         except TypeError as e:
             if "were given" in str(e) or "got an unexpected" in str(e) or "missing" in str(e):

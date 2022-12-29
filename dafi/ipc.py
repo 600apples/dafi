@@ -6,7 +6,7 @@ from typing import NoReturn, Dict, Union, Optional, Callable, Any, Tuple
 from anyio import EndOfStream
 from anyio.from_thread import start_blocking_portal
 
-from dafi.async_result import AsyncResult, AwaitableAsyncResult
+from dafi.async_result import AsyncResult, AwaitableAsyncResult, get_result_type
 from dafi.backend import BackEndKeys, BackEndI
 from dafi.components import ControllerStatus
 from dafi.components.controller import Controller
@@ -16,6 +16,7 @@ from dafi.message import Message, MessageFlag
 from dafi.signals import set_signal_handler
 from dafi.utils.retry import resilent
 from dafi.utils.misc import Period
+from dafi.utils.custom_types import SchedulerTaskType
 from dafi.utils.func_validation import pretty_callbacks
 from dafi.utils.mappings import NODE_CALLBACK_MAPPING, search_remote_callback_in_mapping
 
@@ -108,19 +109,23 @@ class Ipc(Thread):
         )
 
         if inside_callback_context:
-            result_class = AwaitableAsyncResult
             send_to_node_func = self.node.send
         else:
-            result_class = AsyncResult
             send_to_node_func = self.node.send_threadsave
+        result_class = get_result_type(inside_callback_context=inside_callback_context, is_period=bool(func_period))
 
-        if return_result:
+        if return_result or func_period:
             result = result_class(
                 func_name=func_name,
                 uuid=msg.uuid,
             )
         self.node.register_result(result)
         send_to_node_func(msg.dumps(), eta)
+
+        if func_period:
+            result._ipc = self
+            result._scheduler_type = func_period.scheduler_type
+            return result.get()
 
         if not async_ and return_result:
             result = result.get(timeout=timeout)
@@ -233,6 +238,19 @@ class Ipc(Thread):
 
         self.node.send(msg.dumps(), 0)
         return await result.get()
+
+    def cancel_scheduler(
+        self, remote_process: str, scheduler_type: SchedulerTaskType, msg_uuid: str, func_name: str
+    ) -> NoReturn:
+        msg = Message(
+            flag=MessageFlag.REQUEST,
+            transmitter=self.process_name,
+            receiver=remote_process,
+            func_name="__cancel_scheduled_task",
+            func_args=(scheduler_type, msg_uuid, func_name),
+            return_result=False,
+        )
+        self.node.send(msg.dumps(), 0)
 
     def stop(self, *args, **kwargs):
         self.stop_event.set()

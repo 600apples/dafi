@@ -18,15 +18,13 @@ def main():
     now = time.time()
     # Possible to pass timestamp or timedelta
     at_time = [now + 2, now + 10, datetime.now() + timedelta(seconds=15)]
-    g.call.some_func() & PERIOD(
-        at_time=at_time
-    )  # another syntax: g.call.some_func().period(at_time=at_time)
-
+    g.call.some_func() & PERIOD(at_time=at_time)  # another syntax: g.call.some_func().period(at_time=at_time)
     time.sleep(15)
 
-    g.call.another_func(ts=5) & PERIOD(
-        period="5s"
-    )  # another syntax: g.call.some_func().period(period="3s")
+    task = g.call.another_func(ts=3) & PERIOD(period="3s")  # another syntax: g.call.some_func().period(period="3s")
+    time.sleep(10)
+    task.cancel()
+    time.sleep(1)
 
     # All scheduled tasks will be running even with transmitter process is terminated.
     g.stop()

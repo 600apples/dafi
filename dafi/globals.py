@@ -1,8 +1,9 @@
+import os
 import inspect
 from copy import copy
 from inspect import Signature
 from dataclasses import dataclass, field
-from functools import cached_property
+from cached_property import cached_property
 from inspect import iscoroutinefunction
 from threading import Event
 from typing import (
@@ -24,14 +25,19 @@ from dafi.exceptions import InitializationError, RemoteCallError
 from dafi.ipc import Ipc
 from dafi.remote_call import LazyRemoteCall
 from dafi.utils.misc import Singleton, is_lambda_function, uuid
-from dafi.utils.custom_types import GlobalCallback, P
+from dafi.utils.custom_types import GlobalCallback, P, SchedulerTaskType
 from dafi.utils.func_validation import (
     get_class_methods,
     func_info,
     pretty_callbacks,
     is_class_or_static_method,
 )
-from dafi.utils.mappings import LOCAL_CALLBACK_MAPPING, LOCAL_CLASS_CALLBACKS
+from dafi.utils.mappings import (
+    LOCAL_CALLBACK_MAPPING,
+    LOCAL_CLASS_CALLBACKS,
+    SCHEDULER_AT_TIME_TASKS,
+    SCHEDULER_PERIODICAL_TASKS,
+)
 
 __all__ = ["Global", "callback"]
 
@@ -46,7 +52,8 @@ class RemoteCallback(NamedTuple):
     def __call__(self, *args, **kwargs):
         if "g" in self.signature.parameters:
             g = copy(Global._get_self(Global))
-            g._inside_callback_context = True
+            if self.is_async:
+                g._inside_callback_context = True
             kwargs["g"] = g
         return self.callback(*args, **kwargs)
 
@@ -72,7 +79,8 @@ class RemoteClassCallback(NamedTuple):
     def __call__(self, *args, **kwargs):
         if "g" in self.signature.parameters:
             g = copy(Global._get_self(Global))
-            g._inside_callback_context = True
+            if self.is_async:
+                g._inside_callback_context = True
             kwargs["g"] = g
         return self.callback(*args, **kwargs)
 
@@ -92,6 +100,7 @@ class Global(metaclass=Singleton):
     """
 
     def __post_init__(self):
+        self.process_name = f"{self.process_name}[{os.getpid()}]"
         if not (self.init_controller or self.init_node):
             raise InitializationError(
                 "No components were found in current process."
@@ -256,3 +265,16 @@ def __transfer_and_call(func: Callable[..., Any], *args, **kwargs) -> Any:
 @callback
 async def __async_transfer_and_call(func: Callable[..., Any], *args, **kwargs) -> Any:
     return await func(*args, **kwargs)
+
+
+@callback
+async def __cancel_scheduled_task(scheduler_type: SchedulerTaskType, msg_uuid: str, func_name: str) -> NoReturn:
+    from dafi.components.scheduler import logger
+
+    if scheduler_type == "period" and func_name in SCHEDULER_PERIODICAL_TASKS:
+        SCHEDULER_PERIODICAL_TASKS.pop(func_name).cancel()
+        logger.warning(f"Task {func_name!r} (condition={scheduler_type!r}) has been canceled.")
+    elif scheduler_type == "at_time" and msg_uuid in SCHEDULER_AT_TIME_TASKS:
+        for task in SCHEDULER_AT_TIME_TASKS.pop(msg_uuid):
+            task.cancel()
+        logger.warning(f"Task group {func_name!r} (condition={scheduler_type!r}) has been canceled.")

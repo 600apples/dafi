@@ -1,6 +1,6 @@
 import os
 import shelve
-from functools import cached_property
+from cached_property import cached_property
 from pathlib import Path
 from tempfile import gettempdir
 from typing import Any, NoReturn, Optional

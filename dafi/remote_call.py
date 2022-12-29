@@ -6,7 +6,7 @@ from threading import Event
 from typing import Optional, Union, NoReturn, Callable, Coroutine, List
 
 from anyio import to_thread
-from dafi.async_result import AsyncResult
+from dafi.async_result import AsyncResult, SchedulerTask, AsyncSchedulerTask
 from dafi.exceptions import GlobalContextError
 from dafi.utils.timeparse import timeparse
 from dafi.utils.custom_types import P, RemoteResult, TimeUnits
@@ -38,7 +38,7 @@ class PERIOD:
 
 @dataclass
 class RemoteCall:
-    _ipc: "Ipc"
+    _ipc: "Ipc" = field(repr=False)
     func_name: Optional[str] = None
     args: P.args = field(default_factory=tuple)
     kwargs: P.kwargs = field(default_factory=dict)
@@ -139,7 +139,7 @@ class RemoteCall:
         self,
         at_time: Optional[Union[List[TimeUnits], TimeUnits]],
         period: Optional[TimeUnits],
-    ) -> NoReturn:
+    ) -> Union[SchedulerTask, AsyncSchedulerTask]:
         if at_time is not None:
             if isinstance(at_time, (int, float, str, timedelta, datetime)):
                 at_time = [at_time]
@@ -160,7 +160,8 @@ class RemoteCall:
             inside_callback_context=self._inside_callback_context,
         )
         if asyncio.iscoroutine(res) and self._inside_callback_context:
-            asyncio.create_task(res)
+            return asyncio.create_task(res)
+        return res
 
     def _get_duration(self, val: TimeUnits, arg_name: str, default: Optional[int] = None) -> Union[int, float]:
         if val:
@@ -211,21 +212,15 @@ class LazyRemoteCall:
         def condition_executable():
             return self._exist
 
-        if async_library():
-            return to_thread.run_sync(self._wait, condition_executable, interval)
-        else:
-            self._wait(condition_executable, interval)
+        self._wait(condition_executable, interval)
 
-    def _wait_process(self, process_name: str) -> Union[NoReturn, Coroutine]:
+    def _wait_process(self, process_name: str) -> NoReturn:
         interval = 0.5
 
         def condition_executable():
             return process_name in NODE_CALLBACK_MAPPING
 
-        if async_library():
-            return to_thread.run_sync(self._wait, condition_executable, interval)
-        else:
-            self._wait(condition_executable, interval)
+        self._wait(condition_executable, interval)
 
     def __call__(__self__, *args, **kwargs) -> RemoteCall:
         if not __self__._func_name:
@@ -241,7 +236,7 @@ class LazyRemoteCall:
         )
 
     def __getattr__(self, item) -> RemoteCall:
-        if self._stop_event.is_set():
+        if self._stop_event and self._stop_event.is_set():
             raise GlobalContextError("Global can no longer accept remote calls because it was stopped")
         self._func_name = item
         return self

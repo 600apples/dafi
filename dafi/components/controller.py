@@ -2,16 +2,14 @@ import logging
 import time
 from functools import partial
 from collections import defaultdict
-from threading import Event as thEvent
 from typing import NoReturn, ClassVar, Dict
 
 from anyio import (
+    Event,
     create_task_group,
     sleep,
     move_on_after,
     TASK_STATUS_IGNORED,
-    EndOfStream,
-    BrokenResourceError,
 )
 from anyio.abc import TaskGroup
 from anyio.abc._sockets import SocketStream
@@ -19,7 +17,7 @@ from anyio.abc._sockets import SocketStream
 from dafi.utils import colors
 from dafi.backend import BackEndKeys
 from dafi.utils.logger import patch_logger
-from dafi.components import ComponentsBase
+from dafi.components import ComponentsBase, send_to_stream
 from dafi.message import Message, MessageFlag, RemoteError
 from dafi.utils.debug import with_debug_trace
 from dafi.utils.retry import stoppable_retry, RetryInfo
@@ -37,11 +35,10 @@ class Controller(ComponentsBase):
     @stoppable_retry(wait=3)
     async def handle(
         self,
-        stop_event: thEvent,
+        _,
         retry_info: RetryInfo,
         task_status=TASK_STATUS_IGNORED,
     ):
-        self.stop_event = stop_event
         self.operations = ControllerOperations()
 
         if retry_info.attempt == 2 or not retry_info.attempt % 5:
@@ -57,47 +54,44 @@ class Controller(ComponentsBase):
 
     @with_debug_trace
     async def healthcheck(self) -> NoReturn:
-        while not self.stop_event.is_set():
+        while True:
             self.backend.write(BackEndKeys.CONTROLLER_HEALTHCHECK_TS, time.time())
             await sleep(self.TIMEOUT / 2)
 
     @with_debug_trace
     async def _handle_commands(self, stream: SocketStream, sg: TaskGroup):
 
+        stop_event = Event()
         async with stream:
-            while not self.stop_event.is_set():
+            while not stop_event.is_set():
                 with move_on_after(1) as scope:
                     try:
                         raw_msglen = await stream.receive(4)
-                    except (EndOfStream, BrokenResourceError, ConnectionResetError):
+                        if not raw_msglen:
+                            continue
+                        msglen = Message.msglen(raw_msglen)
+                        msg = Message.loads(await stream.receive(msglen))
+                    except Exception:
                         await self.operations.on_stream_close(stream)
                         break
 
-                if scope.cancel_called or not raw_msglen:
+                if scope.cancel_called:
                     continue
 
-                msglen = Message.msglen(raw_msglen)
-                msg = Message.loads(await stream.receive(msglen))
-
                 if msg.flag == MessageFlag.HANDSHAKE:
-                    if not await self.operations.on_handshake(msg, stream, sg):
-                        break
+                    await self.operations.on_handshake(msg, stream, sg, stop_event)
 
                 elif msg.flag == MessageFlag.UPDATE_CALLBACKS:
                     await self.operations.on_update_callbacks(msg, sg)
 
                 elif msg.flag == MessageFlag.REQUEST:
-                    await self.operations.on_request(msg, stream, sg)
+                    await self.operations.on_request(msg, stream, sg, stop_event)
 
                 elif msg.flag == MessageFlag.SUCCESS:
                     await self.operations.on_success(msg, sg)
 
                 elif msg.flag == MessageFlag.SCHEDULER_ERROR:
                     await self.operations.on_scheduler_error(msg, sg)
-
-        if self.stop_event.is_set():
-            await self.listener.aclose()
-            await sg.cancel_scope.cancel()
 
 
 class ControllerOperations:
@@ -109,7 +103,7 @@ class ControllerOperations:
     async def on_stream_close(self, stream: SocketStream):
         del_proc = None
         try:
-            del_proc = next(proc for proc, sock in self.socket_store.items() if sock == stream)
+            del_proc = next(proc for proc, (sock, event) in self.socket_store.items() if sock == stream)
             del self.socket_store[del_proc]
             CONTROLLER_CALLBACK_MAPPING.pop(del_proc, None)
         except StopIteration:
@@ -124,58 +118,54 @@ class ControllerOperations:
         awaited_transmitters = defaultdict(list)
         [awaited_transmitters[trans].append(uuid) for uuid, (trans, rec) in AWAITED_PROCS.items() if rec == del_proc]
 
-        for proc, sock in self.socket_store.items():
+        for proc, (sock, event) in self.socket_store.items():
             # Send updated CONTROLLER_CALLBACK_MAPPING to all processes including transmitter process.
-            await sock.send(
+            await send_to_stream(
+                sock,
                 Message(
                     flag=MessageFlag.UPDATE_CALLBACKS,
                     transmitter=del_proc,
                     receiver=proc,
                     func_args=(CONTROLLER_CALLBACK_MAPPING,),
-                ).dumps()
+                ).dumps(),
+                event,
             )
             awaited_messages = awaited_transmitters.get(proc)
             if awaited_messages:
                 for msg_uuid in awaited_messages:
-                    await sock.send(
+                    await send_to_stream(
+                        sock,
                         Message(
                             flag=MessageFlag.REMOTE_STOPPED_UNEXPECTEDLY,
                             transmitter=del_proc,
                             receiver=proc,
                             uuid=msg_uuid,
                             error=RemoteError(info=f"Remote process {del_proc} stopped unexpectedly."),
-                        ).dumps()
+                        ).dumps(),
+                        event,
                     )
 
     @with_debug_trace
-    async def on_handshake(self, msg: Message, stream: SocketStream, sg: TaskGroup):
-        if msg.transmitter in self.socket_store:
-            info = f"Detected 2 remote processes with the name {msg.transmitter!r}. Please rename one of them."
-            logger.error(info)
-            msg.error = RemoteError(info=info)
-            await stream.send(msg.dumps())
-            return False
-        else:
-            self.socket_store[msg.transmitter] = stream
-            CONTROLLER_CALLBACK_MAPPING[msg.transmitter] = msg.func_args[0]
-            msg.func_args = (CONTROLLER_CALLBACK_MAPPING,)
-            for proc, sock in self.socket_store.items():
-                # Send updated CONTROLLER_CALLBACK_MAPPING to all processes including transmitter process.
-                msg.receiver = proc
-                sg.start_soon(sock.send, msg.dumps())
-            return True
+    async def on_handshake(self, msg: Message, stream: SocketStream, sg: TaskGroup, stop_event: Event):
+        self.socket_store[msg.transmitter] = (stream, stop_event)
+        CONTROLLER_CALLBACK_MAPPING[msg.transmitter] = msg.func_args[0]
+        msg.func_args = (CONTROLLER_CALLBACK_MAPPING,)
+        for proc, (sock, event) in self.socket_store.items():
+            # Send updated CONTROLLER_CALLBACK_MAPPING to all processes including transmitter process.
+            msg.receiver = proc
+            sg.start_soon(send_to_stream, sock, msg.dumps(), event)
 
     @with_debug_trace
     async def on_update_callbacks(self, msg: Message, sg: TaskGroup):
         CONTROLLER_CALLBACK_MAPPING[msg.transmitter].update(msg.func_args[0])
         msg.func_args = (CONTROLLER_CALLBACK_MAPPING,)
-        for proc, sock in self.socket_store.items():
+        for proc, (sock, event) in self.socket_store.items():
             # Send updated CONTROLLER_CALLBACK_MAPPING to all processes including transmitter process.
             msg.receiver = proc
-            sg.start_soon(sock.send, msg.dumps())
+            sg.start_soon(send_to_stream, sock, msg.dumps(), event)
 
     @with_debug_trace
-    async def on_request(self, msg: Message, stream: SocketStream, sg: TaskGroup):
+    async def on_request(self, msg: Message, stream: SocketStream, sg: TaskGroup, stop_event: Event):
         receiver = msg.receiver
 
         if not receiver:
@@ -188,44 +178,52 @@ class ControllerOperations:
         if receiver and receiver in CONTROLLER_CALLBACK_MAPPING:
             msg.receiver = receiver
             # Take socket of destination process where function/method will be triggered.
-            sock = self.socket_store[receiver]
-            # Assign trasmitter to message id in order to redirect result after processing.
+            sock, event = self.socket_store[receiver]
+            # Assign transmitter to message id in order to redirect result after processing.
             AWAITED_PROCS[msg.uuid] = msg.transmitter, receiver
-            sg.start_soon(sock.send, msg.dumps())
+            sg.start_soon(send_to_stream, sock, msg.dumps(), event)
+
+            if msg.period:
+                # Return back to transmitter info that scheduled task was accepted.
+                msg.swap_applicants()
+                msg.flag = MessageFlag.SCHEDULER_ACCEPT
+                sg.start_soon(send_to_stream, stream, msg.dumps(), stop_event)
 
         else:
             msg.flag = MessageFlag.UNABLE_TO_FIND_CANDIDATE
             info = f"Unable to find remote process candidate to execute {msg.func_name!r}"
             msg.error = RemoteError(info=info)
-            sg.start_soon(stream.send, msg.dumps())
+            sg.start_soon(send_to_stream, stream, msg.dumps(), stop_event)
             logger.error(info)
 
     @with_debug_trace
     async def on_success(self, msg: Message, sg: TaskGroup):
         transmitter, _ = AWAITED_PROCS.pop(msg.uuid, (None, None))
         if not transmitter:
-            sock = self.socket_store[msg.transmitter]
+            sock, event = self.socket_store[msg.transmitter]
             msg.flag = MessageFlag.UNABLE_TO_FIND_PROCESS
             info = "Unable to find process by message uuid"
             msg.error = RemoteError(info=info)
-            sg.start_soon(sock.send, msg.dumps())
+            sg.start_soon(send_to_stream, sock, msg.dumps(), event)
             logger.error(info)
 
         else:
-            sock = self.socket_store.get(transmitter)
-            if not sock:
+            sock_and_event = self.socket_store.get(transmitter)
+            if not sock_and_event:
                 logging.error(f"Unable to send calculated result. Process {transmitter!r} is disconnected.")
             else:
-                sg.start_soon(sock.send, msg.dumps())
+                sock, event = sock_and_event
+                sg.start_soon(send_to_stream, sock, msg.dumps(), event)
 
     @with_debug_trace
     async def on_scheduler_error(self, msg: Message, sg: TaskGroup):
         # Dont care about message uuid. Scheduler tasks are long running processes. Sheduler can report about error
         # multiple times.
         AWAITED_PROCS.pop(msg.uuid, None)
-        sock = self.socket_store.get(msg.receiver)
-        if not sock:
+        sock_and_event = self.socket_store.get(msg.receiver)
+        if not sock_and_event:
             logging.error(f"Unable to send calculated result. Process {msg.receiver!r} is disconnected.")
         else:
+            sock, event = sock_and_event
             msg.flag = MessageFlag.SUCCESS
-            sg.start_soon(sock.send, msg.dumps())
+            sg.start_soon(send_to_stream, sock, msg.dumps(), event)

@@ -3,11 +3,12 @@ import logging
 import pickle
 import asyncio
 from asyncio import Queue
-from threading import Event as thEvent
 from typing import Union, Optional, NoReturn
 
 from anyio import (
     sleep,
+    Event,
+    maybe_async,
     create_task_group,
     move_on_after,
     TASK_STATUS_IGNORED,
@@ -26,6 +27,7 @@ from dafi.message import Message, MessageFlag, RemoteError
 from dafi.utils.debug import with_debug_trace
 from dafi.utils.retry import stoppable_retry, RetryInfo
 from dafi.components.scheduler import Scheduler
+from dafi.utils.misc import run_in_threadpool
 
 from dafi.exceptions import UnableToFindCandidate, RemoteStoppedUnexpectedly
 from dafi.utils.mappings import (
@@ -56,41 +58,44 @@ class Node(ComponentsBase):
     )
     async def handle(
         self,
-        stop_event: thEvent,
+        _,
         retry_info: RetryInfo,
         task_status: TaskStatus = TASK_STATUS_IGNORED,
     ):
-        self.stop_event = stop_event
+        self.stop_event = Event()
         self.loop = asyncio.get_running_loop()
         self.item_store = Queue()
-
-        self.operations = NodeOperations()
+        self.operations = NodeOperations(self.stop_event)
 
         if retry_info.attempt == 2 or not retry_info.attempt % 5:
             logger.error("Unable to connect node. retrying...")
 
         async with self.connect_listener() as stream:
             async with create_task_group() as sg:
-                self.scheduler = Scheduler(process_name=self.process_name, sg=sg, stop_event=stop_event)
+                self.scheduler = Scheduler(process_name=self.process_name, sg=sg, stop_event=self.stop_event)
 
                 sg.start_soon(self._write_commands, stream, sg)
                 sg.start_soon(self._read_commands, stream, task_status, sg)
 
     @with_debug_trace
     async def _read_commands(self, stream: SocketStream, task_status: TaskStatus, sg: TaskGroup):
-        while not self.stop_event.is_set():
+        while True:
+            if self.stop_event.is_set():
+                raise ConnectionResetError("Node disconnected from controller.")
+
             with move_on_after(1) as scope:
                 try:
                     raw_msglen = await stream.receive(4)
-                except (EndOfStream, BrokenResourceError, ConnectionResetError):
-                    await sg.cancel_scope.cancel()
+                    if not raw_msglen:
+                        continue
+                    msglen = Message.msglen(raw_msglen)
+                    msg = Message.loads(await stream.receive(msglen))
+                except Exception:
+                    await maybe_async(sg.cancel_scope.cancel())
                     raise
 
-            if scope.cancel_called or not raw_msglen:
+            if scope.cancel_called:
                 continue
-
-            msglen = Message.msglen(raw_msglen)
-            msg = Message.loads(await stream.receive(msglen))
 
             if msg.flag in (MessageFlag.HANDSHAKE, MessageFlag.UPDATE_CALLBACKS):
                 await self.operations.on_handshake(msg, task_status, self.process_name, self.info)
@@ -100,6 +105,9 @@ class Node(ComponentsBase):
 
             elif msg.flag == MessageFlag.SUCCESS:
                 await self.operations.on_success(msg, self.scheduler)
+
+            elif msg.flag == MessageFlag.SCHEDULER_ACCEPT:
+                await self.operations.on_scheduler_accept(msg)
 
             elif msg.flag in (
                 MessageFlag.UNABLE_TO_FIND_CANDIDATE,
@@ -121,17 +129,16 @@ class Node(ComponentsBase):
                 transmitter=self.process_name,
                 func_args=(LOCAL_CALLBACK_MAPPING,),
             ).dumps(),
+            self.stop_event,
         )
-
         while not self.stop_event.is_set():
             item, eta = await self.item_store.get()
             sg.start_soon(self._send_item, item, eta, stream)
-        await stream.aclose()
 
     @with_debug_trace
     async def _send_item(self, item: bytes, eta: Union[int, float], stream: SocketStream):
         await sleep(eta)
-        await send_to_stream(stream, item)
+        await send_to_stream(stream, item, self.stop_event)
 
     @with_debug_trace
     def send_threadsave(self, message: bytes, eta: Union[int, float]):
@@ -149,7 +156,8 @@ class Node(ComponentsBase):
 class NodeOperations:
     """Node operations specification object"""
 
-    def __init__(self):
+    def __init__(self, stop_event: Event):
+        self.stop_event = stop_event
         AsyncResult.fold_results()
         self.initial_log_shown = False
 
@@ -205,6 +213,7 @@ class NodeOperations:
                     return_result=msg.return_result,
                     error=RemoteError(info=info.replace("locally", "on remote process")),
                 ).dumps(),
+                self.stop_event,
             )
             logger.error(info)
 
@@ -225,15 +234,13 @@ class NodeOperations:
         error = msg.error
 
         if msg.return_result:
-            try:
-                ares = AsyncResult._awaited_results[msg.uuid]
-            except KeyError:
-                if not error:
-                    logger.warning(f"Result {msg.uuid} was taken by timeout")
-                else:
-                    # Result already taken by timeout. No need to raise error but need to notify about
-                    # finally remote call returned exception.
-                    error.show_in_log(logger=logger)
+            ares = AsyncResult._awaited_results.get(msg.uuid)
+            if not ares and not error:
+                logger.warning(f"Result {msg.uuid} was taken by timeout")
+            elif not ares and error:
+                # Result already taken by timeout. No need to raise error but need to notify about
+                # finally remote call returned exception.
+                error.show_in_log(logger=logger)
 
             else:
                 if error:
@@ -247,6 +254,16 @@ class NodeOperations:
                     await scheduler.on_error(msg)
                 else:
                     error.show_in_log(logger=logger)
+
+    @with_debug_trace
+    async def on_scheduler_accept(self, msg: Message):
+        transmitter = msg.transmitter
+        ares = AsyncResult._awaited_results.get(msg.uuid)
+        if ares:
+            AsyncResult._awaited_results[msg.uuid] = transmitter
+            ares._ready.set()
+        else:
+            logger.error(f"Unable to find message uuid to accept {msg.func_name!r} scheduler task")
 
     @with_debug_trace
     async def on_unable_to_find(self, msg):
@@ -271,9 +288,10 @@ class NodeOperations:
         kwargs = message.func_kwargs
 
         try:
-            result = remote_callback(*args, **kwargs)
             if remote_callback.is_async:
-                result = await result
+                result = await remote_callback(*args, **kwargs)
+            else:
+                result = await run_in_threadpool(remote_callback, *args, **kwargs)
         except TypeError as e:
             if "were given" in str(e) or "got an unexpected" in str(e) or "missing" in str(e):
                 info = f"{e}. Function signature is: {message.func_name}{remote_callback.signature}: ..."
@@ -310,4 +328,4 @@ class NodeOperations:
                 error=error,
             ).dumps()
 
-        await send_to_stream(stream, message_to_return)
+        await send_to_stream(stream, message_to_return, self.stop_event)

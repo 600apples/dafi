@@ -1,0 +1,6 @@
+@callback
+async def async_callback_func_{{ callback_index }}(*args, g: Global, **kwargs):
+{%- if long_running_callback %}
+    await sleep(5)
+{% endif %}
+    return args, kwargs, g.process_name

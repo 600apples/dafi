@@ -1,0 +1,9 @@
+{% extends "layout/base.jinja2" %}
+
+{%- block content %}
+{% for callback_index in range(start_range, end_range) %}
+{% include "layout/callback.jinja2" %}
+
+{% include "layout/async_callback.jinja2" %}
+{% endfor %}
+{% endblock %}

@@ -5,8 +5,8 @@ from typing import Optional, Tuple, Dict
 
 import dill
 
-from dafi.utils.misc import uuid as msg_uuid, Period
 from dafi.exceptions import RemoteError
+from dafi.utils.misc import uuid as msg_uuid, Period
 
 
 class MessageFlag(IntEnum):
@@ -18,6 +18,7 @@ class MessageFlag(IntEnum):
     UNABLE_TO_FIND_PROCESS = 6
     REMOTE_STOPPED_UNEXPECTEDLY = 7
     SCHEDULER_ERROR = 8
+    SCHEDULER_ACCEPT = 9
 
 
 @dataclass
@@ -25,8 +26,8 @@ class Message:
 
     flag: MessageFlag
     transmitter: str
-    uuid: Optional[str] = field(default_factory=msg_uuid)
     receiver: Optional[str] = None
+    uuid: Optional[str] = field(default_factory=msg_uuid)
     func_name: Optional[str] = None
     func_args: Optional[Tuple] = field(default_factory=tuple)
     func_kwargs: Optional[Dict] = field(default_factory=dict)
@@ -47,3 +48,8 @@ class Message:
     @staticmethod
     def msglen(raw: bytes) -> int:
         return struct.unpack(">I", raw)[0]
+
+    def swap_applicants(self):
+        if self.receiver is None or self.transmitter is None:
+            raise ValueError("Both receiver and transmitter should be not empty to swap.")
+        self.receiver, self.transmitter = self.transmitter, self.receiver
