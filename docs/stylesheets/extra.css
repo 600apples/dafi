@@ -23,3 +23,17 @@ header:after{
 .md-search__input {
     border: 1px solid #2b8ff3;
 }
+
+.admonition.info {
+    background-color: #6f6ff1 !important;
+    color: white !important;
+}
+
+.admonition.warning {
+    background-color: #ff9100 !important;
+    color: white !important;
+}
+
+.admonition-title {
+    background-color: #b3b3f1d6 !important;
+}
