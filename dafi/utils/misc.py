@@ -1,12 +1,47 @@
+import time
 import string
 import types
 import asyncio
 from collections import deque
 from random import choices
-from typing import Callable, Any
+from typing import Callable, Any, NamedTuple, List, Optional
 
 import sniffio
 from anyio import sleep
+
+from dafi.exceptions import InitializationError
+
+
+class Period(NamedTuple):
+    at_time: Optional[List[int]] = None
+    period: Optional[int] = None
+
+    def validate(self):
+
+        if self.at_time is None and self.period is None:
+            raise InitializationError(
+                "Provide one of 'at_time' argument or 'period' argument during Period initialization"
+            )
+
+        if self.at_time is not None and self.period is not None:
+            raise InitializationError("Only 1 time unit is allowed. Provide either 'at_time' or 'period' argument")
+
+        if self.at_time is not None:
+            now = time.time()
+            if len(self.at_time) > 1000:
+                raise InitializationError("Too many scheduled at time periods. Provide no more then 1000 timestamps.")
+            if any(i <= now for i in self.at_time):
+                raise InitializationError(
+                    "One or mote timestamps in 'at_time' argument "
+                    "are less then current timestamp. "
+                    "Make sure you pass timestamps that are greater then current time"
+                )
+
+        if self.period is not None and self.period <= 0:
+            raise InitializationError(
+                "Provided 'period' timestamp is less then 0."
+                " Make sure you pass period that allows scheduler to execute task periodically"
+            )
 
 
 class Singleton(type):

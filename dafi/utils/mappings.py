@@ -1,3 +1,4 @@
+import asyncio
 from collections import defaultdict
 from typing import Dict, DefaultDict, Optional, Tuple, Union, Sequence, Set
 from dafi.utils.custom_types import GlobalCallback, K
@@ -8,6 +9,7 @@ AWAITED_PROCS: Dict[str, Tuple[str, str]] = dict()
 LOCAL_CALLBACK_MAPPING: Dict[K, GlobalCallback] = dict()
 NODE_CALLBACK_MAPPING: DefaultDict[K, Dict[K, GlobalCallback]] = defaultdict()
 CONTROLLER_CALLBACK_MAPPING: DefaultDict[K, Dict[K, GlobalCallback]] = defaultdict()
+SCHEDULER_PERIODICAL_TASKS: Dict[str, asyncio.Task] = dict()
 
 WELL_KNOWN_CALLBACKS: Set[str] = {"__transfer_and_call", "__async_transfer_and_call"}
 

@@ -5,7 +5,7 @@ from typing import Optional, Tuple, Dict
 
 import dill
 
-from dafi.utils.misc import uuid as msg_uuid
+from dafi.utils.misc import uuid as msg_uuid, Period
 from dafi.exceptions import RemoteError
 
 
@@ -17,6 +17,7 @@ class MessageFlag(IntEnum):
     UNABLE_TO_FIND_CANDIDATE = 5
     UNABLE_TO_FIND_PROCESS = 6
     REMOTE_STOPPED_UNEXPECTEDLY = 7
+    SCHEDULER_ERROR = 8
 
 
 @dataclass
@@ -31,6 +32,7 @@ class Message:
     func_kwargs: Optional[Dict] = field(default_factory=dict)
     return_result: Optional[bool] = True
     error: Optional[RemoteError] = None
+    period: Optional[Period] = None
 
     def dumps(self) -> bytes:
         payload = tuple(map(lambda f: getattr(self, f.name), fields(self)))

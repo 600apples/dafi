@@ -83,6 +83,9 @@ class Controller(ComponentsBase):
                 elif msg.flag == MessageFlag.SUCCESS:
                     await self.operations.on_success(msg, sg)
 
+                elif msg.flag == MessageFlag.SCHEDULER_ERROR:
+                    await self.operations.on_scheduler_error(msg, sg)
+
         if self.stop_event.is_set():
             await self.listener.aclose()
             await sg.cancel_scope.cancel()
@@ -205,3 +208,15 @@ class ControllerOperations:
                 logging.error(f"Unable to send calculated result. Process {transmitter!r} is disconnected.")
             else:
                 sg.start_soon(sock.send, msg.dumps())
+
+    @with_debug_trace
+    async def on_scheduler_error(self, msg: Message, sg: TaskGroup):
+        # Dont care about message uuid. Scheduler tasks are long running processes. Sheduler can report about error
+        # multiple times.
+        AWAITED_PROCS.pop(msg.uuid, None)
+        sock = self.socket_store.get(msg.receiver)
+        if not sock:
+            logging.error(f"Unable to send calculated result. Process {msg.receiver!r} is disconnected.")
+        else:
+            msg.flag = MessageFlag.SUCCESS
+            sg.start_soon(sock.send, msg.dumps())

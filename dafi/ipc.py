@@ -15,6 +15,7 @@ from dafi.exceptions import InitializationError, GlobalContextError
 from dafi.message import Message, MessageFlag
 from dafi.signals import set_signal_handler
 from dafi.utils.retry import resilent
+from dafi.utils.misc import Period
 from dafi.utils.func_validation import pretty_callbacks
 from dafi.utils.mappings import NODE_CALLBACK_MAPPING, search_remote_callback_in_mapping
 
@@ -64,6 +65,7 @@ class Ipc(Thread):
         async_: Optional[bool] = False,
         eta: Optional[Union[int, float]] = 0,
         return_result: Optional[bool] = True,
+        func_period: Optional[Period] = None,
         inside_callback_context: Optional[bool] = False,
     ):
         if not self.node:
@@ -102,6 +104,7 @@ class Ipc(Thread):
             func_args=args,
             func_kwargs=kwargs,
             return_result=return_result,
+            period=func_period,
         )
 
         if inside_callback_context:

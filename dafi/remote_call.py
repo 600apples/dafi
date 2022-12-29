@@ -1,33 +1,39 @@
 import time
 import asyncio
 from dataclasses import dataclass, field
-from datetime import timedelta
+from datetime import timedelta, datetime
 from threading import Event
-from typing import Optional, Union, NoReturn, Callable, Coroutine
+from typing import Optional, Union, NoReturn, Callable, Coroutine, List
 
 from anyio import to_thread
 from dafi.async_result import AsyncResult
 from dafi.exceptions import GlobalContextError
 from dafi.utils.timeparse import timeparse
-from dafi.utils.custom_types import P, RemoteResult
+from dafi.utils.custom_types import P, RemoteResult, TimeUnits
 from dafi.utils.mappings import search_remote_callback_in_mapping, NODE_CALLBACK_MAPPING
-from dafi.utils.misc import async_library, sync_to_async
+from dafi.utils.misc import async_library, sync_to_async, Period
 
 
 @dataclass
 class FG:
-    timeout: Optional[Union[timedelta, int, float, str]] = None
+    timeout: Optional[TimeUnits] = None
 
 
 @dataclass
 class BG:
-    timeout: Optional[Union[timedelta, int, float, str]] = None
-    eta: Optional[Union[timedelta, int, float, str]] = None
+    timeout: Optional[TimeUnits] = None
+    eta: Optional[TimeUnits] = None
 
 
 @dataclass
 class NO_RETURN:
-    eta: Optional[Union[timedelta, int, float, str]] = None
+    eta: Optional[TimeUnits] = None
+
+
+@dataclass
+class PERIOD:
+    at_time: Optional[Union[List[TimeUnits], TimeUnits]] = None
+    period: Optional[TimeUnits] = None
 
 
 @dataclass
@@ -67,13 +73,16 @@ class RemoteCall:
             return self.bg(timeout=other.timeout, eta=other.eta)
 
         elif isinstance(other, (NO_RETURN, type(NO_RETURN))):
-            return self.no_return(eta=NO_RETURN.eta)
+            return self.no_return(eta=other.eta)
+
+        elif isinstance(other, (PERIOD, type(PERIOD))):
+            return self.period(at_time=other.at_time, period=other.period)
 
         else:
-            valid_operands = ", ".join(map(lambda o: o.__name__, (FG, BG, NO_RETURN)))
+            valid_operands = ", ".join(map(lambda o: o.__name__, (FG, BG, NO_RETURN, PERIOD)))
             raise GlobalContextError(f"Invalid operand {type(other)}. Use one of {valid_operands}")
 
-    def __call__(self, timeout: Optional[Union[timedelta, int, float, str]] = None) -> RemoteResult:
+    def __call__(self, timeout: Optional[TimeUnits] = None) -> RemoteResult:
         return self.fg(timeout=timeout)
 
     @property
@@ -86,7 +95,7 @@ class RemoteCall:
     def exists(self) -> bool:
         return bool(self.info)
 
-    def fg(self, timeout: Optional[Union[timedelta, int, float, str]] = None) -> RemoteResult:
+    def fg(self, timeout: Optional[TimeUnits] = None) -> RemoteResult:
         timeout = self._get_duration(timeout, "timeout")
         return self._ipc.call(
             self.func_name,
@@ -98,9 +107,7 @@ class RemoteCall:
             inside_callback_context=self._inside_callback_context,
         )
 
-    def bg(
-        self, timeout: Optional[Union[int, float]] = None, eta: Optional[Union[timedelta, int, float, str]] = None
-    ) -> AsyncResult:
+    def bg(self, timeout: Optional[TimeUnits] = None, eta: Optional[TimeUnits] = None) -> AsyncResult:
         timeout = self._get_duration(timeout, "timeout")
         eta = self._get_duration(eta, "eta", 0)
         return self._ipc.call(
@@ -114,7 +121,7 @@ class RemoteCall:
             inside_callback_context=self._inside_callback_context,
         )
 
-    def no_return(self, eta: Optional[Union[timedelta, int, float, str]] = None) -> NoReturn:
+    def no_return(self, eta: Optional[TimeUnits] = None) -> NoReturn:
         eta = self._get_duration(eta, "eta", 0)
         res = self._ipc.call(
             self.func_name,
@@ -128,14 +135,37 @@ class RemoteCall:
         if asyncio.iscoroutine(res) and self._inside_callback_context:
             asyncio.create_task(res)
 
-    def _get_duration(
-        self, val: Union[timedelta, int, float, str], arg_name: str, default: Optional[int] = None
-    ) -> Union[int, float]:
+    def period(self, at_time: Optional[Union[List[TimeUnits], TimeUnits]], period: Optional[TimeUnits]) -> NoReturn:
+        if at_time is not None:
+            if isinstance(at_time, (int, float, str, timedelta, datetime)):
+                at_time = [at_time]
+            at_time = [self._get_duration(i, "at_time", 0) for i in at_time]
+        if period is not None:
+            period = self._get_duration(period, "period", 0)
+
+        func_period = Period(at_time=at_time, period=period)
+        func_period.validate()
+
+        res = self._ipc.call(
+            self.func_name,
+            args=self.args,
+            kwargs=self.kwargs,
+            async_=True,
+            return_result=False,
+            func_period=func_period,
+            inside_callback_context=self._inside_callback_context,
+        )
+        if asyncio.iscoroutine(res) and self._inside_callback_context:
+            asyncio.create_task(res)
+
+    def _get_duration(self, val: TimeUnits, arg_name: str, default: Optional[int] = None) -> Union[int, float]:
         if val:
             if isinstance(val, timedelta):
                 val = val.total_seconds()
             elif isinstance(val, str):
                 val = timeparse(val)
+            elif isinstance(val, datetime):
+                val = time.mktime(val.timetuple())
             elif not isinstance(val, (float, int)):
                 raise GlobalContextError(
                     f"Invalid {arg_name} format. Should be string, int, float or datetime.timedelta."

@@ -4,7 +4,7 @@ import pickle
 import asyncio
 from asyncio import Queue
 from threading import Event as thEvent
-from typing import Union, Optional, NoReturn, Any
+from typing import Union, Optional, NoReturn
 
 from anyio import (
     sleep,
@@ -13,20 +13,19 @@ from anyio import (
     TASK_STATUS_IGNORED,
     EndOfStream,
     BrokenResourceError,
-    BusyResourceError,
 )
 from anyio._backends._asyncio import TaskGroup
 from anyio.abc import TaskStatus
 from anyio.abc._sockets import SocketStream
 
 from dafi.utils import colors
-from dafi.utils.misc import AsyncDeque
 from dafi.utils.logger import patch_logger
 from dafi.async_result import AsyncResult
-from dafi.components import ComponentsBase
+from dafi.components import ComponentsBase, send_to_stream
 from dafi.message import Message, MessageFlag, RemoteError
 from dafi.utils.debug import with_debug_trace
 from dafi.utils.retry import stoppable_retry, RetryInfo
+from dafi.components.scheduler import Scheduler
 
 from dafi.exceptions import UnableToFindCandidate, RemoteStoppedUnexpectedly
 from dafi.utils.mappings import (
@@ -44,18 +43,6 @@ tblib.pickling_support.install()
 logger = patch_logger(logging.getLogger(__name__), colors.green)
 
 
-async def send_to_stream(stream: SocketStream, item: Any):
-    attempts = 20
-    for _ in range(attempts):
-        try:
-            await stream.send(item)
-            break
-        except BusyResourceError:
-            await sleep(0.1)
-    else:
-        logger.error(f"Failed to send item {item} during {attempts} attempts.")
-
-
 class Node(ComponentsBase):
     @stoppable_retry(
         wait=3, acceptable=(ConnectionRefusedError, ConnectionResetError, EndOfStream, BrokenResourceError, OSError)
@@ -64,7 +51,6 @@ class Node(ComponentsBase):
         self.stop_event = stop_event
         self.loop = asyncio.get_running_loop()
         self.item_store = Queue()
-        self.item_mediator_store = AsyncDeque()
 
         self.operations = NodeOperations()
 
@@ -73,6 +59,8 @@ class Node(ComponentsBase):
 
         async with self.connect_listener() as stream:
             async with create_task_group() as sg:
+                self.scheduler = Scheduler(process_name=self.process_name, sg=sg, stop_event=stop_event)
+
                 sg.start_soon(self._write_commands, stream, sg)
                 sg.start_soon(self._read_commands, stream, task_status, sg)
 
@@ -96,10 +84,10 @@ class Node(ComponentsBase):
                 await self.operations.on_handshake(msg, task_status, self.process_name, self.info)
 
             elif msg.flag == MessageFlag.REQUEST:
-                await self.operations.on_request(msg, stream, sg, self.process_name)
+                await self.operations.on_request(msg, stream, sg, self.process_name, self.scheduler)
 
             elif msg.flag == MessageFlag.SUCCESS:
-                await self.operations.on_success(msg)
+                await self.operations.on_success(msg, self.scheduler)
 
             elif msg.flag in (
                 MessageFlag.UNABLE_TO_FIND_CANDIDATE,
@@ -178,11 +166,16 @@ class NodeOperations:
                 )
 
     @with_debug_trace
-    async def on_request(self, msg: Message, stream: SocketStream, sg: TaskGroup, process_name: str):
+    async def on_request(
+        self, msg: Message, stream: SocketStream, sg: TaskGroup, process_name: str, scheduler: Scheduler
+    ):
 
         remote_callback = LOCAL_CALLBACK_MAPPING.get(msg.func_name)
         if not remote_callback:
-            info = f"Function {msg.func_name!r} is not registered as callback locally. Make sure python loaded module where callback is located."
+            info = (
+                f"Function {msg.func_name!r} is not registered as callback locally."
+                f" Make sure python loaded module where callback is located."
+            )
             sg.start_soon(
                 send_to_stream,
                 stream,
@@ -198,6 +191,9 @@ class NodeOperations:
             )
             logger.error(info)
 
+        elif msg.period:
+            await scheduler.register(msg=msg, stream=stream)
+
         else:
             sg.start_soon(
                 self._remote_func_executor,
@@ -208,7 +204,7 @@ class NodeOperations:
             )
 
     @with_debug_trace
-    async def on_success(self, msg: Message):
+    async def on_success(self, msg: Message, scheduler: Scheduler):
         error = msg.error
 
         if msg.return_result:
@@ -230,7 +226,10 @@ class NodeOperations:
                 ares._ready.set()
         else:
             if error:
-                error.show_in_log(logger=logger)
+                if msg.period:
+                    await scheduler.on_error(msg)
+                else:
+                    error.show_in_log(logger=logger)
 
     @with_debug_trace
     async def on_unable_to_find(self, msg):

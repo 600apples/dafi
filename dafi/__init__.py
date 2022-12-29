@@ -10,4 +10,4 @@ from dafi.exceptions import (
     RemoteStoppedUnexpectedly,
 )
 from dafi.globals import Global, callback
-from dafi.remote_call import FG, BG, NO_RETURN
+from dafi.remote_call import FG, BG, NO_RETURN, PERIOD

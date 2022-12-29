@@ -1,15 +1,31 @@
 import os
+import logging
 from enum import IntEnum
 from functools import cached_property
-from threading import Event as ThEvent
-from typing import Optional
+from typing import Optional, Any
 from contextlib import asynccontextmanager
 
+from anyio import BusyResourceError, sleep
 from anyio.abc._sockets import SocketListener, UNIXSocketStream, SocketStream
 from anyio import create_unix_listener, create_tcp_listener, connect_unix, connect_tcp
 
 from dafi.exceptions import InitializationError
 from dafi.interface import ControllerI, NodeI, BackEndI
+
+
+logger = logging.getLogger(__name__)
+
+
+async def send_to_stream(stream: SocketStream, item: Any):
+    attempts = 20
+    for _ in range(attempts):
+        try:
+            await stream.send(item)
+            break
+        except BusyResourceError:
+            await sleep(0.1)
+    else:
+        logger.error(f"Failed to send item {item} during {attempts} attempts.")
 
 
 class ControllerStatus(IntEnum):
