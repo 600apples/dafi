@@ -66,7 +66,7 @@ dependencies = [
 ]
 [tool.hatch.envs.default.scripts]
 cov = "pytest --cov-report=term-missing --cov-config=pyproject.toml --cov=dafi --cov=tests {args}"
-# cov_git = "pytest --cov --cov-report={env:COVERAGE_REPORT:term-missing} --cov-config=pyproject.toml"
+cov_git = "pytest --cov --cov-report={env:COVERAGE_REPORT:term-missing} --cov-config=pyproject.toml"
 no-cov = "cov --no-cov {args}"
 
 [tool.hatch.envs.docs]
