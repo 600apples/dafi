@@ -81,8 +81,9 @@ jobs:
 
     - name: Export coverage reports
       run: |
-#        hatch run coverage:report-xml
-        hatch run coverage:report-uncovered-html
+        hatch run coverage:report-xml -i
+        hatch run coverage:report-uncovered-html -i
+
     - name: Upload uncovered HTML report
       uses: actions/upload-artifact@v3
       with:
