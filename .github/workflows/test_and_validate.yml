@@ -81,6 +81,7 @@ jobs:
 
     - name: Export coverage reports
       run: |
+        find . -name "*.pyc" -delete
         hatch run coverage:report-xml -i
         hatch run coverage:report-uncovered-html -i
 
