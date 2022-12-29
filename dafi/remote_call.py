@@ -135,7 +135,11 @@ class RemoteCall:
         if asyncio.iscoroutine(res) and self._inside_callback_context:
             asyncio.create_task(res)
 
-    def period(self, at_time: Optional[Union[List[TimeUnits], TimeUnits]], period: Optional[TimeUnits]) -> NoReturn:
+    def period(
+        self,
+        at_time: Optional[Union[List[TimeUnits], TimeUnits]],
+        period: Optional[TimeUnits],
+    ) -> NoReturn:
         if at_time is not None:
             if isinstance(at_time, (int, float, str, timedelta, datetime)):
                 at_time = [at_time]
@@ -203,7 +207,10 @@ class LazyRemoteCall:
 
     def _wait_function(self) -> Union[NoReturn, Coroutine]:
         interval = 0.5
-        condition_executable = lambda: self._exist
+
+        def condition_executable():
+            return self._exist
+
         if async_library():
             return to_thread.run_sync(self._wait, condition_executable, interval)
         else:
@@ -211,7 +218,10 @@ class LazyRemoteCall:
 
     def _wait_process(self, process_name: str) -> Union[NoReturn, Coroutine]:
         interval = 0.5
-        condition_executable = lambda: process_name in NODE_CALLBACK_MAPPING
+
+        def condition_executable():
+            return process_name in NODE_CALLBACK_MAPPING
+
         if async_library():
             return to_thread.run_sync(self._wait, condition_executable, interval)
         else:

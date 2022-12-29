@@ -19,12 +19,19 @@ DAFI_HOST = os.environ["DAFI_HOST"]
 DAFI_PORT = os.environ["DAFI_PORT"]
 DAFI_INIT_CONTROLLER = DAFI_HOST == DAFI_PROCESS_NAME
 
-g = Global(process_name=DAFI_PROCESS_NAME, host=DAFI_HOST, port=DAFI_PORT, init_controller=DAFI_INIT_CONTROLLER)
+g = Global(
+    process_name=DAFI_PROCESS_NAME,
+    host=DAFI_HOST,
+    port=DAFI_PORT,
+    init_controller=DAFI_INIT_CONTROLLER,
+)
 
 app = Flask(__name__)
 app.config["SECRET_KEY"] = "your secret key"
 
-messages = [{"title": "Message One", "content": "Message One Content", "color": "black"}]
+messages = [
+    {"title": "Message One", "content": "Message One Content", "color": "black"}
+]
 
 
 @app.route("/", methods=("GET", "POST"))

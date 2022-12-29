@@ -45,9 +45,21 @@ logger = patch_logger(logging.getLogger(__name__), colors.green)
 
 class Node(ComponentsBase):
     @stoppable_retry(
-        wait=3, acceptable=(ConnectionRefusedError, ConnectionResetError, EndOfStream, BrokenResourceError, OSError)
+        wait=3,
+        acceptable=(
+            ConnectionRefusedError,
+            ConnectionResetError,
+            EndOfStream,
+            BrokenResourceError,
+            OSError,
+        ),
     )
-    async def handle(self, stop_event: thEvent, retry_info: RetryInfo, task_status: TaskStatus = TASK_STATUS_IGNORED):
+    async def handle(
+        self,
+        stop_event: thEvent,
+        retry_info: RetryInfo,
+        task_status: TaskStatus = TASK_STATUS_IGNORED,
+    ):
         self.stop_event = stop_event
         self.loop = asyncio.get_running_loop()
         self.item_store = Queue()
@@ -167,7 +179,12 @@ class NodeOperations:
 
     @with_debug_trace
     async def on_request(
-        self, msg: Message, stream: SocketStream, sg: TaskGroup, process_name: str, scheduler: Scheduler
+        self,
+        msg: Message,
+        stream: SocketStream,
+        sg: TaskGroup,
+        process_name: str,
+        scheduler: Scheduler,
     ):
 
         remote_callback = LOCAL_CALLBACK_MAPPING.get(msg.func_name)
@@ -243,7 +260,11 @@ class NodeOperations:
 
     @with_debug_trace
     async def _remote_func_executor(
-        self, stream: SocketStream, remote_callback: "RemoteCallback", message: Message, process_name: str
+        self,
+        stream: SocketStream,
+        remote_callback: "RemoteCallback",
+        message: Message,
+        process_name: str,
     ):
         result = error = None
         args = message.func_args

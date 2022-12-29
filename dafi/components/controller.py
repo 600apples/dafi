@@ -23,7 +23,11 @@ from dafi.components import ComponentsBase
 from dafi.message import Message, MessageFlag, RemoteError
 from dafi.utils.debug import with_debug_trace
 from dafi.utils.retry import stoppable_retry, RetryInfo
-from dafi.utils.mappings import CONTROLLER_CALLBACK_MAPPING, AWAITED_PROCS, search_remote_callback_in_mapping
+from dafi.utils.mappings import (
+    CONTROLLER_CALLBACK_MAPPING,
+    AWAITED_PROCS,
+    search_remote_callback_in_mapping,
+)
 
 
 logger = patch_logger(logging.getLogger(__name__), colors.blue)
@@ -31,7 +35,12 @@ logger = patch_logger(logging.getLogger(__name__), colors.blue)
 
 class Controller(ComponentsBase):
     @stoppable_retry(wait=3)
-    async def handle(self, stop_event: thEvent, retry_info: RetryInfo, task_status=TASK_STATUS_IGNORED):
+    async def handle(
+        self,
+        stop_event: thEvent,
+        retry_info: RetryInfo,
+        task_status=TASK_STATUS_IGNORED,
+    ):
         self.stop_event = stop_event
         self.operations = ControllerOperations()
 

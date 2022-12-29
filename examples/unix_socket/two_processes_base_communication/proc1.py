@@ -6,9 +6,7 @@ PROC_NAME = "White Rabbit"
 
 @callback
 def greeting1(arg1, arg2):
-    return (
-        f"Greeting from {PROC_NAME!r} process. You called function greeting1 with arguments: arg1={arg1}, arg2={arg2}"
-    )
+    return f"Greeting from {PROC_NAME!r} process. You called function greeting1 with arguments: arg1={arg1}, arg2={arg2}"
 
 
 @callback

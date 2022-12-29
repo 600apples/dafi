@@ -6,9 +6,7 @@ PROC_NAME = "Trio White Rabbit"
 
 @callback
 async def greeting1(arg1, arg2):
-    return (
-        f"Greeting from {PROC_NAME!r} process. You called function greeting1 with arguments: arg1={arg1}, arg2={arg2}"
-    )
+    return f"Greeting from {PROC_NAME!r} process. You called function greeting1 with arguments: arg1={arg1}, arg2={arg2}"
 
 
 @callback
@@ -25,7 +23,9 @@ async def main():
 
     for _ in range(10):
         try:
-            res = g.call.cheers1("foo", "bar").fg()  # another syntax: g.call.cheers1("foo", "bar") & FG
+            res = g.call.cheers1(
+                "foo", "bar"
+            ).fg()  # another syntax: g.call.cheers1("foo", "bar") & FG
             print(res)
             await sleep(2)
 

@@ -120,7 +120,9 @@ class Global(metaclass=Singleton):
     @cached_property
     def call(self) -> LazyRemoteCall:
         return LazyRemoteCall(
-            _ipc=self.ipc, _stop_event=self._stop_event, _inside_callback_context=self._inside_callback_context
+            _ipc=self.ipc,
+            _stop_event=self._stop_event,
+            _inside_callback_context=self._inside_callback_context,
         )
 
     @property

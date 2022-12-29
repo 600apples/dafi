@@ -16,7 +16,7 @@ def get_class_methods(klass):
 def is_class_or_static_method(klass: type, name: str):
     """Test if a value of a class is static method or class method.
 
-    example::
+    Example:
 
         class MyClass(object):
             @staticmethod
@@ -88,7 +88,7 @@ def func_info(func: Callable[P, Any]):
         name = "unknown"
     # Hack to detect functions not defined at the module-level
     if hasattr(func, "func_globals") and name in func.func_globals:
-        if not func.func_globals[name] is func:
+        if func.func_globals[name] is not func:
             name = "%s-alias" % name
     if inspect.ismethod(func):
         # We need to add the name of the class

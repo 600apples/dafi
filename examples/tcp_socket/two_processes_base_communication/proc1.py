@@ -6,9 +6,7 @@ PROC_NAME = "White Rabbit"
 
 @callback
 def greeting1(arg1, arg2):
-    return (
-        f"Greeting from {PROC_NAME!r} process. You called function greeting1 with arguments: arg1={arg1}, arg2={arg2}"
-    )
+    return f"Greeting from {PROC_NAME!r} process. You called function greeting1 with arguments: arg1={arg1}, arg2={arg2}"
 
 
 @callback
@@ -18,7 +16,9 @@ def greeting2():
 
 def main():
     remote_proc = "Brown Fox"
-    g = Global(process_name=PROC_NAME, init_controller=True, host="localhost", port=8888)
+    g = Global(
+        process_name=PROC_NAME, init_controller=True, host="localhost", port=8888
+    )
 
     print(f"wait for {remote_proc} process to be started...")
     g.wait_process(remote_proc)

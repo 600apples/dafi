@@ -28,7 +28,11 @@ class RetryInfo(NamedTuple):
 
 class AsyncRetry:
     def __init__(
-        self, stop_event: Union[thEvent, asyncEvent], fn: Callable[..., Any], acceptable: acceptable_errors, wait: int
+        self,
+        stop_event: Union[thEvent, asyncEvent],
+        fn: Callable[..., Any],
+        acceptable: acceptable_errors,
+        wait: int,
     ):
         self.fn = fn
         self.stop_event = stop_event

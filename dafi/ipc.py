@@ -155,11 +155,17 @@ class Ipc(Thread):
                 with start_blocking_portal() as portal:
                     if self.controller:
                         c_future, _ = portal.start_task(
-                            self.controller.handle, self.stop_event, name=Controller.__class__.__name__
+                            self.controller.handle,
+                            self.stop_event,
+                            name=Controller.__class__.__name__,
                         )
 
                     if self.node:
-                        n_future, _ = portal.start_task(self.node.handle, self.stop_event, name=Node.__class__.__name__)
+                        n_future, _ = portal.start_task(
+                            self.node.handle,
+                            self.stop_event,
+                            name=Node.__class__.__name__,
+                        )
 
                     self.start_event.set()
                     self.stop_event.wait()

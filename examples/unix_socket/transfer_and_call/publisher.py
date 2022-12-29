@@ -3,7 +3,7 @@ Publisher is the process that declares available remote functions
 Make sure you started this process first.
 """
 import time
-from dafi import Global, callback
+from dafi import Global
 
 
 PROC_NAME = "White Rabbit"

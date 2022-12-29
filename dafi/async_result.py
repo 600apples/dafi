@@ -43,7 +43,8 @@ class AsyncResult:
     def fold_results(cls):
         for msg_uuid, ares in AsyncResult._awaited_results.items():
             AsyncResult._awaited_results[msg_uuid] = RemoteError(
-                info="Lost connection to Controller.", _awaited_error_type=RemoteStoppedUnexpectedly
+                info="Lost connection to Controller.",
+                _awaited_error_type=RemoteStoppedUnexpectedly,
             )
             ares._ready.set()
 
@@ -53,10 +54,14 @@ class AwaitableAsyncResult(AsyncResult):
         if self.result is None:
             if timeout is not None:
                 timeout = time.time() + timeout
-                timeout_cond = lambda: time.time() < timeout
+
+                def timeout_cond():
+                    return time.time() < timeout
 
             else:
-                timeout_cond = lambda: True
+
+                def timeout_cond():
+                    return True
 
             while timeout_cond() and not self._ready.is_set():
                 await sleep(0.1)

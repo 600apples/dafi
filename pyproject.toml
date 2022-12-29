@@ -55,13 +55,18 @@ Source = "https://github.com/unknown/dafi"
 [tool.hatch.version]
 path = "dafi/__about__.py"
 
+[tool.hatch.envs.default.overrides]
+env.GITHUB_ACTIONS.env-vars = "COVERAGE_REPORT="
+
 [tool.hatch.envs.default]
 dependencies = [
     "pytest",
     "pytest-cov",
+    "pytest-asyncio==0.20.3",
 ]
 [tool.hatch.envs.default.scripts]
 cov = "pytest --cov-report=term-missing --cov-config=pyproject.toml --cov=dafi --cov=tests {args}"
+# cov_git = "pytest --cov --cov-report={env:COVERAGE_REPORT:term-missing} --cov-config=pyproject.toml"
 no-cov = "cov --no-cov {args}"
 
 [tool.hatch.envs.docs]
@@ -74,8 +79,45 @@ dependencies = [
 build = "mkdocs build --clean --strict"
 serve = "mkdocs serve --dev-addr localhost:8000"
 
+[tool.hatch.envs.lint]
+detached = true
+dependencies = [
+  "black>=22.6.0",
+  "mypy>=0.990",
+  "ruff>=0.0.176",
+]
+[tool.hatch.envs.lint.scripts]
+typing = "mypy --install-types --non-interactive {args:backend/src/hatchling src/hatch tests}"
+style = [
+  "ruff {args:.}",
+  "black --check --diff {args:.}",
+]
+fmt = [
+  "black {args:.}",
+  "ruff --fix {args:.}",
+  "style",
+]
+all = [
+  "style",
+  "typing",
+]
+
 [[tool.hatch.envs.test.matrix]]
 python = ["37", "38", "39", "310", "311"]
+
+[tool.hatch.envs.coverage]
+detached = true
+dependencies = [
+  "coverage[toml]>=6.2",
+   "lxml",
+]
+
+[tool.hatch.envs.coverage.scripts]
+combine = "coverage combine {args}"
+report-xml = "coverage xml"
+report-uncovered-html = "coverage html --skip-covered --skip-empty"
+generate-summary = "python scripts/generate_coverage_summary.py"
+write-summary-report = "python scripts/write_coverage_summary_report.py"
 
 [tool.coverage.run]
 branch = true
@@ -90,6 +132,7 @@ exclude_lines = [
   "if __name__ == .__main__.:",
   "if TYPE_CHECKING:",
 ]
+
 
 [tool.black]
 line-length = 120
