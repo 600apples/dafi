@@ -23,9 +23,7 @@ async def main():
 
     for _ in range(10):
         try:
-            res = g.call.greeting1(
-                "foo", "bar"
-            ).fg()  # another syntax: g.call.greeting1("foo", "bar") & FG
+            res = g.call.greeting1("foo", "bar").fg()  # another syntax: g.call.greeting1("foo", "bar") & FG
             print(res)
             await sleep(2)
             res = g.call.greeting2().fg()

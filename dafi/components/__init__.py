@@ -2,7 +2,7 @@ import os
 import logging
 from enum import IntEnum
 from cached_property import cached_property
-from typing import Optional, Any
+from typing import Optional, List
 from contextlib import asynccontextmanager
 
 from anyio import BusyResourceError, sleep, Event
@@ -16,19 +16,21 @@ from dafi.interface import ControllerI, NodeI, BackEndI
 logger = logging.getLogger(__name__)
 
 
-async def send_to_stream(stream: SocketStream, item: Any, stop_event: Event):
+async def send_to_stream(stream: SocketStream, msg: List[bytes], stop_event: Optional[Event] = None):
     attempts = 20
-    for _ in range(attempts):
-        try:
-            await stream.send(item)
+    for chunk in msg:
+        for _ in range(attempts):
+            try:
+                await stream.send(chunk)
+                break
+            except BusyResourceError:
+                await sleep(0.1)
+            except Exception:
+                if stop_event:
+                    await stop_event.set()
+        else:
+            logger.error(f"Failed to send item message during {attempts} attempts.")
             break
-        except BusyResourceError:
-            await sleep(0.1)
-        except Exception:
-            await stop_event.set()
-            await stream.aclose()
-    else:
-        logger.error(f"Failed to send item {item} during {attempts} attempts.")
 
 
 class ControllerStatus(IntEnum):

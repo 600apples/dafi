@@ -30,9 +30,7 @@ async def main():
             # Here execution stuck for additional 3 seconds due to eta
             res = ares.get()
             if res:
-                print(
-                    f"Calculated result = {res}. Total exec time: {time.time() - start}"
-                )
+                print(f"Calculated result = {res}. Total exec time: {time.time() - start}")
 
         except (GlobalContextError, UnableToFindCandidate) as e:
             print(e)

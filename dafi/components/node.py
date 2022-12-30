@@ -12,8 +12,6 @@ from anyio import (
     create_task_group,
     move_on_after,
     TASK_STATUS_IGNORED,
-    EndOfStream,
-    BrokenResourceError,
 )
 from anyio._backends._asyncio import TaskGroup
 from anyio.abc import TaskStatus
@@ -46,33 +44,29 @@ logger = patch_logger(logging.getLogger(__name__), colors.green)
 
 
 class Node(ComponentsBase):
-    @stoppable_retry(
-        wait=3,
-        acceptable=(
-            ConnectionRefusedError,
-            ConnectionResetError,
-            EndOfStream,
-            BrokenResourceError,
-            OSError,
-        ),
-    )
+    @stoppable_retry(wait=3)
     async def handle(
         self,
-        _,
+        global_event,
         retry_info: RetryInfo,
         task_status: TaskStatus = TASK_STATUS_IGNORED,
     ):
+        self.global_event = global_event
         self.stop_event = Event()
         self.loop = asyncio.get_running_loop()
         self.item_store = Queue()
         self.operations = NodeOperations(self.stop_event)
+
+        if global_event.is_set():
+            logger.info("Termination node...")
+            return
 
         if retry_info.attempt == 2 or not retry_info.attempt % 5:
             logger.error("Unable to connect node. retrying...")
 
         async with self.connect_listener() as stream:
             async with create_task_group() as sg:
-                self.scheduler = Scheduler(process_name=self.process_name, sg=sg, stop_event=self.stop_event)
+                self.scheduler = Scheduler(process_name=self.process_name, sg=sg, global_event=global_event)
 
                 sg.start_soon(self._write_commands, stream, sg)
                 sg.start_soon(self._read_commands, stream, task_status, sg)
@@ -88,10 +82,14 @@ class Node(ComponentsBase):
                     raw_msglen = await stream.receive(4)
                     if not raw_msglen:
                         continue
-                    msglen = Message.msglen(raw_msglen)
-                    msg = Message.loads(await stream.receive(msglen))
+
+                    msg = await Message.loads(stream, raw_msglen)
+                    if not msg:
+                        continue
                 except Exception:
                     await maybe_async(sg.cancel_scope.cancel())
+                    if self.global_event.is_set():
+                        return
                     raise
 
             if scope.cancel_called:
@@ -100,7 +98,7 @@ class Node(ComponentsBase):
             if msg.flag in (MessageFlag.HANDSHAKE, MessageFlag.UPDATE_CALLBACKS):
                 await self.operations.on_handshake(msg, task_status, self.process_name, self.info)
 
-            elif msg.flag == MessageFlag.REQUEST:
+            elif msg.flag in (MessageFlag.REQUEST, MessageFlag.BROADCAST):
                 await self.operations.on_request(msg, stream, sg, self.process_name, self.scheduler)
 
             elif msg.flag == MessageFlag.SUCCESS:
@@ -303,29 +301,30 @@ class NodeOperations:
             logger.error(info + f" {e}")
             error = RemoteError(info=info, traceback=pickle.dumps(sys.exc_info()))
 
-        try:
-            message_to_return = Message(
-                flag=MessageFlag.SUCCESS,
-                transmitter=process_name,
-                receiver=message.transmitter,
-                uuid=message.uuid,
-                func_name=message.func_name,
-                func_args=(result,) if (message.return_result and not error) else None,
-                return_result=message.return_result,
-                error=error,
-            ).dumps()
-        except TypeError as e:
-            info = f"Unsupported return type {type(result)}."
-            logger.error(info + f" {e}")
-            error = RemoteError(info=info, traceback=pickle.dumps(sys.exc_info()))
-            message_to_return = Message(
-                flag=MessageFlag.SUCCESS,
-                transmitter=process_name,
-                receiver=message.transmitter,
-                uuid=message.uuid,
-                func_name=message.func_name,
-                return_result=message.return_result,
-                error=error,
-            ).dumps()
+        if message.flag != MessageFlag.BROADCAST:
+            try:
+                message_to_return = Message(
+                    flag=MessageFlag.SUCCESS,
+                    transmitter=process_name,
+                    receiver=message.transmitter,
+                    uuid=message.uuid,
+                    func_name=message.func_name,
+                    func_args=(result,) if (message.return_result and not error) else None,
+                    return_result=message.return_result,
+                    error=error,
+                ).dumps()
+            except TypeError as e:
+                info = f"Unsupported return type {type(result)}."
+                logger.error(info + f" {e}")
+                error = RemoteError(info=info, traceback=pickle.dumps(sys.exc_info()))
+                message_to_return = Message(
+                    flag=MessageFlag.SUCCESS,
+                    transmitter=process_name,
+                    receiver=message.transmitter,
+                    uuid=message.uuid,
+                    func_name=message.func_name,
+                    return_result=message.return_result,
+                    error=error,
+                ).dumps()
 
-        await send_to_stream(stream, message_to_return, self.stop_event)
+            await send_to_stream(stream, message_to_return, self.stop_event)

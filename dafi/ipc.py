@@ -28,7 +28,7 @@ class Ipc(Thread):
         backend: BackEndI,
         init_controller: bool,
         init_node: bool,
-        stop_event: Event,
+        global_event: Event,
         host: Optional[str] = None,
         port: Optional[int] = None,
     ):
@@ -37,7 +37,7 @@ class Ipc(Thread):
         self.backend = backend
         self.init_controller = init_controller
         self.init_node = init_node
-        self.stop_event = stop_event
+        self.global_event = global_event
         self.host = host
         self.port = port
 
@@ -67,6 +67,7 @@ class Ipc(Thread):
         eta: Optional[Union[int, float]] = 0,
         return_result: Optional[bool] = True,
         func_period: Optional[Period] = None,
+        broadcast: Optional[bool] = False,
         inside_callback_context: Optional[bool] = False,
     ):
         if not self.node:
@@ -99,7 +100,7 @@ class Ipc(Thread):
 
         result = None
         msg = Message(
-            flag=MessageFlag.REQUEST,
+            flag=MessageFlag.REQUEST if not broadcast else MessageFlag.BROADCAST,
             transmitter=self.process_name,
             func_name=func_name,
             func_args=args,
@@ -149,6 +150,11 @@ class Ipc(Thread):
             except ValueError:
                 # Controller has been initialized by other process
                 ...
+        if not self.controller and self.init_controller:
+            raise InitializationError("Unable to initialize controller."
+                                      " Seems controller already running in another process."
+                                      "Terminate another controller or set 'init_controller=False' for current process")
+
 
         if self.init_node:
             self.node = Node(self.process_name, self.backend, self.host, self.port)
@@ -161,19 +167,19 @@ class Ipc(Thread):
                     if self.controller:
                         c_future, _ = portal.start_task(
                             self.controller.handle,
-                            self.stop_event,
+                            self.global_event,
                             name=Controller.__class__.__name__,
                         )
 
                     if self.node:
                         n_future, _ = portal.start_task(
                             self.node.handle,
-                            self.stop_event,
+                            self.global_event,
                             name=Node.__class__.__name__,
                         )
 
                     self.start_event.set()
-                    self.stop_event.wait()
+                    self.global_event.wait()
                     # Wait pending futures to complete their tasks
                     time.sleep(1.5)
                     for future in filter(None, (c_future, n_future)):
@@ -253,7 +259,19 @@ class Ipc(Thread):
         self.node.send(msg.dumps(), 0)
 
     def stop(self, *args, **kwargs):
-        self.stop_event.set()
+        if self.controller:
+            self.backend.delete_key(BackEndKeys.CONTROLLER_HEALTHCHECK_TS)
+            self.backend.write(BackEndKeys.CONTROLLER_STATUS, ControllerStatus.UNAVAILABLE)
+            msg = Message(
+                flag=MessageFlag.BROADCAST,
+                transmitter=self.process_name,
+                func_name="__on_controller_stop",
+                return_result=False,
+            )
+            self.node.send(msg.dumps(), 0)
+            time.sleep(0.1)
+
+        self.global_event.set()
         for msg_uuid, ares in AsyncResult._awaited_results.items():
             AsyncResult._awaited_results[msg_uuid] = None
             if isinstance(ares, AsyncResult):

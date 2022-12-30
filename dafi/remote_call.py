@@ -5,13 +5,12 @@ from datetime import timedelta, datetime
 from threading import Event
 from typing import Optional, Union, NoReturn, Callable, Coroutine, List
 
-from anyio import to_thread
 from dafi.async_result import AsyncResult, SchedulerTask, AsyncSchedulerTask
 from dafi.exceptions import GlobalContextError
 from dafi.utils.timeparse import timeparse
 from dafi.utils.custom_types import P, RemoteResult, TimeUnits
 from dafi.utils.mappings import search_remote_callback_in_mapping, NODE_CALLBACK_MAPPING
-from dafi.utils.misc import async_library, sync_to_async, Period
+from dafi.utils.misc import sync_to_async, Period
 
 
 @dataclass
@@ -34,6 +33,11 @@ class NO_RETURN:
 class PERIOD:
     at_time: Optional[Union[List[TimeUnits], TimeUnits]] = None
     period: Optional[TimeUnits] = None
+
+
+@dataclass
+class BROADCAST:
+    eta: Optional[TimeUnits] = None
 
 
 @dataclass
@@ -78,8 +82,11 @@ class RemoteCall:
         elif isinstance(other, (PERIOD, type(PERIOD))):
             return self.period(at_time=other.at_time, period=other.period)
 
+        elif isinstance(other, (BROADCAST, type(BROADCAST))):
+            return self.broadcast(eta=other.eta)
+
         else:
-            valid_operands = ", ".join(map(lambda o: o.__name__, (FG, BG, NO_RETURN, PERIOD)))
+            valid_operands = ", ".join(map(lambda o: o.__name__, (FG, BG, NO_RETURN, PERIOD, BROADCAST)))
             raise GlobalContextError(f"Invalid operand {type(other)}. Use one of {valid_operands}")
 
     def __call__(self, timeout: Optional[TimeUnits] = None) -> RemoteResult:
@@ -135,6 +142,21 @@ class RemoteCall:
         if asyncio.iscoroutine(res) and self._inside_callback_context:
             asyncio.create_task(res)
 
+    def broadcast(self, eta: Optional[TimeUnits] = None) -> NoReturn:
+        eta = self._get_duration(eta, "eta", 0)
+        res = self._ipc.call(
+            self.func_name,
+            args=self.args,
+            kwargs=self.kwargs,
+            eta=eta,
+            async_=True,
+            return_result=False,
+            broadcast=True,
+            inside_callback_context=self._inside_callback_context,
+        )
+        if asyncio.iscoroutine(res) and self._inside_callback_context:
+            asyncio.create_task(res)
+
     def period(
         self,
         at_time: Optional[Union[List[TimeUnits], TimeUnits]],
@@ -184,7 +206,7 @@ class RemoteCall:
 @dataclass
 class LazyRemoteCall:
     _ipc: "Ipc" = field(repr=False)
-    _stop_event: Event = field(repr=False)
+    _global_event: Event = field(repr=False)
     _func_name: Optional[str] = field(repr=False, default=None)
     _inside_callback_context: Optional[bool] = field(repr=False, default=False)
 
@@ -236,7 +258,7 @@ class LazyRemoteCall:
         )
 
     def __getattr__(self, item) -> RemoteCall:
-        if self._stop_event and self._stop_event.is_set():
+        if self._global_event and self._global_event.is_set():
             raise GlobalContextError("Global can no longer accept remote calls because it was stopped")
         self._func_name = item
         return self

@@ -29,9 +29,7 @@ g = Global(
 app = Flask(__name__)
 app.config["SECRET_KEY"] = "your secret key"
 
-messages = [
-    {"title": "Message One", "content": "Message One Content", "color": "black"}
-]
+messages = [{"title": "Message One", "content": "Message One Content", "color": "black"}]
 
 
 @app.route("/", methods=("GET", "POST"))

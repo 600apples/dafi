@@ -34,13 +34,8 @@ def skip_if_marker_not_present(checkmarker, request):
     # Get list of all markers specified before test execution
     markers = list(map(str.strip, re.split("and|or", checkmarker)))
     if request.node.get_closest_marker("skip_if_marker_not_present"):
-        if (
-            request.node.get_closest_marker("skip_if_marker_not_present").args[0]
-            not in markers
-        ):
-            pytest.skip(
-                "This test can only be run if you specify its marker explicitly at startup"
-            )
+        if request.node.get_closest_marker("skip_if_marker_not_present").args[0] not in markers:
+            pytest.skip("This test can only be run if you specify its marker explicitly at startup")
 
 
 @pytest.fixture

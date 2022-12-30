@@ -35,11 +35,15 @@ class Controller(ComponentsBase):
     @stoppable_retry(wait=3)
     async def handle(
         self,
-        _,
+        global_event,
         retry_info: RetryInfo,
         task_status=TASK_STATUS_IGNORED,
     ):
         self.operations = ControllerOperations()
+
+        if global_event.is_set():
+            logger.info("Termination controller...")
+            return
 
         if retry_info.attempt == 2 or not retry_info.attempt % 5:
             logger.error(f"Unable to connect controller. Error = {retry_info.prev_error} retrying...")
@@ -69,8 +73,9 @@ class Controller(ComponentsBase):
                         raw_msglen = await stream.receive(4)
                         if not raw_msglen:
                             continue
-                        msglen = Message.msglen(raw_msglen)
-                        msg = Message.loads(await stream.receive(msglen))
+                        msg = await Message.loads(stream, raw_msglen)
+                        if not msg:
+                            continue
                     except Exception:
                         await self.operations.on_stream_close(stream)
                         break
@@ -93,6 +98,9 @@ class Controller(ComponentsBase):
                 elif msg.flag == MessageFlag.SCHEDULER_ERROR:
                     await self.operations.on_scheduler_error(msg, sg)
 
+                elif msg.flag == MessageFlag.BROADCAST:
+                    await self.operations.on_broadcast(msg, sg)
+
 
 class ControllerOperations:
     """Controller operations specification object"""
@@ -103,7 +111,7 @@ class ControllerOperations:
     async def on_stream_close(self, stream: SocketStream):
         del_proc = None
         try:
-            del_proc = next(proc for proc, (sock, event) in self.socket_store.items() if sock == stream)
+            del_proc = next(proc for proc, (sock, event) in list(self.socket_store.items()) if sock == stream)
             del self.socket_store[del_proc]
             CONTROLLER_CALLBACK_MAPPING.pop(del_proc, None)
         except StopIteration:
@@ -118,7 +126,7 @@ class ControllerOperations:
         awaited_transmitters = defaultdict(list)
         [awaited_transmitters[trans].append(uuid) for uuid, (trans, rec) in AWAITED_PROCS.items() if rec == del_proc]
 
-        for proc, (sock, event) in self.socket_store.items():
+        for proc, (sock, event) in list(self.socket_store.items()):
             # Send updated CONTROLLER_CALLBACK_MAPPING to all processes including transmitter process.
             await send_to_stream(
                 sock,
@@ -150,7 +158,7 @@ class ControllerOperations:
         self.socket_store[msg.transmitter] = (stream, stop_event)
         CONTROLLER_CALLBACK_MAPPING[msg.transmitter] = msg.func_args[0]
         msg.func_args = (CONTROLLER_CALLBACK_MAPPING,)
-        for proc, (sock, event) in self.socket_store.items():
+        for proc, (sock, event) in list(self.socket_store.items()):
             # Send updated CONTROLLER_CALLBACK_MAPPING to all processes including transmitter process.
             msg.receiver = proc
             sg.start_soon(send_to_stream, sock, msg.dumps(), event)
@@ -159,7 +167,7 @@ class ControllerOperations:
     async def on_update_callbacks(self, msg: Message, sg: TaskGroup):
         CONTROLLER_CALLBACK_MAPPING[msg.transmitter].update(msg.func_args[0])
         msg.func_args = (CONTROLLER_CALLBACK_MAPPING,)
-        for proc, (sock, event) in self.socket_store.items():
+        for proc, (sock, event) in list(self.socket_store.items()):
             # Send updated CONTROLLER_CALLBACK_MAPPING to all processes including transmitter process.
             msg.receiver = proc
             sg.start_soon(send_to_stream, sock, msg.dumps(), event)
@@ -178,16 +186,18 @@ class ControllerOperations:
         if receiver and receiver in CONTROLLER_CALLBACK_MAPPING:
             msg.receiver = receiver
             # Take socket of destination process where function/method will be triggered.
-            sock, event = self.socket_store[receiver]
-            # Assign transmitter to message id in order to redirect result after processing.
-            AWAITED_PROCS[msg.uuid] = msg.transmitter, receiver
-            sg.start_soon(send_to_stream, sock, msg.dumps(), event)
+            sock_and_event = self.socket_store.get(receiver)
+            if sock_and_event:
+                sock, event = sock_and_event
+                # Assign transmitter to message id in order to redirect result after processing.
+                AWAITED_PROCS[msg.uuid] = msg.transmitter, receiver
+                sg.start_soon(send_to_stream, sock, msg.dumps(), event)
 
-            if msg.period:
-                # Return back to transmitter info that scheduled task was accepted.
-                msg.swap_applicants()
-                msg.flag = MessageFlag.SCHEDULER_ACCEPT
-                sg.start_soon(send_to_stream, stream, msg.dumps(), stop_event)
+                if msg.period:
+                    # Return back to transmitter info that scheduled task was accepted.
+                    msg.swap_applicants()
+                    msg.flag = MessageFlag.SCHEDULER_ACCEPT
+                    sg.start_soon(send_to_stream, stream, msg.dumps(), stop_event)
 
         else:
             msg.flag = MessageFlag.UNABLE_TO_FIND_CANDIDATE
@@ -227,3 +237,18 @@ class ControllerOperations:
             sock, event = sock_and_event
             msg.flag = MessageFlag.SUCCESS
             sg.start_soon(send_to_stream, sock, msg.dumps(), event)
+
+    @with_debug_trace
+    async def on_broadcast(self, msg: Message, sg: TaskGroup):
+        data = search_remote_callback_in_mapping(
+            CONTROLLER_CALLBACK_MAPPING, msg.func_name, exclude=msg.transmitter, take_all=True
+        )
+        if data:
+            for receiver, _ in data:
+
+                msg.receiver = receiver
+                # Take socket of destination process where function/method will be triggered.
+                sock_and_event = self.socket_store.get(receiver)
+                if sock_and_event:
+                    sock, event = sock_and_event
+                    sg.start_soon(send_to_stream, sock, msg.dumps(), event)

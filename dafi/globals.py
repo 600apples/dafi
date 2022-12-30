@@ -1,4 +1,5 @@
 import os
+import logging
 import inspect
 from copy import copy
 from inspect import Signature
@@ -38,6 +39,8 @@ from dafi.utils.mappings import (
     SCHEDULER_AT_TIME_TASKS,
     SCHEDULER_PERIODICAL_TASKS,
 )
+
+logger = logging.getLogger(__name__)
 
 __all__ = ["Global", "callback"]
 
@@ -100,7 +103,6 @@ class Global(metaclass=Singleton):
     """
 
     def __post_init__(self):
-        self.process_name = f"{self.process_name}[{os.getpid()}]"
         if not (self.init_controller or self.init_node):
             raise InitializationError(
                 "No components were found in current process."
@@ -111,13 +113,13 @@ class Global(metaclass=Singleton):
         if (self.host and not self.port) or (self.port and not self.host):
             raise InitializationError("To work through the TCP socket, the host and port arguments must be defined.")
 
-        self._stop_event = Event()
+        self._global_event = Event()
         self.ipc = Ipc(
             process_name=self.process_name,
             backend=LocalBackEnd(),
             init_controller=self.init_controller,
             init_node=self.init_node,
-            stop_event=self._stop_event,
+            global_event=self._global_event,
             host=self.host,
             port=self.port,
         )
@@ -130,7 +132,7 @@ class Global(metaclass=Singleton):
     def call(self) -> LazyRemoteCall:
         return LazyRemoteCall(
             _ipc=self.ipc,
-            _stop_event=self._stop_event,
+            _global_event=self._global_event,
             _inside_callback_context=self._inside_callback_context,
         )
 
@@ -161,11 +163,11 @@ class Global(metaclass=Singleton):
 
     @staticmethod
     def wait_function(func_name: str) -> Union[NoReturn, Coroutine]:
-        return LazyRemoteCall(_ipc=None, _stop_event=None, _func_name=func_name)._wait_function()
+        return LazyRemoteCall(_ipc=None, _global_event=None, _func_name=func_name)._wait_function()
 
     @staticmethod
     def wait_process(process_name: str) -> Union[NoReturn, Coroutine]:
-        return LazyRemoteCall(_ipc=None, _stop_event=None)._wait_process(process_name)
+        return LazyRemoteCall(_ipc=None, _global_event=None)._wait_process(process_name)
 
 
 class callback(Generic[GlobalCallback]):
@@ -278,3 +280,8 @@ async def __cancel_scheduled_task(scheduler_type: SchedulerTaskType, msg_uuid: s
         for task in SCHEDULER_AT_TIME_TASKS.pop(msg_uuid):
             task.cancel()
         logger.warning(f"Task group {func_name!r} (condition={scheduler_type!r}) has been canceled.")
+
+
+@callback
+async def __on_controller_stop(g: Global) -> NoReturn:
+    g.stop()

@@ -1,12 +1,15 @@
 import struct
 from dataclasses import dataclass, field, fields
 from enum import IntEnum
-from typing import Optional, Tuple, Dict
+from typing import Optional, Tuple, Dict, List
 
 import dill
 
-from dafi.exceptions import RemoteError
+from dafi.exceptions import RemoteError, InitializationError
 from dafi.utils.misc import uuid as msg_uuid, Period
+
+BYTES_CHUNK = 1024  # 15 Kb
+BYTES_LIMIT = 1e6  # 1 Mb
 
 
 class MessageFlag(IntEnum):
@@ -19,6 +22,7 @@ class MessageFlag(IntEnum):
     REMOTE_STOPPED_UNEXPECTEDLY = 7
     SCHEDULER_ERROR = 8
     SCHEDULER_ACCEPT = 9
+    BROADCAST = 10
 
 
 @dataclass
@@ -35,19 +39,44 @@ class Message:
     error: Optional[RemoteError] = None
     period: Optional[Period] = None
 
-    def dumps(self) -> bytes:
+    def dumps(self) -> List[bytes]:
         payload = tuple(map(lambda f: getattr(self, f.name), fields(self)))
         msg = dill.dumps(payload)
-        return struct.pack(">I", len(msg)) + msg
+        msg_len = len(msg)
+        if msg_len > BYTES_LIMIT:
+            raise InitializationError("Payload is too big! 2 Mb is maximum allowed payload.")
+
+        len_marker = struct.pack(">I", len(msg))
+        chunked_payload = [
+            len_marker + msg[i : i + BYTES_CHUNK] if i == 0 else msg[i : i + BYTES_CHUNK]
+            for i in range(0, len(msg), BYTES_CHUNK)
+        ]
+        return chunked_payload
 
     @classmethod
-    def loads(cls, payload: bytes) -> "Message":
-        data = dill.loads(payload)
-        return cls(*data)
+    async def loads(cls, stream, raw_msglen) -> "Message":
+        msglen = cls.msglen(raw_msglen)
+        payload = await cls.recvall(stream, msglen)
+        if payload:
+            data = dill.loads(payload)
+            return cls(*data)
 
     @staticmethod
     def msglen(raw: bytes) -> int:
         return struct.unpack(">I", raw)[0]
+
+    @classmethod
+    async def recvall(cls, stream, total_len):
+        # Helper function to recv n bytes or return None if EOF is hit
+
+        data = bytearray()
+        full_chunks, rest = divmod(total_len, BYTES_CHUNK)
+        for chunk in [BYTES_CHUNK] * full_chunks + [rest] if rest else []:
+            packet = await stream.receive(chunk)
+            if not packet:
+                return None
+            data.extend(packet)
+        return data
 
     def swap_applicants(self):
         if self.receiver is None or self.transmitter is None:

@@ -29,5 +29,6 @@ def main():
     # All scheduled tasks will be running even with transmitter process is terminated.
     g.stop()
 
+
 if __name__ == "__main__":
     main()

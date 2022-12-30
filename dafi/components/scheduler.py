@@ -26,7 +26,7 @@ logger = patch_logger(logging.getLogger(__name__), colors.magenta)
 class Scheduler:
     sg: TaskGroup
     process_name: str
-    stop_event: thEvent
+    global_event: thEvent
 
     @with_debug_trace
     async def register(self, msg: Message, stream: SocketStream):
@@ -48,7 +48,7 @@ class Scheduler:
 
     @with_debug_trace
     async def on_period(self, period: int, stream: SocketStream, msg: Message):
-        while not self.stop_event.is_set():
+        while not self.global_event.is_set():
             await sleep(period)
             if not await self._remote_func_executor(stream, msg, "period"):
                 logger.error(

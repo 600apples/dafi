@@ -13,7 +13,6 @@ templateEnv = Environment(loader=templateLoader)
 
 @pytest.fixture
 def remote_callbacks_path(tmp_path):
-
     def dec(**kwargs):
         """
         Expected arguments:
@@ -33,7 +32,9 @@ def remote_callbacks_path(tmp_path):
 
 
 @pytest.fixture
-def global_obj() -> Global:
+def g() -> Global:
+    """Create Global object. Global is singleton and should be cleaned before each test suite."""
+    Global._instances.clear()
     g = None
     try:
         g = Global(init_controller=True)

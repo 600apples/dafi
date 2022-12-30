@@ -2,6 +2,7 @@ import time
 import string
 import types
 import asyncio
+import logging
 from collections import deque
 from random import choices
 from functools import partial
@@ -12,6 +13,8 @@ from anyio import sleep, to_thread
 
 from dafi.utils.custom_types import SchedulerTaskType
 from dafi.exceptions import InitializationError
+
+logger = logging.getLogger(__name__)
 
 
 class Period(NamedTuple):
@@ -59,6 +62,8 @@ class Singleton(type):
     def __call__(cls, *args, **kwargs):
         if cls not in cls._instances:
             cls._instances[cls] = super(Singleton, cls).__call__(*args, **kwargs)
+        else:
+            logger.warning("Object is singleton and should not be created several times.")
         return cls._instances[cls]
 
     @classmethod

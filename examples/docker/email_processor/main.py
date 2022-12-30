@@ -11,9 +11,7 @@ logger.setLevel(logging.DEBUG)
 @callback
 def send_email(title: str, content: str):
     logger.warning("-" * 20)
-    logger.warning(
-        f"Email has been sent:\nemail title = {title}, email content = {content}"
-    )
+    logger.warning(f"Email has been sent:\nemail title = {title}, email content = {content}")
     logger.warning("-" * 20)
 
 

@@ -13,14 +13,20 @@ CONTROLLER_CALLBACK_MAPPING: DefaultDict[K, Dict[K, GlobalCallback]] = defaultdi
 SCHEDULER_PERIODICAL_TASKS: Dict[str, asyncio.Task] = dict()
 SCHEDULER_AT_TIME_TASKS: Dict[str, List[asyncio.Task]] = dict()
 
-WELL_KNOWN_CALLBACKS: Set[str] = {"__transfer_and_call", "__async_transfer_and_call", "__cancel_scheduled_task"}
+WELL_KNOWN_CALLBACKS: Set[str] = {
+    "__transfer_and_call",
+    "__async_transfer_and_call",
+    "__cancel_scheduled_task",
+    "__on_controller_stop",
+}
 
 
 def search_remote_callback_in_mapping(
     mapping: DefaultDict[K, Dict[K, GlobalCallback]],
     func_name: str,
     exclude: Optional[Union[str, Sequence]] = None,
-) -> Optional[Tuple[str, "RemoteCallback"]]:
+    take_all: Optional[bool] = False,
+) -> Optional[Union[Tuple[str, "RemoteCallback"], List[Tuple[str, "RemoteCallback"]]]]:
 
     if isinstance(exclude, str):
         exclude = [exclude]
@@ -33,6 +39,8 @@ def search_remote_callback_in_mapping(
             if remote_callback:
                 found.append((proc, remote_callback))
     try:
+        if take_all:
+            return found
         return choice(found)
     except IndexError:
         ...
