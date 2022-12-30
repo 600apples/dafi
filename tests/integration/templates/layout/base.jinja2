@@ -16,7 +16,7 @@ if __name__ == "__main__":
         host={{ macros.quote(host) }},
         {% endif %}
         {%- if port %}
-        port={{ macros.quote(port) }},
+        port={{ port }},
         {% endif -%}
         {%- if init_controller %}
         init_controller={{ init_controller }},

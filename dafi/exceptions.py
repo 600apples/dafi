@@ -31,6 +31,10 @@ class TimeoutError(Exception):
     ...
 
 
+class DummyExeption(Exception):
+    ...
+
+
 @dataclass
 class RemoteError:
     info: Optional[str] = None

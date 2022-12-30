@@ -3,7 +3,6 @@ from inspect import iscoroutinefunction
 from threading import Thread, Event
 from typing import NoReturn, Dict, Union, Optional, Callable, Any, Tuple
 
-from anyio import EndOfStream
 from anyio.from_thread import start_blocking_portal
 
 from dafi.async_result import AsyncResult, AwaitableAsyncResult, get_result_type
@@ -14,7 +13,6 @@ from dafi.components.node import Node
 from dafi.exceptions import InitializationError, GlobalContextError
 from dafi.message import Message, MessageFlag
 from dafi.signals import set_signal_handler
-from dafi.utils.retry import resilent
 from dafi.utils.misc import Period
 from dafi.utils.custom_types import SchedulerTaskType
 from dafi.utils.func_validation import pretty_callbacks
@@ -140,7 +138,7 @@ class Ipc(Thread):
             if (
                 controller_status != ControllerStatus.RUNNING
                 or not controller_hc_ts
-                or (time.time() - controller_hc_ts) > Controller.TIMEOUT / 2
+                or (time.time() - controller_hc_ts) > Controller.TIMEOUT
             ):
                 self.backend.delete_key(BackEndKeys.CONTROLLER_HEALTHCHECK_TS)
                 self.backend.delete_key(BackEndKeys.CONTROLLER_STATUS)
@@ -162,30 +160,28 @@ class Ipc(Thread):
 
         if self.node or self.controller:
             c_future = n_future = None
+            with start_blocking_portal() as portal:
+                if self.controller:
+                    c_future, _ = portal.start_task(
+                        self.controller.handle,
+                        self.global_event,
+                        name=Controller.__class__.__name__,
+                    )
 
-            with resilent((RuntimeError, EndOfStream)):
-                with start_blocking_portal() as portal:
-                    if self.controller:
-                        c_future, _ = portal.start_task(
-                            self.controller.handle,
-                            self.global_event,
-                            name=Controller.__class__.__name__,
-                        )
+                if self.node:
+                    n_future, _ = portal.start_task(
+                        self.node.handle,
+                        self.global_event,
+                        name=Node.__class__.__name__,
+                    )
 
-                    if self.node:
-                        n_future, _ = portal.start_task(
-                            self.node.handle,
-                            self.global_event,
-                            name=Node.__class__.__name__,
-                        )
-
-                    self.start_event.set()
-                    self.global_event.wait()
-                    # Wait pending futures to complete their tasks
-                    time.sleep(1.5)
-                    for future in filter(None, (c_future, n_future)):
-                        if not future.done():
-                            future.cancel()
+                self.start_event.set()
+                self.global_event.wait()
+                # Wait pending futures to complete their tasks
+                time.sleep(1.5)
+                for future in filter(None, (c_future, n_future)):
+                    if not future.done():
+                        future.cancel()
 
     def update_callbacks(self, func_info: Dict[str, "RemoteCallback"]) -> NoReturn:
         self.node.send(
@@ -264,7 +260,3 @@ class Ipc(Thread):
             self.backend.delete_key(BackEndKeys.CONTROLLER_HEALTHCHECK_TS)
             self.backend.write(BackEndKeys.CONTROLLER_STATUS, ControllerStatus.UNAVAILABLE)
         self.global_event.set()
-        for msg_uuid, ares in AsyncResult._awaited_results.items():
-            AsyncResult._awaited_results[msg_uuid] = None
-            if isinstance(ares, AsyncResult):
-                ares._ready.set()

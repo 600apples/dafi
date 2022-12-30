@@ -67,7 +67,7 @@ dependencies = [
     "Jinja2==3.1.2",
 ]
 [tool.hatch.envs.default.scripts]
-cov = "pytest --cov-report=term-missing --cov-config=pyproject.toml --cov=dafi --cov=tests {args}"
+cov = "pytest --cov-report=term-missing --cov-config=pyproject.toml --cov=dafi --cov=tests -s -vv {args}"
 cov_git = "pytest --cov=dafi --cov-report={env:COVERAGE_REPORT:term-missing} --cov-config=pyproject.toml"
 no_cov = "pytest -vv {args}"
 

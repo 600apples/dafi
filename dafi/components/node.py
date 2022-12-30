@@ -9,6 +9,7 @@ from anyio import (
     sleep,
     Event,
     maybe_async,
+    to_thread,
     create_task_group,
     TASK_STATUS_IGNORED,
 )
@@ -68,6 +69,17 @@ class Node(ComponentsBase):
 
                 sg.start_soon(self._write_commands, stream, sg)
                 sg.start_soon(self._read_commands, stream, task_status, sg)
+                sg.start_soon(self.global_event_observer, global_event)
+
+    @with_debug_trace
+    async def global_event_observer(self, global_event) -> NoReturn:
+        await to_thread.run_sync(global_event.wait)
+        LOCAL_CALLBACK_MAPPING.clear()
+        NODE_CALLBACK_MAPPING.clear()
+        for msg_uuid, ares in AsyncResult._awaited_results.items():
+            AsyncResult._awaited_results[msg_uuid] = None
+            if hasattr(ares, "_ready"):
+                ares._ready.set()
 
     @with_debug_trace
     async def _read_commands(self, stream: SocketStream, task_status: TaskStatus, sg: TaskGroup):

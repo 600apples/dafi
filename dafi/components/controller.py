@@ -4,12 +4,7 @@ from functools import partial
 from collections import defaultdict
 from typing import NoReturn, ClassVar, Dict
 
-from anyio import (
-    Event,
-    create_task_group,
-    sleep,
-    TASK_STATUS_IGNORED,
-)
+from anyio import Event, create_task_group, sleep, to_thread, TASK_STATUS_IGNORED, ExceptionGroup, ClosedResourceError
 from anyio.abc import TaskGroup
 from anyio.abc._sockets import SocketStream
 
@@ -31,27 +26,32 @@ logger = patch_logger(logging.getLogger(__name__), colors.blue)
 
 
 class Controller(ComponentsBase):
-    @stoppable_retry(wait=3)
+    @stoppable_retry(wait=3, not_acceptable=(ClosedResourceError, ExceptionGroup))
     async def handle(
         self,
         global_event,
         retry_info: RetryInfo,
         task_status=TASK_STATUS_IGNORED,
     ):
+        self.listener = None
         self.operations = ControllerOperations()
 
         if global_event.is_set():
-            logger.info("Termination controller...")
+
+            breakpoint()
+            logger.info("Gracefully stopping controller...")
             return
 
         if retry_info.attempt == 2 or not retry_info.attempt % 5:
             logger.error(f"Unable to connect controller. Error = {retry_info.prev_error}. Retrying...")
 
+        self.listener = await self.create_listener()
+        if task_status._future._state == "PENDING":
+            task_status.started("STARTED")
+
         async with create_task_group() as sg:
-            self.listener = await self.create_listener()
-            if task_status._future._state == "PENDING":
-                task_status.started("STARTED")
             sg.start_soon(self.healthcheck)
+            sg.start_soon(self.global_event_observer, global_event)
             sg.start_soon(self.listener.serve, partial(self._handle_commands, sg=sg), sg)
             logger.info(f"Controller has been started successfully. Process name: {self.process_name!r}")
 
@@ -62,6 +62,12 @@ class Controller(ComponentsBase):
             await sleep(self.TIMEOUT / 2)
 
     @with_debug_trace
+    async def global_event_observer(self, global_event) -> NoReturn:
+        await to_thread.run_sync(global_event.wait)
+        await self.operations.close_sockets()
+        await self.listener.aclose()
+
+    @with_debug_trace
     async def _handle_commands(self, stream: SocketStream, sg: TaskGroup):
 
         stop_event = Event()
@@ -70,6 +76,7 @@ class Controller(ComponentsBase):
                 try:
                     raw_msglen = await stream.receive(4)
                     if not raw_msglen:
+
                         continue
                     msg = await Message.loads(stream, raw_msglen)
                     if not msg:
@@ -247,3 +254,13 @@ class ControllerOperations:
                 if sock_and_event:
                     sock, event = sock_and_event
                     sg.start_soon(send_to_stream, sock, msg.dumps(), event)
+
+    async def close_sockets(self):
+        for sock in list(self.socket_store.values()):
+            try:
+                await sock.aclose()
+            except Exception:
+                ...
+        self.socket_store.clear()
+        CONTROLLER_CALLBACK_MAPPING.clear()
+        AWAITED_PROCS.clear()

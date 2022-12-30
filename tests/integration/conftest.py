@@ -1,5 +1,6 @@
 import pytest
 from pathlib import Path
+import socketserver
 
 from dafi import Global
 from jinja2 import FileSystemLoader, Environment
@@ -36,9 +37,21 @@ def g():
     """Create Global object. Global is singleton and should be cleaned before each test suite."""
     Global._instances.clear()
     gl = None
+
+    def dec(host: str = None, port: int = None):
+        nonlocal gl
+        gl = Global(init_controller=True, host=host, port=port)
+        return gl
+
     try:
-        gl = Global(init_controller=True)
-        yield gl
+        yield dec
     finally:
-        if gl:
-            gl.stop()
+        gl.stop()
+
+
+@pytest.fixture
+def free_port() -> int:
+
+    with socketserver.TCPServer(("localhost", 0), None) as s:
+        free_port = s.server_address[1]
+        return free_port

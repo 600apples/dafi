@@ -1,4 +1,5 @@
 import struct
+import logging
 from dataclasses import dataclass, field, fields
 from enum import IntEnum
 from typing import Optional, Tuple, Dict, List
@@ -9,7 +10,9 @@ from dafi.exceptions import RemoteError, InitializationError
 from dafi.utils.misc import uuid as msg_uuid, Period
 
 BYTES_CHUNK = 1024  # 15 Kb
-BYTES_LIMIT = 1e6  # 1 Mb
+BYTES_LIMIT = 3e6  # 3 Mb
+
+logger = logging.getLogger(__name__)
 
 
 class MessageFlag(IntEnum):
@@ -44,7 +47,9 @@ class Message:
         msg = dill.dumps(payload)
         msg_len = len(msg)
         if msg_len > BYTES_LIMIT:
-            raise InitializationError("Payload is too big! 1 Mb is maximum allowed payload.")
+            err = "Payload is too big! 3 Mb is maximum allowed payload."
+            logger.error(err)
+            raise InitializationError(err)
 
         len_marker = struct.pack(">I", len(msg))
         chunked_payload = [

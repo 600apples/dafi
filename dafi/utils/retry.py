@@ -1,24 +1,16 @@
 import asyncio
 from itertools import chain
-from contextlib import contextmanager
 from functools import wraps
 from typing import Optional, Union, Callable, Any, NamedTuple, Type, Sequence
 
 from anyio import sleep, Event as asyncEvent
 from threading import Event as thEvent
 
-__all__ = ["resilent", "stoppable_retry"]
+from dafi.exceptions import DummyExeption
+
+__all__ = ["stoppable_retry"]
 
 acceptable_errors = Optional[Union[Type[BaseException], Sequence[Type[BaseException]]]]
-
-
-@contextmanager
-def resilent(acceptable: acceptable_errors = Exception):
-    """Suppress exceptions raised from the wrapped scope."""
-    try:
-        yield
-    except acceptable:
-        ...
 
 
 class RetryInfo(NamedTuple):
@@ -32,11 +24,13 @@ class AsyncRetry:
         stop_event: Union[thEvent, asyncEvent],
         fn: Callable[..., Any],
         acceptable: acceptable_errors,
+        not_acceptable: acceptable_errors,
         wait: int,
     ):
         self.fn = fn
         self.stop_event = stop_event
         self.acceptable = acceptable
+        self.not_acceptable = not_acceptable
         self.wait = wait
 
     async def stop_event_observer(self) -> bool:
@@ -67,12 +61,16 @@ class AsyncRetry:
 
             try:
                 return done.result()
+            except self.not_acceptable:
+                break
             except self.acceptable as err:
                 prev_error = err
                 await sleep(self.wait)
 
 
-def stoppable_retry(wait: int, acceptable: acceptable_errors = Exception):
+def stoppable_retry(
+    wait: int, acceptable: acceptable_errors = Exception, not_acceptable: acceptable_errors = DummyExeption
+):
     def dec(fn: Callable[..., Any]) -> Any:
         @wraps(fn)
         async def _dec(*args, **kwargs) -> Any:
@@ -82,7 +80,9 @@ def stoppable_retry(wait: int, acceptable: acceptable_errors = Exception):
                 raise KeyError(
                     f"Unable to find stop event argument. Please provide {type(thEvent)} or {type(asyncEvent)}"
                 )
-            return await AsyncRetry(fn=fn, stop_event=stop_event, acceptable=acceptable, wait=wait)(*args, **kwargs)
+            return await AsyncRetry(
+                fn=fn, stop_event=stop_event, acceptable=acceptable, not_acceptable=not_acceptable, wait=wait
+            )(*args, **kwargs)
 
         return _dec
 

@@ -5,7 +5,7 @@ from random import choices, choice
 from subprocess import Popen
 
 import pytest
-from dafi import FG, BG, PERIOD, NO_RETURN
+from dafi import FG, BG, PERIOD, NO_RETURN, Global
 
 
 timings = []
@@ -31,6 +31,9 @@ async def call_remote(g, _range, exec_type):
         elif exec_type == BG:
             future = future & BG
             res = future.get()
+
+            assert res
+
             assert func_args == res[0]
             assert {} == res[1]
             assert res[2].startswith("test_node")
@@ -57,7 +60,7 @@ async def call_remote_no_return(g, _range, exec_type, path):
 @pytest.mark.parametrize("exec_type", [FG, BG])
 @pytest.mark.skipif(sys.platform == "win32", reason="Unix sockets dont work on windows")
 async def test_many_callbacks_unix(remote_callbacks_path, exec_type, g):
-
+    g = g()
     process_name = "test_node"
     start_range = 1
     end_range = 1000
@@ -76,13 +79,12 @@ async def test_many_callbacks_unix(remote_callbacks_path, exec_type, g):
     finally:
         if remote:
             remote.kill()
-        g.stop()
 
 
 @pytest.mark.parametrize("exec_type", [PERIOD, NO_RETURN])
 @pytest.mark.skipif(sys.platform == "win32", reason="Unix sockets dont work on windows")
 async def test_many_callbacks_unix_no_return(remote_callbacks_path, exec_type, g):
-
+    g = g()
     process_name = "test_node"
     start_range = 1
     end_range = 1000
@@ -106,4 +108,59 @@ async def test_many_callbacks_unix_no_return(remote_callbacks_path, exec_type, g
     finally:
         if remote:
             remote.kill()
-        g.stop()
+
+
+@pytest.mark.parametrize("exec_type", [BG, FG])
+async def test_many_callbacks_tcp(remote_callbacks_path, exec_type, g, free_port):
+    g = g(host="localhost", port=free_port)
+    process_name = "test_node"
+    start_range = 1
+    end_range = 1000
+    remote = None
+    range_ = list(range(start_range, end_range))
+    executable_file = remote_callbacks_path(
+        process_name=process_name, start_range=start_range, end_range=end_range, host="localhost", port=free_port
+    )
+    try:
+        remote = Popen([sys.executable, executable_file])
+        g.wait_process(process_name)
+        await asyncio.gather(*[call_remote(g, range_, exec_type) for _ in range(500)])
+
+        max_time = max(timings)
+        assert max_time < 1
+    finally:
+        if remote:
+            remote.kill()
+
+
+@pytest.mark.parametrize("exec_type", [PERIOD, NO_RETURN])
+async def test_many_callbacks_tcp_no_return(remote_callbacks_path, exec_type, g, free_port):
+    g = g(host="0.0.0.0", port=free_port)
+    process_name = "test_node"
+    start_range = 1
+    end_range = 1000
+    remote = None
+    range_ = list(range(start_range, end_range))
+    executable_file = remote_callbacks_path(
+        process_name=process_name,
+        start_range=start_range,
+        end_range=end_range,
+        write_to_file=True,
+        host="0.0.0.0",
+        port=free_port,
+    )
+    path = executable_file.parent / "test_data"
+    path.mkdir()
+
+    try:
+        remote = Popen([sys.executable, executable_file])
+        g.wait_process(process_name)
+        await asyncio.gather(*[call_remote_no_return(g, range_, exec_type, path / str(i)) for i in range(500)])
+
+        all_files = list(path.iterdir())
+        assert len(all_files) == 500
+        for file in all_files:
+            assert file.read_text() == "4"
+    finally:
+        if remote:
+            remote.kill()

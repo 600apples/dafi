@@ -165,11 +165,11 @@ class Global(metaclass=Singleton):
         return self.ipc.transfer_and_call(remote_process, func, *args, **kwargs)
 
     @staticmethod
-    def wait_function(func_name: str) -> Union[NoReturn, Coroutine]:
+    def wait_function(func_name: str) -> NoReturn:
         return LazyRemoteCall(_ipc=None, _global_event=None, _func_name=func_name)._wait_function()
 
     @staticmethod
-    def wait_process(process_name: str) -> Union[NoReturn, Coroutine]:
+    def wait_process(process_name: str) -> NoReturn:
         return LazyRemoteCall(_ipc=None, _global_event=None)._wait_process(process_name)
 
 

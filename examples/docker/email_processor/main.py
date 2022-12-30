@@ -2,7 +2,6 @@ import os
 import logging
 from dafi import Global, callback
 
-email = "noboby@gmail.com"
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
