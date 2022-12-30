@@ -44,7 +44,7 @@ class Message:
         msg = dill.dumps(payload)
         msg_len = len(msg)
         if msg_len > BYTES_LIMIT:
-            raise InitializationError("Payload is too big! 2 Mb is maximum allowed payload.")
+            raise InitializationError("Payload is too big! 1 Mb is maximum allowed payload.")
 
         len_marker = struct.pack(">I", len(msg))
         chunked_payload = [

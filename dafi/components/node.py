@@ -58,11 +58,10 @@ class Node(ComponentsBase):
         self.operations = NodeOperations(self.stop_event)
 
         if global_event.is_set():
-            logger.info("Termination node...")
             return
 
         if retry_info.attempt == 2 or not retry_info.attempt % 5:
-            logger.error("Unable to connect node. retrying...")
+            logger.error(f"Unable to connect node. Error = {retry_info.prev_error}. Retrying...")
 
         async with self.connect_listener() as stream:
             async with create_task_group() as sg:

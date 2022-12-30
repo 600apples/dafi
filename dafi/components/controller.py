@@ -46,7 +46,7 @@ class Controller(ComponentsBase):
             return
 
         if retry_info.attempt == 2 or not retry_info.attempt % 5:
-            logger.error(f"Unable to connect controller. Error = {retry_info.prev_error} retrying...")
+            logger.error(f"Unable to connect controller. Error = {retry_info.prev_error}. Retrying...")
 
         async with create_task_group() as sg:
             self.listener = await self.create_listener()

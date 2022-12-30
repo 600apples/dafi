@@ -51,7 +51,7 @@ async def test_many_callbacks(remote_callbacks_path, exec_type, g):
 
     process_name = "test_node"
     start_range = 1
-    end_range = 200
+    end_range = 1000
     remote = None
     range_ = list(range(start_range, end_range))
     executable_file = remote_callbacks_path(process_name=process_name, start_range=start_range, end_range=end_range)

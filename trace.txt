@@ -1,0 +1,495 @@
+----------------------_write_commands-----------------------
+Traceback (most recent call last):
+  File "/Users/user/Documents/InvestigatedLibraries/dafi/dafi/utils/debug.py", line 14, in write_exception_trace
+    retry_state.outcome.result()
+  File "/opt/homebrew/Cellar/python@3.10/3.10.6_2/Frameworks/Python.framework/Versions/3.10/lib/python3.10/concurrent/futures/_base.py", line 451, in result
+    return self.__get_result()
+  File "/opt/homebrew/Cellar/python@3.10/3.10.6_2/Frameworks/Python.framework/Versions/3.10/lib/python3.10/concurrent/futures/_base.py", line 403, in __get_result
+    raise self._exception
+  File "/Users/user/Library/Application Support/hatch/env/virtual/dafi/Vjr0VuTJ/dafi/lib/python3.10/site-packages/tenacity/_asyncio.py", line 51, in __call__
+    result = await fn(*args, **kwargs)
+  File "/Users/user/Documents/InvestigatedLibraries/dafi/dafi/components/node.py", line 129, in _write_commands
+    ).dumps(),
+  File "/Users/user/Documents/InvestigatedLibraries/dafi/dafi/message.py", line 47, in dumps
+    raise InitializationError("Payload is too big! 2 Mb is maximum allowed payload.")
+dafi.exceptions.InitializationError: Payload is too big! 2 Mb is maximum allowed payload.
+----------------------_write_commands-----------------------
+Traceback (most recent call last):
+  File "/Users/user/Documents/InvestigatedLibraries/dafi/dafi/utils/debug.py", line 14, in write_exception_trace
+    retry_state.outcome.result()
+  File "/opt/homebrew/Cellar/python@3.10/3.10.6_2/Frameworks/Python.framework/Versions/3.10/lib/python3.10/concurrent/futures/_base.py", line 451, in result
+    return self.__get_result()
+  File "/opt/homebrew/Cellar/python@3.10/3.10.6_2/Frameworks/Python.framework/Versions/3.10/lib/python3.10/concurrent/futures/_base.py", line 403, in __get_result
+    raise self._exception
+  File "/Users/user/Library/Application Support/hatch/env/virtual/dafi/Vjr0VuTJ/dafi/lib/python3.10/site-packages/tenacity/_asyncio.py", line 51, in __call__
+    result = await fn(*args, **kwargs)
+  File "/Users/user/Documents/InvestigatedLibraries/dafi/dafi/components/node.py", line 129, in _write_commands
+    ).dumps(),
+  File "/Users/user/Documents/InvestigatedLibraries/dafi/dafi/message.py", line 47, in dumps
+    raise InitializationError("Payload is too big! 2 Mb is maximum allowed payload.")
+dafi.exceptions.InitializationError: Payload is too big! 2 Mb is maximum allowed payload.
+----------------------_write_commands-----------------------
+Traceback (most recent call last):
+  File "/Users/user/Documents/InvestigatedLibraries/dafi/dafi/utils/debug.py", line 14, in write_exception_trace
+    retry_state.outcome.result()
+  File "/opt/homebrew/Cellar/python@3.10/3.10.6_2/Frameworks/Python.framework/Versions/3.10/lib/python3.10/concurrent/futures/_base.py", line 451, in result
+    return self.__get_result()
+  File "/opt/homebrew/Cellar/python@3.10/3.10.6_2/Frameworks/Python.framework/Versions/3.10/lib/python3.10/concurrent/futures/_base.py", line 403, in __get_result
+    raise self._exception
+  File "/Users/user/Library/Application Support/hatch/env/virtual/dafi/Vjr0VuTJ/dafi/lib/python3.10/site-packages/tenacity/_asyncio.py", line 51, in __call__
+    result = await fn(*args, **kwargs)
+  File "/Users/user/Documents/InvestigatedLibraries/dafi/dafi/components/node.py", line 129, in _write_commands
+    ).dumps(),
+  File "/Users/user/Documents/InvestigatedLibraries/dafi/dafi/message.py", line 47, in dumps
+    raise InitializationError("Payload is too big! 2 Mb is maximum allowed payload.")
+dafi.exceptions.InitializationError: Payload is too big! 2 Mb is maximum allowed payload.
+----------------------_write_commands-----------------------
+Traceback (most recent call last):
+  File "/Users/user/Documents/InvestigatedLibraries/dafi/dafi/utils/debug.py", line 14, in write_exception_trace
+    retry_state.outcome.result()
+  File "/opt/homebrew/Cellar/python@3.10/3.10.6_2/Frameworks/Python.framework/Versions/3.10/lib/python3.10/concurrent/futures/_base.py", line 451, in result
+    return self.__get_result()
+  File "/opt/homebrew/Cellar/python@3.10/3.10.6_2/Frameworks/Python.framework/Versions/3.10/lib/python3.10/concurrent/futures/_base.py", line 403, in __get_result
+    raise self._exception
+  File "/Users/user/Library/Application Support/hatch/env/virtual/dafi/Vjr0VuTJ/dafi/lib/python3.10/site-packages/tenacity/_asyncio.py", line 51, in __call__
+    result = await fn(*args, **kwargs)
+  File "/Users/user/Documents/InvestigatedLibraries/dafi/dafi/components/node.py", line 129, in _write_commands
+    ).dumps(),
+  File "/Users/user/Documents/InvestigatedLibraries/dafi/dafi/message.py", line 47, in dumps
+    raise InitializationError("Payload is too big! 2 Mb is maximum allowed payload.")
+dafi.exceptions.InitializationError: Payload is too big! 2 Mb is maximum allowed payload.
+----------------------_write_commands-----------------------
+Traceback (most recent call last):
+  File "/Users/user/Documents/InvestigatedLibraries/dafi/dafi/utils/debug.py", line 14, in write_exception_trace
+    retry_state.outcome.result()
+  File "/opt/homebrew/Cellar/python@3.10/3.10.6_2/Frameworks/Python.framework/Versions/3.10/lib/python3.10/concurrent/futures/_base.py", line 451, in result
+    return self.__get_result()
+  File "/opt/homebrew/Cellar/python@3.10/3.10.6_2/Frameworks/Python.framework/Versions/3.10/lib/python3.10/concurrent/futures/_base.py", line 403, in __get_result
+    raise self._exception
+  File "/Users/user/Library/Application Support/hatch/env/virtual/dafi/Vjr0VuTJ/dafi/lib/python3.10/site-packages/tenacity/_asyncio.py", line 51, in __call__
+    result = await fn(*args, **kwargs)
+  File "/Users/user/Documents/InvestigatedLibraries/dafi/dafi/components/node.py", line 129, in _write_commands
+    ).dumps(),
+  File "/Users/user/Documents/InvestigatedLibraries/dafi/dafi/message.py", line 47, in dumps
+    raise InitializationError("Payload is too big! 2 Mb is maximum allowed payload.")
+dafi.exceptions.InitializationError: Payload is too big! 2 Mb is maximum allowed payload.
+----------------------_write_commands-----------------------
+Traceback (most recent call last):
+  File "/Users/user/Documents/InvestigatedLibraries/dafi/dafi/utils/debug.py", line 14, in write_exception_trace
+    retry_state.outcome.result()
+  File "/opt/homebrew/Cellar/python@3.10/3.10.6_2/Frameworks/Python.framework/Versions/3.10/lib/python3.10/concurrent/futures/_base.py", line 451, in result
+    return self.__get_result()
+  File "/opt/homebrew/Cellar/python@3.10/3.10.6_2/Frameworks/Python.framework/Versions/3.10/lib/python3.10/concurrent/futures/_base.py", line 403, in __get_result
+    raise self._exception
+  File "/Users/user/Library/Application Support/hatch/env/virtual/dafi/Vjr0VuTJ/dafi/lib/python3.10/site-packages/tenacity/_asyncio.py", line 51, in __call__
+    result = await fn(*args, **kwargs)
+  File "/Users/user/Documents/InvestigatedLibraries/dafi/dafi/components/node.py", line 129, in _write_commands
+    ).dumps(),
+  File "/Users/user/Documents/InvestigatedLibraries/dafi/dafi/message.py", line 47, in dumps
+    raise InitializationError("Payload is too big! 2 Mb is maximum allowed payload.")
+dafi.exceptions.InitializationError: Payload is too big! 2 Mb is maximum allowed payload.
+----------------------_write_commands-----------------------
+Traceback (most recent call last):
+  File "/Users/user/Documents/InvestigatedLibraries/dafi/dafi/utils/debug.py", line 14, in write_exception_trace
+    retry_state.outcome.result()
+  File "/opt/homebrew/Cellar/python@3.10/3.10.6_2/Frameworks/Python.framework/Versions/3.10/lib/python3.10/concurrent/futures/_base.py", line 451, in result
+    return self.__get_result()
+  File "/opt/homebrew/Cellar/python@3.10/3.10.6_2/Frameworks/Python.framework/Versions/3.10/lib/python3.10/concurrent/futures/_base.py", line 403, in __get_result
+    raise self._exception
+  File "/Users/user/Library/Application Support/hatch/env/virtual/dafi/Vjr0VuTJ/dafi/lib/python3.10/site-packages/tenacity/_asyncio.py", line 51, in __call__
+    result = await fn(*args, **kwargs)
+  File "/Users/user/Documents/InvestigatedLibraries/dafi/dafi/components/node.py", line 129, in _write_commands
+    ).dumps(),
+  File "/Users/user/Documents/InvestigatedLibraries/dafi/dafi/message.py", line 47, in dumps
+    raise InitializationError("Payload is too big! 2 Mb is maximum allowed payload.")
+dafi.exceptions.InitializationError: Payload is too big! 2 Mb is maximum allowed payload.
+----------------------_write_commands-----------------------
+Traceback (most recent call last):
+  File "/Users/user/Documents/InvestigatedLibraries/dafi/dafi/utils/debug.py", line 14, in write_exception_trace
+    retry_state.outcome.result()
+  File "/opt/homebrew/Cellar/python@3.10/3.10.6_2/Frameworks/Python.framework/Versions/3.10/lib/python3.10/concurrent/futures/_base.py", line 451, in result
+    return self.__get_result()
+  File "/opt/homebrew/Cellar/python@3.10/3.10.6_2/Frameworks/Python.framework/Versions/3.10/lib/python3.10/concurrent/futures/_base.py", line 403, in __get_result
+    raise self._exception
+  File "/Users/user/Library/Application Support/hatch/env/virtual/dafi/Vjr0VuTJ/dafi/lib/python3.10/site-packages/tenacity/_asyncio.py", line 51, in __call__
+    result = await fn(*args, **kwargs)
+  File "/Users/user/Documents/InvestigatedLibraries/dafi/dafi/components/node.py", line 129, in _write_commands
+    ).dumps(),
+  File "/Users/user/Documents/InvestigatedLibraries/dafi/dafi/message.py", line 47, in dumps
+    raise InitializationError("Payload is too big! 2 Mb is maximum allowed payload.")
+dafi.exceptions.InitializationError: Payload is too big! 2 Mb is maximum allowed payload.
+----------------------_write_commands-----------------------
+Traceback (most recent call last):
+  File "/Users/user/Documents/InvestigatedLibraries/dafi/dafi/utils/debug.py", line 14, in write_exception_trace
+    retry_state.outcome.result()
+  File "/opt/homebrew/Cellar/python@3.10/3.10.6_2/Frameworks/Python.framework/Versions/3.10/lib/python3.10/concurrent/futures/_base.py", line 451, in result
+    return self.__get_result()
+  File "/opt/homebrew/Cellar/python@3.10/3.10.6_2/Frameworks/Python.framework/Versions/3.10/lib/python3.10/concurrent/futures/_base.py", line 403, in __get_result
+    raise self._exception
+  File "/Users/user/Library/Application Support/hatch/env/virtual/dafi/Vjr0VuTJ/dafi/lib/python3.10/site-packages/tenacity/_asyncio.py", line 51, in __call__
+    result = await fn(*args, **kwargs)
+  File "/Users/user/Documents/InvestigatedLibraries/dafi/dafi/components/node.py", line 129, in _write_commands
+    ).dumps(),
+  File "/Users/user/Documents/InvestigatedLibraries/dafi/dafi/message.py", line 47, in dumps
+    raise InitializationError("Payload is too big! 2 Mb is maximum allowed payload.")
+dafi.exceptions.InitializationError: Payload is too big! 2 Mb is maximum allowed payload.
+----------------------_write_commands-----------------------
+Traceback (most recent call last):
+  File "/Users/user/Documents/InvestigatedLibraries/dafi/dafi/utils/debug.py", line 14, in write_exception_trace
+    retry_state.outcome.result()
+  File "/opt/homebrew/Cellar/python@3.10/3.10.6_2/Frameworks/Python.framework/Versions/3.10/lib/python3.10/concurrent/futures/_base.py", line 451, in result
+    return self.__get_result()
+  File "/opt/homebrew/Cellar/python@3.10/3.10.6_2/Frameworks/Python.framework/Versions/3.10/lib/python3.10/concurrent/futures/_base.py", line 403, in __get_result
+    raise self._exception
+  File "/Users/user/Library/Application Support/hatch/env/virtual/dafi/Vjr0VuTJ/dafi/lib/python3.10/site-packages/tenacity/_asyncio.py", line 51, in __call__
+    result = await fn(*args, **kwargs)
+  File "/Users/user/Documents/InvestigatedLibraries/dafi/dafi/components/node.py", line 129, in _write_commands
+    ).dumps(),
+  File "/Users/user/Documents/InvestigatedLibraries/dafi/dafi/message.py", line 47, in dumps
+    raise InitializationError("Payload is too big! 2 Mb is maximum allowed payload.")
+dafi.exceptions.InitializationError: Payload is too big! 2 Mb is maximum allowed payload.
+----------------------_write_commands-----------------------
+Traceback (most recent call last):
+  File "/Users/user/Documents/InvestigatedLibraries/dafi/dafi/utils/debug.py", line 14, in write_exception_trace
+    retry_state.outcome.result()
+  File "/opt/homebrew/Cellar/python@3.10/3.10.6_2/Frameworks/Python.framework/Versions/3.10/lib/python3.10/concurrent/futures/_base.py", line 451, in result
+    return self.__get_result()
+  File "/opt/homebrew/Cellar/python@3.10/3.10.6_2/Frameworks/Python.framework/Versions/3.10/lib/python3.10/concurrent/futures/_base.py", line 403, in __get_result
+    raise self._exception
+  File "/Users/user/Library/Application Support/hatch/env/virtual/dafi/Vjr0VuTJ/dafi/lib/python3.10/site-packages/tenacity/_asyncio.py", line 51, in __call__
+    result = await fn(*args, **kwargs)
+  File "/Users/user/Documents/InvestigatedLibraries/dafi/dafi/components/node.py", line 129, in _write_commands
+    ).dumps(),
+  File "/Users/user/Documents/InvestigatedLibraries/dafi/dafi/message.py", line 47, in dumps
+    raise InitializationError("Payload is too big! 2 Mb is maximum allowed payload.")
+dafi.exceptions.InitializationError: Payload is too big! 2 Mb is maximum allowed payload.
+----------------------_write_commands-----------------------
+Traceback (most recent call last):
+  File "/Users/user/Documents/InvestigatedLibraries/dafi/dafi/utils/debug.py", line 14, in write_exception_trace
+    retry_state.outcome.result()
+  File "/opt/homebrew/Cellar/python@3.10/3.10.6_2/Frameworks/Python.framework/Versions/3.10/lib/python3.10/concurrent/futures/_base.py", line 451, in result
+    return self.__get_result()
+  File "/opt/homebrew/Cellar/python@3.10/3.10.6_2/Frameworks/Python.framework/Versions/3.10/lib/python3.10/concurrent/futures/_base.py", line 403, in __get_result
+    raise self._exception
+  File "/Users/user/Library/Application Support/hatch/env/virtual/dafi/Vjr0VuTJ/dafi/lib/python3.10/site-packages/tenacity/_asyncio.py", line 51, in __call__
+    result = await fn(*args, **kwargs)
+  File "/Users/user/Documents/InvestigatedLibraries/dafi/dafi/components/node.py", line 129, in _write_commands
+    ).dumps(),
+  File "/Users/user/Documents/InvestigatedLibraries/dafi/dafi/message.py", line 47, in dumps
+    raise InitializationError("Payload is too big! 2 Mb is maximum allowed payload.")
+dafi.exceptions.InitializationError: Payload is too big! 2 Mb is maximum allowed payload.
+----------------------_write_commands-----------------------
+Traceback (most recent call last):
+  File "/Users/user/Documents/InvestigatedLibraries/dafi/dafi/utils/debug.py", line 14, in write_exception_trace
+    retry_state.outcome.result()
+  File "/opt/homebrew/Cellar/python@3.10/3.10.6_2/Frameworks/Python.framework/Versions/3.10/lib/python3.10/concurrent/futures/_base.py", line 451, in result
+    return self.__get_result()
+  File "/opt/homebrew/Cellar/python@3.10/3.10.6_2/Frameworks/Python.framework/Versions/3.10/lib/python3.10/concurrent/futures/_base.py", line 403, in __get_result
+    raise self._exception
+  File "/Users/user/Library/Application Support/hatch/env/virtual/dafi/Vjr0VuTJ/dafi/lib/python3.10/site-packages/tenacity/_asyncio.py", line 51, in __call__
+    result = await fn(*args, **kwargs)
+  File "/Users/user/Documents/InvestigatedLibraries/dafi/dafi/components/node.py", line 129, in _write_commands
+    ).dumps(),
+  File "/Users/user/Documents/InvestigatedLibraries/dafi/dafi/message.py", line 47, in dumps
+    raise InitializationError("Payload is too big! 2 Mb is maximum allowed payload.")
+dafi.exceptions.InitializationError: Payload is too big! 2 Mb is maximum allowed payload.
+----------------------_write_commands-----------------------
+Traceback (most recent call last):
+  File "/Users/user/Documents/InvestigatedLibraries/dafi/dafi/utils/debug.py", line 14, in write_exception_trace
+    retry_state.outcome.result()
+  File "/opt/homebrew/Cellar/python@3.10/3.10.6_2/Frameworks/Python.framework/Versions/3.10/lib/python3.10/concurrent/futures/_base.py", line 451, in result
+    return self.__get_result()
+  File "/opt/homebrew/Cellar/python@3.10/3.10.6_2/Frameworks/Python.framework/Versions/3.10/lib/python3.10/concurrent/futures/_base.py", line 403, in __get_result
+    raise self._exception
+  File "/Users/user/Library/Application Support/hatch/env/virtual/dafi/Vjr0VuTJ/dafi/lib/python3.10/site-packages/tenacity/_asyncio.py", line 51, in __call__
+    result = await fn(*args, **kwargs)
+  File "/Users/user/Documents/InvestigatedLibraries/dafi/dafi/components/node.py", line 129, in _write_commands
+    ).dumps(),
+  File "/Users/user/Documents/InvestigatedLibraries/dafi/dafi/message.py", line 47, in dumps
+    raise InitializationError("Payload is too big! 2 Mb is maximum allowed payload.")
+dafi.exceptions.InitializationError: Payload is too big! 2 Mb is maximum allowed payload.
+----------------------_write_commands-----------------------
+Traceback (most recent call last):
+  File "/Users/user/Documents/InvestigatedLibraries/dafi/dafi/utils/debug.py", line 14, in write_exception_trace
+    retry_state.outcome.result()
+  File "/opt/homebrew/Cellar/python@3.10/3.10.6_2/Frameworks/Python.framework/Versions/3.10/lib/python3.10/concurrent/futures/_base.py", line 451, in result
+    return self.__get_result()
+  File "/opt/homebrew/Cellar/python@3.10/3.10.6_2/Frameworks/Python.framework/Versions/3.10/lib/python3.10/concurrent/futures/_base.py", line 403, in __get_result
+    raise self._exception
+  File "/Users/user/Library/Application Support/hatch/env/virtual/dafi/Vjr0VuTJ/dafi/lib/python3.10/site-packages/tenacity/_asyncio.py", line 51, in __call__
+    result = await fn(*args, **kwargs)
+  File "/Users/user/Documents/InvestigatedLibraries/dafi/dafi/components/node.py", line 129, in _write_commands
+    ).dumps(),
+  File "/Users/user/Documents/InvestigatedLibraries/dafi/dafi/message.py", line 47, in dumps
+    raise InitializationError("Payload is too big! 2 Mb is maximum allowed payload.")
+dafi.exceptions.InitializationError: Payload is too big! 2 Mb is maximum allowed payload.
+----------------------_write_commands-----------------------
+Traceback (most recent call last):
+  File "/Users/user/Documents/InvestigatedLibraries/dafi/dafi/utils/debug.py", line 14, in write_exception_trace
+    retry_state.outcome.result()
+  File "/opt/homebrew/Cellar/python@3.10/3.10.6_2/Frameworks/Python.framework/Versions/3.10/lib/python3.10/concurrent/futures/_base.py", line 451, in result
+    return self.__get_result()
+  File "/opt/homebrew/Cellar/python@3.10/3.10.6_2/Frameworks/Python.framework/Versions/3.10/lib/python3.10/concurrent/futures/_base.py", line 403, in __get_result
+    raise self._exception
+  File "/Users/user/Library/Application Support/hatch/env/virtual/dafi/Vjr0VuTJ/dafi/lib/python3.10/site-packages/tenacity/_asyncio.py", line 51, in __call__
+    result = await fn(*args, **kwargs)
+  File "/Users/user/Documents/InvestigatedLibraries/dafi/dafi/components/node.py", line 129, in _write_commands
+    ).dumps(),
+  File "/Users/user/Documents/InvestigatedLibraries/dafi/dafi/message.py", line 47, in dumps
+    raise InitializationError("Payload is too big! 2 Mb is maximum allowed payload.")
+dafi.exceptions.InitializationError: Payload is too big! 2 Mb is maximum allowed payload.
+----------------------_write_commands-----------------------
+Traceback (most recent call last):
+  File "/Users/user/Documents/InvestigatedLibraries/dafi/dafi/utils/debug.py", line 14, in write_exception_trace
+    retry_state.outcome.result()
+  File "/opt/homebrew/Cellar/python@3.10/3.10.6_2/Frameworks/Python.framework/Versions/3.10/lib/python3.10/concurrent/futures/_base.py", line 451, in result
+    return self.__get_result()
+  File "/opt/homebrew/Cellar/python@3.10/3.10.6_2/Frameworks/Python.framework/Versions/3.10/lib/python3.10/concurrent/futures/_base.py", line 403, in __get_result
+    raise self._exception
+  File "/Users/user/Library/Application Support/hatch/env/virtual/dafi/Vjr0VuTJ/dafi/lib/python3.10/site-packages/tenacity/_asyncio.py", line 51, in __call__
+    result = await fn(*args, **kwargs)
+  File "/Users/user/Documents/InvestigatedLibraries/dafi/dafi/components/node.py", line 129, in _write_commands
+    ).dumps(),
+  File "/Users/user/Documents/InvestigatedLibraries/dafi/dafi/message.py", line 47, in dumps
+    raise InitializationError("Payload is too big! 2 Mb is maximum allowed payload.")
+dafi.exceptions.InitializationError: Payload is too big! 2 Mb is maximum allowed payload.
+----------------------_write_commands-----------------------
+Traceback (most recent call last):
+  File "/Users/user/Documents/InvestigatedLibraries/dafi/dafi/utils/debug.py", line 14, in write_exception_trace
+    retry_state.outcome.result()
+  File "/opt/homebrew/Cellar/python@3.10/3.10.6_2/Frameworks/Python.framework/Versions/3.10/lib/python3.10/concurrent/futures/_base.py", line 451, in result
+    return self.__get_result()
+  File "/opt/homebrew/Cellar/python@3.10/3.10.6_2/Frameworks/Python.framework/Versions/3.10/lib/python3.10/concurrent/futures/_base.py", line 403, in __get_result
+    raise self._exception
+  File "/Users/user/Library/Application Support/hatch/env/virtual/dafi/Vjr0VuTJ/dafi/lib/python3.10/site-packages/tenacity/_asyncio.py", line 51, in __call__
+    result = await fn(*args, **kwargs)
+  File "/Users/user/Documents/InvestigatedLibraries/dafi/dafi/components/node.py", line 129, in _write_commands
+    ).dumps(),
+  File "/Users/user/Documents/InvestigatedLibraries/dafi/dafi/message.py", line 47, in dumps
+    raise InitializationError("Payload is too big! 2 Mb is maximum allowed payload.")
+dafi.exceptions.InitializationError: Payload is too big! 2 Mb is maximum allowed payload.
+----------------------_write_commands-----------------------
+Traceback (most recent call last):
+  File "/Users/user/Documents/InvestigatedLibraries/dafi/dafi/utils/debug.py", line 14, in write_exception_trace
+    retry_state.outcome.result()
+  File "/opt/homebrew/Cellar/python@3.10/3.10.6_2/Frameworks/Python.framework/Versions/3.10/lib/python3.10/concurrent/futures/_base.py", line 451, in result
+    return self.__get_result()
+  File "/opt/homebrew/Cellar/python@3.10/3.10.6_2/Frameworks/Python.framework/Versions/3.10/lib/python3.10/concurrent/futures/_base.py", line 403, in __get_result
+    raise self._exception
+  File "/Users/user/Library/Application Support/hatch/env/virtual/dafi/Vjr0VuTJ/dafi/lib/python3.10/site-packages/tenacity/_asyncio.py", line 51, in __call__
+    result = await fn(*args, **kwargs)
+  File "/Users/user/Documents/InvestigatedLibraries/dafi/dafi/components/node.py", line 129, in _write_commands
+    ).dumps(),
+  File "/Users/user/Documents/InvestigatedLibraries/dafi/dafi/message.py", line 47, in dumps
+    raise InitializationError("Payload is too big! 2 Mb is maximum allowed payload.")
+dafi.exceptions.InitializationError: Payload is too big! 2 Mb is maximum allowed payload.
+----------------------_write_commands-----------------------
+Traceback (most recent call last):
+  File "/Users/user/Documents/InvestigatedLibraries/dafi/dafi/utils/debug.py", line 14, in write_exception_trace
+    retry_state.outcome.result()
+  File "/opt/homebrew/Cellar/python@3.10/3.10.6_2/Frameworks/Python.framework/Versions/3.10/lib/python3.10/concurrent/futures/_base.py", line 451, in result
+    return self.__get_result()
+  File "/opt/homebrew/Cellar/python@3.10/3.10.6_2/Frameworks/Python.framework/Versions/3.10/lib/python3.10/concurrent/futures/_base.py", line 403, in __get_result
+    raise self._exception
+  File "/Users/user/Library/Application Support/hatch/env/virtual/dafi/Vjr0VuTJ/dafi/lib/python3.10/site-packages/tenacity/_asyncio.py", line 51, in __call__
+    result = await fn(*args, **kwargs)
+  File "/Users/user/Documents/InvestigatedLibraries/dafi/dafi/components/node.py", line 129, in _write_commands
+    ).dumps(),
+  File "/Users/user/Documents/InvestigatedLibraries/dafi/dafi/message.py", line 47, in dumps
+    raise InitializationError("Payload is too big! 2 Mb is maximum allowed payload.")
+dafi.exceptions.InitializationError: Payload is too big! 2 Mb is maximum allowed payload.
+----------------------_write_commands-----------------------
+Traceback (most recent call last):
+  File "/Users/user/Documents/InvestigatedLibraries/dafi/dafi/utils/debug.py", line 14, in write_exception_trace
+    retry_state.outcome.result()
+  File "/opt/homebrew/Cellar/python@3.10/3.10.6_2/Frameworks/Python.framework/Versions/3.10/lib/python3.10/concurrent/futures/_base.py", line 451, in result
+    return self.__get_result()
+  File "/opt/homebrew/Cellar/python@3.10/3.10.6_2/Frameworks/Python.framework/Versions/3.10/lib/python3.10/concurrent/futures/_base.py", line 403, in __get_result
+    raise self._exception
+  File "/Users/user/Library/Application Support/hatch/env/virtual/dafi/Vjr0VuTJ/dafi/lib/python3.10/site-packages/tenacity/_asyncio.py", line 51, in __call__
+    result = await fn(*args, **kwargs)
+  File "/Users/user/Documents/InvestigatedLibraries/dafi/dafi/components/node.py", line 129, in _write_commands
+    ).dumps(),
+  File "/Users/user/Documents/InvestigatedLibraries/dafi/dafi/message.py", line 47, in dumps
+    raise InitializationError("Payload is too big! 2 Mb is maximum allowed payload.")
+dafi.exceptions.InitializationError: Payload is too big! 2 Mb is maximum allowed payload.
+----------------------_write_commands-----------------------
+Traceback (most recent call last):
+  File "/Users/user/Documents/InvestigatedLibraries/dafi/dafi/utils/debug.py", line 14, in write_exception_trace
+    retry_state.outcome.result()
+  File "/opt/homebrew/Cellar/python@3.10/3.10.6_2/Frameworks/Python.framework/Versions/3.10/lib/python3.10/concurrent/futures/_base.py", line 451, in result
+    return self.__get_result()
+  File "/opt/homebrew/Cellar/python@3.10/3.10.6_2/Frameworks/Python.framework/Versions/3.10/lib/python3.10/concurrent/futures/_base.py", line 403, in __get_result
+    raise self._exception
+  File "/Users/user/Library/Application Support/hatch/env/virtual/dafi/Vjr0VuTJ/dafi/lib/python3.10/site-packages/tenacity/_asyncio.py", line 51, in __call__
+    result = await fn(*args, **kwargs)
+  File "/Users/user/Documents/InvestigatedLibraries/dafi/dafi/components/node.py", line 129, in _write_commands
+    ).dumps(),
+  File "/Users/user/Documents/InvestigatedLibraries/dafi/dafi/message.py", line 47, in dumps
+    raise InitializationError("Payload is too big! 2 Mb is maximum allowed payload.")
+dafi.exceptions.InitializationError: Payload is too big! 2 Mb is maximum allowed payload.
+----------------------_write_commands-----------------------
+Traceback (most recent call last):
+  File "/Users/user/Documents/InvestigatedLibraries/dafi/dafi/utils/debug.py", line 14, in write_exception_trace
+    retry_state.outcome.result()
+  File "/opt/homebrew/Cellar/python@3.10/3.10.6_2/Frameworks/Python.framework/Versions/3.10/lib/python3.10/concurrent/futures/_base.py", line 451, in result
+    return self.__get_result()
+  File "/opt/homebrew/Cellar/python@3.10/3.10.6_2/Frameworks/Python.framework/Versions/3.10/lib/python3.10/concurrent/futures/_base.py", line 403, in __get_result
+    raise self._exception
+  File "/Users/user/Library/Application Support/hatch/env/virtual/dafi/Vjr0VuTJ/dafi/lib/python3.10/site-packages/tenacity/_asyncio.py", line 51, in __call__
+    result = await fn(*args, **kwargs)
+  File "/Users/user/Documents/InvestigatedLibraries/dafi/dafi/components/node.py", line 129, in _write_commands
+    ).dumps(),
+  File "/Users/user/Documents/InvestigatedLibraries/dafi/dafi/message.py", line 47, in dumps
+    raise InitializationError("Payload is too big! 2 Mb is maximum allowed payload.")
+dafi.exceptions.InitializationError: Payload is too big! 2 Mb is maximum allowed payload.
+----------------------_write_commands-----------------------
+Traceback (most recent call last):
+  File "/Users/user/Documents/InvestigatedLibraries/dafi/dafi/utils/debug.py", line 14, in write_exception_trace
+    retry_state.outcome.result()
+  File "/opt/homebrew/Cellar/python@3.10/3.10.6_2/Frameworks/Python.framework/Versions/3.10/lib/python3.10/concurrent/futures/_base.py", line 451, in result
+    return self.__get_result()
+  File "/opt/homebrew/Cellar/python@3.10/3.10.6_2/Frameworks/Python.framework/Versions/3.10/lib/python3.10/concurrent/futures/_base.py", line 403, in __get_result
+    raise self._exception
+  File "/Users/user/Library/Application Support/hatch/env/virtual/dafi/Vjr0VuTJ/dafi/lib/python3.10/site-packages/tenacity/_asyncio.py", line 51, in __call__
+    result = await fn(*args, **kwargs)
+  File "/Users/user/Documents/InvestigatedLibraries/dafi/dafi/components/node.py", line 129, in _write_commands
+    ).dumps(),
+  File "/Users/user/Documents/InvestigatedLibraries/dafi/dafi/message.py", line 47, in dumps
+    raise InitializationError("Payload is too big! 2 Mb is maximum allowed payload.")
+dafi.exceptions.InitializationError: Payload is too big! 2 Mb is maximum allowed payload.
+----------------------_write_commands-----------------------
+Traceback (most recent call last):
+  File "/Users/user/Documents/InvestigatedLibraries/dafi/dafi/utils/debug.py", line 14, in write_exception_trace
+    retry_state.outcome.result()
+  File "/opt/homebrew/Cellar/python@3.10/3.10.6_2/Frameworks/Python.framework/Versions/3.10/lib/python3.10/concurrent/futures/_base.py", line 451, in result
+    return self.__get_result()
+  File "/opt/homebrew/Cellar/python@3.10/3.10.6_2/Frameworks/Python.framework/Versions/3.10/lib/python3.10/concurrent/futures/_base.py", line 403, in __get_result
+    raise self._exception
+  File "/Users/user/Library/Application Support/hatch/env/virtual/dafi/Vjr0VuTJ/dafi/lib/python3.10/site-packages/tenacity/_asyncio.py", line 51, in __call__
+    result = await fn(*args, **kwargs)
+  File "/Users/user/Documents/InvestigatedLibraries/dafi/dafi/components/node.py", line 128, in _write_commands
+    ).dumps(),
+  File "/Users/user/Documents/InvestigatedLibraries/dafi/dafi/message.py", line 47, in dumps
+    raise InitializationError("Payload is too big! 2 Mb is maximum allowed payload.")
+dafi.exceptions.InitializationError: Payload is too big! 2 Mb is maximum allowed payload.
+----------------------_write_commands-----------------------
+Traceback (most recent call last):
+  File "/Users/user/Documents/InvestigatedLibraries/dafi/dafi/utils/debug.py", line 14, in write_exception_trace
+    retry_state.outcome.result()
+  File "/opt/homebrew/Cellar/python@3.10/3.10.6_2/Frameworks/Python.framework/Versions/3.10/lib/python3.10/concurrent/futures/_base.py", line 451, in result
+    return self.__get_result()
+  File "/opt/homebrew/Cellar/python@3.10/3.10.6_2/Frameworks/Python.framework/Versions/3.10/lib/python3.10/concurrent/futures/_base.py", line 403, in __get_result
+    raise self._exception
+  File "/Users/user/Library/Application Support/hatch/env/virtual/dafi/Vjr0VuTJ/dafi/lib/python3.10/site-packages/tenacity/_asyncio.py", line 51, in __call__
+    result = await fn(*args, **kwargs)
+  File "/Users/user/Documents/InvestigatedLibraries/dafi/dafi/components/node.py", line 128, in _write_commands
+    ).dumps(),
+  File "/Users/user/Documents/InvestigatedLibraries/dafi/dafi/message.py", line 47, in dumps
+    raise InitializationError("Payload is too big! 2 Mb is maximum allowed payload.")
+dafi.exceptions.InitializationError: Payload is too big! 2 Mb is maximum allowed payload.
+----------------------_write_commands-----------------------
+Traceback (most recent call last):
+  File "/Users/user/Documents/InvestigatedLibraries/dafi/dafi/utils/debug.py", line 14, in write_exception_trace
+    retry_state.outcome.result()
+  File "/opt/homebrew/Cellar/python@3.10/3.10.6_2/Frameworks/Python.framework/Versions/3.10/lib/python3.10/concurrent/futures/_base.py", line 451, in result
+    return self.__get_result()
+  File "/opt/homebrew/Cellar/python@3.10/3.10.6_2/Frameworks/Python.framework/Versions/3.10/lib/python3.10/concurrent/futures/_base.py", line 403, in __get_result
+    raise self._exception
+  File "/Users/user/Library/Application Support/hatch/env/virtual/dafi/Vjr0VuTJ/dafi/lib/python3.10/site-packages/tenacity/_asyncio.py", line 51, in __call__
+    result = await fn(*args, **kwargs)
+  File "/Users/user/Documents/InvestigatedLibraries/dafi/dafi/components/node.py", line 128, in _write_commands
+    ).dumps(),
+  File "/Users/user/Documents/InvestigatedLibraries/dafi/dafi/message.py", line 47, in dumps
+    raise InitializationError("Payload is too big! 2 Mb is maximum allowed payload.")
+dafi.exceptions.InitializationError: Payload is too big! 2 Mb is maximum allowed payload.
+----------------------_write_commands-----------------------
+Traceback (most recent call last):
+  File "/Users/user/Documents/InvestigatedLibraries/dafi/dafi/utils/debug.py", line 14, in write_exception_trace
+    retry_state.outcome.result()
+  File "/opt/homebrew/Cellar/python@3.10/3.10.6_2/Frameworks/Python.framework/Versions/3.10/lib/python3.10/concurrent/futures/_base.py", line 451, in result
+    return self.__get_result()
+  File "/opt/homebrew/Cellar/python@3.10/3.10.6_2/Frameworks/Python.framework/Versions/3.10/lib/python3.10/concurrent/futures/_base.py", line 403, in __get_result
+    raise self._exception
+  File "/Users/user/Library/Application Support/hatch/env/virtual/dafi/Vjr0VuTJ/dafi/lib/python3.10/site-packages/tenacity/_asyncio.py", line 51, in __call__
+    result = await fn(*args, **kwargs)
+  File "/Users/user/Documents/InvestigatedLibraries/dafi/dafi/components/node.py", line 128, in _write_commands
+    ).dumps(),
+  File "/Users/user/Documents/InvestigatedLibraries/dafi/dafi/message.py", line 47, in dumps
+    raise InitializationError("Payload is too big! 2 Mb is maximum allowed payload.")
+dafi.exceptions.InitializationError: Payload is too big! 2 Mb is maximum allowed payload.
+----------------------_write_commands-----------------------
+Traceback (most recent call last):
+  File "/Users/user/Documents/InvestigatedLibraries/dafi/dafi/utils/debug.py", line 14, in write_exception_trace
+    retry_state.outcome.result()
+  File "/opt/homebrew/Cellar/python@3.10/3.10.6_2/Frameworks/Python.framework/Versions/3.10/lib/python3.10/concurrent/futures/_base.py", line 451, in result
+    return self.__get_result()
+  File "/opt/homebrew/Cellar/python@3.10/3.10.6_2/Frameworks/Python.framework/Versions/3.10/lib/python3.10/concurrent/futures/_base.py", line 403, in __get_result
+    raise self._exception
+  File "/Users/user/Library/Application Support/hatch/env/virtual/dafi/Vjr0VuTJ/dafi/lib/python3.10/site-packages/tenacity/_asyncio.py", line 51, in __call__
+    result = await fn(*args, **kwargs)
+  File "/Users/user/Documents/InvestigatedLibraries/dafi/dafi/components/node.py", line 128, in _write_commands
+    ).dumps(),
+  File "/Users/user/Documents/InvestigatedLibraries/dafi/dafi/message.py", line 47, in dumps
+    raise InitializationError("Payload is too big! 2 Mb is maximum allowed payload.")
+dafi.exceptions.InitializationError: Payload is too big! 2 Mb is maximum allowed payload.
+----------------------_write_commands-----------------------
+Traceback (most recent call last):
+  File "/Users/user/Documents/InvestigatedLibraries/dafi/dafi/utils/debug.py", line 14, in write_exception_trace
+    retry_state.outcome.result()
+  File "/opt/homebrew/Cellar/python@3.10/3.10.6_2/Frameworks/Python.framework/Versions/3.10/lib/python3.10/concurrent/futures/_base.py", line 451, in result
+    return self.__get_result()
+  File "/opt/homebrew/Cellar/python@3.10/3.10.6_2/Frameworks/Python.framework/Versions/3.10/lib/python3.10/concurrent/futures/_base.py", line 403, in __get_result
+    raise self._exception
+  File "/Users/user/Library/Application Support/hatch/env/virtual/dafi/Vjr0VuTJ/dafi/lib/python3.10/site-packages/tenacity/_asyncio.py", line 51, in __call__
+    result = await fn(*args, **kwargs)
+  File "/Users/user/Documents/InvestigatedLibraries/dafi/dafi/components/node.py", line 128, in _write_commands
+    ).dumps(),
+  File "/Users/user/Documents/InvestigatedLibraries/dafi/dafi/message.py", line 47, in dumps
+    raise InitializationError("Payload is too big! 2 Mb is maximum allowed payload.")
+dafi.exceptions.InitializationError: Payload is too big! 2 Mb is maximum allowed payload.
+----------------------_write_commands-----------------------
+Traceback (most recent call last):
+  File "/Users/user/Documents/InvestigatedLibraries/dafi/dafi/utils/debug.py", line 14, in write_exception_trace
+    retry_state.outcome.result()
+  File "/opt/homebrew/Cellar/python@3.10/3.10.6_2/Frameworks/Python.framework/Versions/3.10/lib/python3.10/concurrent/futures/_base.py", line 451, in result
+    return self.__get_result()
+  File "/opt/homebrew/Cellar/python@3.10/3.10.6_2/Frameworks/Python.framework/Versions/3.10/lib/python3.10/concurrent/futures/_base.py", line 403, in __get_result
+    raise self._exception
+  File "/Users/user/Library/Application Support/hatch/env/virtual/dafi/Vjr0VuTJ/dafi/lib/python3.10/site-packages/tenacity/_asyncio.py", line 51, in __call__
+    result = await fn(*args, **kwargs)
+  File "/Users/user/Documents/InvestigatedLibraries/dafi/dafi/components/node.py", line 128, in _write_commands
+    ).dumps(),
+  File "/Users/user/Documents/InvestigatedLibraries/dafi/dafi/message.py", line 47, in dumps
+    raise InitializationError("Payload is too big! 2 Mb is maximum allowed payload.")
+dafi.exceptions.InitializationError: Payload is too big! 2 Mb is maximum allowed payload.
+----------------------_write_commands-----------------------
+Traceback (most recent call last):
+  File "/Users/user/Documents/InvestigatedLibraries/dafi/dafi/utils/debug.py", line 14, in write_exception_trace
+    retry_state.outcome.result()
+  File "/opt/homebrew/Cellar/python@3.10/3.10.6_2/Frameworks/Python.framework/Versions/3.10/lib/python3.10/concurrent/futures/_base.py", line 451, in result
+    return self.__get_result()
+  File "/opt/homebrew/Cellar/python@3.10/3.10.6_2/Frameworks/Python.framework/Versions/3.10/lib/python3.10/concurrent/futures/_base.py", line 403, in __get_result
+    raise self._exception
+  File "/Users/user/Library/Application Support/hatch/env/virtual/dafi/Vjr0VuTJ/dafi/lib/python3.10/site-packages/tenacity/_asyncio.py", line 51, in __call__
+    result = await fn(*args, **kwargs)
+  File "/Users/user/Documents/InvestigatedLibraries/dafi/dafi/components/node.py", line 128, in _write_commands
+    ).dumps(),
+  File "/Users/user/Documents/InvestigatedLibraries/dafi/dafi/message.py", line 47, in dumps
+    raise InitializationError("Payload is too big! 2 Mb is maximum allowed payload.")
+dafi.exceptions.InitializationError: Payload is too big! 2 Mb is maximum allowed payload.
+----------------------_write_commands-----------------------
+Traceback (most recent call last):
+  File "/Users/user/Documents/InvestigatedLibraries/dafi/dafi/utils/debug.py", line 14, in write_exception_trace
+    retry_state.outcome.result()
+  File "/opt/homebrew/Cellar/python@3.10/3.10.6_2/Frameworks/Python.framework/Versions/3.10/lib/python3.10/concurrent/futures/_base.py", line 451, in result
+    return self.__get_result()
+  File "/opt/homebrew/Cellar/python@3.10/3.10.6_2/Frameworks/Python.framework/Versions/3.10/lib/python3.10/concurrent/futures/_base.py", line 403, in __get_result
+    raise self._exception
+  File "/Users/user/Library/Application Support/hatch/env/virtual/dafi/Vjr0VuTJ/dafi/lib/python3.10/site-packages/tenacity/_asyncio.py", line 51, in __call__
+    result = await fn(*args, **kwargs)
+  File "/Users/user/Documents/InvestigatedLibraries/dafi/dafi/components/node.py", line 128, in _write_commands
+    ).dumps(),
+  File "/Users/user/Documents/InvestigatedLibraries/dafi/dafi/message.py", line 47, in dumps
+    raise InitializationError("Payload is too big! 2 Mb is maximum allowed payload.")
+dafi.exceptions.InitializationError: Payload is too big! 2 Mb is maximum allowed payload.
