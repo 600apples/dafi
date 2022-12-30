@@ -140,7 +140,7 @@ class Ipc(Thread):
             if (
                 controller_status != ControllerStatus.RUNNING
                 or not controller_hc_ts
-                or (time.time() - controller_hc_ts) > Controller.TIMEOUT
+                or (time.time() - controller_hc_ts) > Controller.TIMEOUT / 2
             ):
                 self.backend.delete_key(BackEndKeys.CONTROLLER_HEALTHCHECK_TS)
                 self.backend.delete_key(BackEndKeys.CONTROLLER_STATUS)
@@ -151,10 +151,11 @@ class Ipc(Thread):
                 # Controller has been initialized by other process
                 ...
         if not self.controller and self.init_controller:
-            raise InitializationError("Unable to initialize controller."
-                                      " Seems controller already running in another process."
-                                      "Terminate another controller or set 'init_controller=False' for current process")
-
+            raise InitializationError(
+                "Unable to initialize controller."
+                " Seems controller already running in another process."
+                "Terminate another controller or set 'init_controller=False' for current process"
+            )
 
         if self.init_node:
             self.node = Node(self.process_name, self.backend, self.host, self.port)
@@ -262,20 +263,8 @@ class Ipc(Thread):
         if self.controller:
             self.backend.delete_key(BackEndKeys.CONTROLLER_HEALTHCHECK_TS)
             self.backend.write(BackEndKeys.CONTROLLER_STATUS, ControllerStatus.UNAVAILABLE)
-            msg = Message(
-                flag=MessageFlag.BROADCAST,
-                transmitter=self.process_name,
-                func_name="__on_controller_stop",
-                return_result=False,
-            )
-            self.node.send(msg.dumps(), 0)
-            time.sleep(0.1)
-
         self.global_event.set()
         for msg_uuid, ares in AsyncResult._awaited_results.items():
             AsyncResult._awaited_results[msg_uuid] = None
             if isinstance(ares, AsyncResult):
                 ares._ready.set()
-        if self.controller:
-            self.backend.delete_key(BackEndKeys.CONTROLLER_HEALTHCHECK_TS)
-            self.backend.write(BackEndKeys.CONTROLLER_STATUS, ControllerStatus.UNAVAILABLE)

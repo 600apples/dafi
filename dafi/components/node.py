@@ -10,7 +10,6 @@ from anyio import (
     Event,
     maybe_async,
     create_task_group,
-    move_on_after,
     TASK_STATUS_IGNORED,
 )
 from anyio._backends._asyncio import TaskGroup
@@ -75,24 +74,19 @@ class Node(ComponentsBase):
         while True:
             if self.stop_event.is_set():
                 raise ConnectionResetError("Node disconnected from controller.")
+            try:
+                raw_msglen = await stream.receive(4)
+                if not raw_msglen:
+                    continue
 
-            with move_on_after(1) as scope:
-                try:
-                    raw_msglen = await stream.receive(4)
-                    if not raw_msglen:
-                        continue
-
-                    msg = await Message.loads(stream, raw_msglen)
-                    if not msg:
-                        continue
-                except Exception:
-                    await maybe_async(sg.cancel_scope.cancel())
-                    if self.global_event.is_set():
-                        return
-                    raise
-
-            if scope.cancel_called:
-                continue
+                msg = await Message.loads(stream, raw_msglen)
+                if not msg:
+                    continue
+            except Exception:
+                await maybe_async(sg.cancel_scope.cancel())
+                if self.global_event.is_set():
+                    return
+                raise
 
             if msg.flag in (MessageFlag.HANDSHAKE, MessageFlag.UPDATE_CALLBACKS):
                 await self.operations.on_handshake(msg, task_status, self.process_name, self.info)

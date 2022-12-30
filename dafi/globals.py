@@ -1,4 +1,4 @@
-import os
+import sys
 import logging
 import inspect
 from copy import copy
@@ -112,6 +112,9 @@ class Global(metaclass=Singleton):
 
         if (self.host and not self.port) or (self.port and not self.host):
             raise InitializationError("To work through the TCP socket, the host and port arguments must be defined.")
+
+        if (not self.host and not self.port) and sys.platform == "win32":
+            raise InitializationError("Windows platform doesn't support unix sockets. Provide host and port to use TCP")
 
         self._global_event = Event()
         self.ipc = Ipc(
@@ -280,8 +283,3 @@ async def __cancel_scheduled_task(scheduler_type: SchedulerTaskType, msg_uuid: s
         for task in SCHEDULER_AT_TIME_TASKS.pop(msg_uuid):
             task.cancel()
         logger.warning(f"Task group {func_name!r} (condition={scheduler_type!r}) has been canceled.")
-
-
-@callback
-async def __on_controller_stop(g: Global) -> NoReturn:
-    g.stop()

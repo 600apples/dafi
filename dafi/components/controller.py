@@ -8,7 +8,6 @@ from anyio import (
     Event,
     create_task_group,
     sleep,
-    move_on_after,
     TASK_STATUS_IGNORED,
 )
 from anyio.abc import TaskGroup
@@ -68,20 +67,16 @@ class Controller(ComponentsBase):
         stop_event = Event()
         async with stream:
             while not stop_event.is_set():
-                with move_on_after(1) as scope:
-                    try:
-                        raw_msglen = await stream.receive(4)
-                        if not raw_msglen:
-                            continue
-                        msg = await Message.loads(stream, raw_msglen)
-                        if not msg:
-                            continue
-                    except Exception:
-                        await self.operations.on_stream_close(stream)
-                        break
-
-                if scope.cancel_called:
-                    continue
+                try:
+                    raw_msglen = await stream.receive(4)
+                    if not raw_msglen:
+                        continue
+                    msg = await Message.loads(stream, raw_msglen)
+                    if not msg:
+                        continue
+                except Exception:
+                    await self.operations.on_stream_close(stream)
+                    break
 
                 if msg.flag == MessageFlag.HANDSHAKE:
                     await self.operations.on_handshake(msg, stream, sg, stop_event)

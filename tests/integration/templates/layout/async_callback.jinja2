@@ -1,6 +1,6 @@
 @callback
-async def async_callback_func_{{ callback_index }}(*args, g: Global, **kwargs):
-{%- if long_running_callback %}
-    await sleep(5)
+async def async_callback_func_{{ callback_index }}(*args, g: Global, path=None, text=None, **kwargs):
+{%- if write_to_file %}
+    with open(path, "w") as f: f.write(text)
 {% endif %}
     return args, kwargs, g.process_name

@@ -25,9 +25,10 @@ class LocalBackEnd(BackEndI):
 
     @cached_property
     def lock(self):
-        fl = FileLock(self.base_dir / ".lock")
-        fl.release(force=True)
-        fl.timeout = 10
+        lock_path = self.base_dir / ".lock"
+        lock_path.unlink(missing_ok=True)
+        fl = FileLock(lock_path)
+        fl.timeout = 3
         return fl
 
     @cached_property

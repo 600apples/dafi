@@ -32,13 +32,13 @@ def remote_callbacks_path(tmp_path):
 
 
 @pytest.fixture
-def g() -> Global:
+def g():
     """Create Global object. Global is singleton and should be cleaned before each test suite."""
     Global._instances.clear()
-    g = None
+    gl = None
     try:
-        g = Global(init_controller=True)
-        yield g
+        gl = Global(init_controller=True)
+        yield gl
     finally:
-        if g:
-            g.stop()
+        if gl:
+            gl.stop()
