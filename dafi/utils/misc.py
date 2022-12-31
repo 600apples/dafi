@@ -1,10 +1,9 @@
 import time
-import string
 import types
 import asyncio
 import logging
+from uuid import uuid4
 from collections import deque
-from random import choices
 from functools import partial
 from typing import Callable, Any, NamedTuple, List, Optional
 
@@ -94,9 +93,12 @@ def async_library():
         ...
 
 
-def uuid(k: int = 8):
-    alphabet = string.ascii_lowercase + string.digits
-    return "".join(choices(alphabet, k=k))
+def uuid() -> int:
+    return uuid4().int & (1 << 32) - 1
+
+
+def string_uuid() -> str:
+    return hex(uuid())
 
 
 def is_lambda_function(obj):

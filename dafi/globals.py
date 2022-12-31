@@ -1,6 +1,8 @@
 import sys
+import time
 import logging
 import inspect
+import asyncio
 from copy import copy
 from inspect import Signature
 from dataclasses import dataclass, field
@@ -21,11 +23,15 @@ from typing import (
     Coroutine,
 )
 
+from anyio import sleep
+
+from dafi.utils import colors
+from dafi.utils.logger import patch_logger
 from dafi.backend import LocalBackEnd
 from dafi.exceptions import InitializationError, RemoteCallError
 from dafi.ipc import Ipc
 from dafi.remote_call import LazyRemoteCall
-from dafi.utils.misc import Singleton, is_lambda_function, uuid
+from dafi.utils.misc import Singleton, is_lambda_function, string_uuid
 from dafi.utils.custom_types import GlobalCallback, P, SchedulerTaskType
 from dafi.utils.func_validation import (
     get_class_methods,
@@ -33,14 +39,15 @@ from dafi.utils.func_validation import (
     pretty_callbacks,
     is_class_or_static_method,
 )
-from dafi.utils.mappings import (
+from dafi.utils.settings import (
     LOCAL_CALLBACK_MAPPING,
     LOCAL_CLASS_CALLBACKS,
     SCHEDULER_AT_TIME_TASKS,
     SCHEDULER_PERIODICAL_TASKS,
+    WELL_KNOWN_CALLBACKS,
 )
 
-logger = logging.getLogger(__name__)
+logger = patch_logger(logging.getLogger(__name__), colors.intense_grey)
 
 __all__ = ["Global", "callback"]
 
@@ -90,7 +97,7 @@ class RemoteClassCallback(NamedTuple):
 
 @dataclass
 class Global(metaclass=Singleton):
-    process_name: Optional[str] = field(default_factory=uuid)
+    process_name: Optional[str] = field(default_factory=string_uuid)
     init_controller: Optional[bool] = False
     init_node: Optional[bool] = True
     host: Optional[str] = None
@@ -103,6 +110,8 @@ class Global(metaclass=Singleton):
     """
 
     def __post_init__(self):
+        self.process_name = str(self.process_name)
+
         if not (self.init_controller or self.init_node):
             raise InitializationError(
                 "No components were found in current process."
@@ -116,15 +125,16 @@ class Global(metaclass=Singleton):
         if (not self.host and not self.port) and sys.platform == "win32":
             raise InitializationError("Windows platform doesn't support unix sockets. Provide host and port to use TCP")
 
-        self._global_event = Event()
+        self._global_terminate_event = Event()
         self.ipc = Ipc(
             process_name=self.process_name,
             backend=LocalBackEnd(),
             init_controller=self.init_controller,
             init_node=self.init_node,
-            global_event=self._global_event,
+            global_terminate_event=self._global_terminate_event,
             host=self.host,
             port=self.port,
+            logger=logger,
         )
 
         callback._ipc = self.ipc
@@ -135,7 +145,7 @@ class Global(metaclass=Singleton):
     def call(self) -> LazyRemoteCall:
         return LazyRemoteCall(
             _ipc=self.ipc,
-            _global_event=self._global_event,
+            _global_terminate_event=self._global_terminate_event,
             _inside_callback_context=self._inside_callback_context,
         )
 
@@ -154,8 +164,17 @@ class Global(metaclass=Singleton):
         """
         self.ipc.join(timeout=timeout)
 
-    def stop(self):
+    def stop(self, kill_all_connected_nodes: Optional[bool] = False):
+        if kill_all_connected_nodes:
+            if not self.is_controller:
+                logger.error("You can kill all nodes only from a process that has a controller")
+            else:
+                self.kill_all()
         self.ipc.stop()
+
+    def kill_all(self):
+        self.ipc.kill_all()
+        time.sleep(5)
 
     def transfer_and_call(
         self, remote_process: str, func: Callable[..., Any], *args, **kwargs
@@ -164,13 +183,11 @@ class Global(metaclass=Singleton):
             return self.ipc.async_transfer_and_call(remote_process, func, *args, **kwargs)
         return self.ipc.transfer_and_call(remote_process, func, *args, **kwargs)
 
-    @staticmethod
-    def wait_function(func_name: str) -> NoReturn:
-        return LazyRemoteCall(_ipc=None, _global_event=None, _func_name=func_name)._wait_function()
+    def wait_function(self, func_name: str) -> NoReturn:
+        return LazyRemoteCall(_ipc=self.ipc, _global_terminate_event=None, _func_name=func_name)._wait_function()
 
-    @staticmethod
-    def wait_process(process_name: str) -> NoReturn:
-        return LazyRemoteCall(_ipc=None, _global_event=None)._wait_process(process_name)
+    def wait_process(self, process_name: str) -> NoReturn:
+        return LazyRemoteCall(_ipc=self.ipc, _global_terminate_event=None)._wait_process(process_name)
 
 
 class callback(Generic[GlobalCallback]):
@@ -187,8 +204,9 @@ class callback(Generic[GlobalCallback]):
                 if name.startswith("_"):
                     continue
 
+                klass = fn if is_class_or_static_method(fn, name) else None
                 cb = RemoteClassCallback(
-                    klass=fn if is_class_or_static_method(fn, name) else None,
+                    klass=klass,
                     klass_name=fn.__name__,
                     module=module,
                     origin_name=name,
@@ -196,6 +214,8 @@ class callback(Generic[GlobalCallback]):
                     is_async=iscoroutinefunction(method),
                 )
                 LOCAL_CALLBACK_MAPPING[name] = cb
+                logger.info(f"{name!r} registered" + f" (required {fn.__name__} initialization)" if klass else "")
+
                 if self._ipc and self._ipc.is_running:
                     # Update remote callbacks if ips is running. It means callback was not registered during handshake
                     # or callback was added dynamically.
@@ -214,6 +234,8 @@ class callback(Generic[GlobalCallback]):
                 is_async=iscoroutinefunction(fn),
             )
             LOCAL_CALLBACK_MAPPING[name] = self._fn
+            if name not in WELL_KNOWN_CALLBACKS:
+                logger.info(f"{name!r} registered")
             if self._ipc and self._ipc.is_running:
                 # Update remote callbacks if ips is running. It means callback was not registered during handshake
                 # or callback was added dynamically.
@@ -277,9 +299,20 @@ async def __cancel_scheduled_task(scheduler_type: SchedulerTaskType, msg_uuid: s
     from dafi.components.scheduler import logger
 
     if scheduler_type == "period" and func_name in SCHEDULER_PERIODICAL_TASKS:
-        SCHEDULER_PERIODICAL_TASKS.pop(func_name).cancel()
+        task = SCHEDULER_PERIODICAL_TASKS.pop(func_name, None)
+        if task:
+            task.cancel()
         logger.warning(f"Task {func_name!r} (condition={scheduler_type!r}) has been canceled.")
     elif scheduler_type == "at_time" and msg_uuid in SCHEDULER_AT_TIME_TASKS:
-        for task in SCHEDULER_AT_TIME_TASKS.pop(msg_uuid):
+        for task in SCHEDULER_AT_TIME_TASKS.pop(msg_uuid, []):
             task.cancel()
         logger.warning(f"Task group {func_name!r} (condition={scheduler_type!r}) has been canceled.")
+
+
+@callback
+async def __kill_all(g: Global) -> NoReturn:
+    try:
+        loop = asyncio.get_running_loop()
+        loop.call_later(1, g.stop)
+    except Exception as e:
+        logger.error(f"Unpredictable exception during termination of node {g.process_name!r}: {e}")

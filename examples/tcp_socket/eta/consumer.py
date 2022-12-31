@@ -12,7 +12,7 @@ async def main():
     g = Global(host="localhost", port=8888)
 
     print("Wait for publisher process to be started...")
-    await g.wait_function("add")
+    g.wait_function("add")
 
     for _ in range(10):
 

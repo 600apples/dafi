@@ -36,12 +36,13 @@ classifiers = [
 ]
 dependencies = [
     "anyio>=3.6.2",
+    "uvloop>=0.17.0",
     "dill>=0.3.6",
     "filelock>=3.8.2",
     "tenacity>=8.1.0",
     "typing_extensions>=4.4.0",
-    "tblib==1.7.0",
-    "cached-property==1.5.2",
+    "tblib>=1.7.0",
+    "cached-property>=1.5.2",
     "colorama>=0.4.6; sys.platform == 'win32'"
 ]
 dynamic = [

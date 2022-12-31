@@ -11,7 +11,7 @@ async def main():
     g = Global(host="localhost", port=8888)
 
     print("Wait for publisher process to be started...")
-    await g.wait_function("static_method")
+    g.wait_function("static_method")
 
     res = g.call.static_method(foo="bar") & FG
     print(res)
@@ -24,6 +24,10 @@ async def main():
 
     res = g.call.method_with_access_to_g_object() & FG
     print(res)
+
+    import time
+
+    time.sleep(5)
 
     g.stop()
 

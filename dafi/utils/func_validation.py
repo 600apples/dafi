@@ -2,7 +2,7 @@ import os
 import inspect
 from typing import Callable, Any
 from dafi.utils.custom_types import P
-from dafi.utils.mappings import NODE_CALLBACK_MAPPING, WELL_KNOWN_CALLBACKS
+from dafi.utils.settings import NODE_CALLBACK_MAPPING, WELL_KNOWN_CALLBACKS
 
 
 def get_class_methods(klass):
@@ -44,13 +44,12 @@ def pretty_callbacks(exclude_proc, format: str):
     res = "" if format == "string" else dict()
     for proc, func_mapping in NODE_CALLBACK_MAPPING.items():
         if proc != exclude_proc:
-            available_functions = [fn for fn in func_mapping if fn not in WELL_KNOWN_CALLBACKS]
             if format == "string":
                 res += f"process: {proc}\n"
-                res += f"  - [ {', '.join(available_functions) or '<< no registered callbacks >>'} ]\n"
+                res += f"  - [ {', '.join(func_mapping) or '<< no registered callbacks >>'} ]\n"
             else:
-                res[proc] = available_functions
-        return res
+                res[proc] = func_mapping
+    return res
 
 
 def func_info(func: Callable[P, Any]):

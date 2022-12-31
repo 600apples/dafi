@@ -1,5 +1,6 @@
 import os
 import shelve
+from enum import IntEnum
 from cached_property import cached_property
 from pathlib import Path
 from tempfile import gettempdir
@@ -8,6 +9,11 @@ from typing import Any, NoReturn, Optional
 from filelock import FileLock
 
 from dafi.interface import BackEndI
+
+
+class ControllerStatus(IntEnum):
+    RUNNING = 1
+    UNAVAILABLE = 2
 
 
 class BackEndKeys:

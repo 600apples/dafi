@@ -1,5 +1,5 @@
 import time
-from dafi import Global, callback, RemoteStoppedUnexpectedly
+from dafi import Global, callback, RemoteStoppedUnexpectedly, GlobalContextError
 
 PROC_NAME = "Brown Fox"
 
@@ -21,7 +21,7 @@ def main():
     print(f"wait for {remote_proc} process to be started...")
     g.wait_process(remote_proc)
 
-    for _ in range(10):
+    for _ in range(20):
         try:
             res = g.call.greeting1("foo", "bar").fg()
             print(res)
@@ -34,6 +34,9 @@ def main():
             # It means remote callbacks becomes unavailable.
             print(e)
             break
+        except GlobalContextError:
+            time.sleep(10)
+            continue
 
     g.stop()
 

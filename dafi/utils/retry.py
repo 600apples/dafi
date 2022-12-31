@@ -1,5 +1,6 @@
 import asyncio
 from itertools import chain
+from contextlib import contextmanager
 from functools import wraps
 from typing import Optional, Union, Callable, Any, NamedTuple, Type, Sequence
 
@@ -8,9 +9,18 @@ from threading import Event as thEvent
 
 from dafi.exceptions import DummyExeption
 
-__all__ = ["stoppable_retry"]
+__all__ = ["resilent", "stoppable_retry"]
 
 acceptable_errors = Optional[Union[Type[BaseException], Sequence[Type[BaseException]]]]
+
+
+@contextmanager
+def resilent(acceptable: acceptable_errors = Exception):
+    """Suppress exceptions raised from the wrapped scope."""
+    try:
+        yield
+    except acceptable:
+        ...
 
 
 class RetryInfo(NamedTuple):
@@ -21,26 +31,26 @@ class RetryInfo(NamedTuple):
 class AsyncRetry:
     def __init__(
         self,
-        stop_event: Union[thEvent, asyncEvent],
+        global_terminate_event: Union[thEvent, asyncEvent],
         fn: Callable[..., Any],
         acceptable: acceptable_errors,
         not_acceptable: acceptable_errors,
         wait: int,
     ):
         self.fn = fn
-        self.stop_event = stop_event
+        self.global_terminate_event = global_terminate_event
         self.acceptable = acceptable
         self.not_acceptable = not_acceptable
         self.wait = wait
 
-    async def stop_event_observer(self) -> bool:
+    async def global_terminate_event_observer(self) -> bool:
         while True:
             await sleep(0.1)
-            if self.stop_event.is_set():
+            if self.global_terminate_event.is_set():
                 return True
 
     async def __call__(self, *args, **kwargs):
-        stop_event_observer = "stop_event_observer"
+        global_terminate_event_observer = "global_terminate_event_observer"
         attempt = 0
         prev_error = None
 
@@ -48,7 +58,7 @@ class AsyncRetry:
             attempt += 1
             kwargs["retry_info"] = RetryInfo(attempt=attempt, prev_error=prev_error)
 
-            is_stop = asyncio.create_task(self.stop_event_observer(), name=stop_event_observer)
+            is_stop = asyncio.create_task(self.global_terminate_event_observer(), name=global_terminate_event_observer)
             process = asyncio.create_task(self.fn(*args, **kwargs))
             done, pending = chain.from_iterable(
                 await asyncio.wait([process, is_stop], return_when=asyncio.FIRST_COMPLETED)
@@ -56,7 +66,7 @@ class AsyncRetry:
 
             pending.cancel()
             # Take first element from set. We know there is always 1 task in done and 1 in pending state.
-            if done.get_name() == stop_event_observer:
+            if done.get_name() == global_terminate_event_observer:
                 break
 
             try:
@@ -75,13 +85,17 @@ def stoppable_retry(
         @wraps(fn)
         async def _dec(*args, **kwargs) -> Any:
             try:
-                stop_event = next(filter(lambda i: isinstance(i, (asyncEvent, thEvent)), args))
+                global_terminate_event = next(filter(lambda i: isinstance(i, (asyncEvent, thEvent)), args))
             except StopIteration:
                 raise KeyError(
                     f"Unable to find stop event argument. Please provide {type(thEvent)} or {type(asyncEvent)}"
                 )
             return await AsyncRetry(
-                fn=fn, stop_event=stop_event, acceptable=acceptable, not_acceptable=not_acceptable, wait=wait
+                fn=fn,
+                global_terminate_event=global_terminate_event,
+                acceptable=acceptable,
+                not_acceptable=not_acceptable,
+                wait=wait,
             )(*args, **kwargs)
 
         return _dec

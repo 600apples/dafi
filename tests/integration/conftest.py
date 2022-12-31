@@ -14,7 +14,7 @@ templateEnv = Environment(loader=templateLoader)
 
 @pytest.fixture
 def remote_callbacks_path(tmp_path):
-    def dec(**kwargs):
+    def dec(template_name: str, filename: str = "main.py", **kwargs):
         """
         Expected arguments:
            start_range: int
@@ -23,8 +23,8 @@ def remote_callbacks_path(tmp_path):
            host: str
            port: int
         """
-        file = tmp_path / "main.py"
-        template = templateEnv.get_template("many_callbacks.jinja2")
+        file = tmp_path / filename
+        template = templateEnv.get_template(template_name)
         output = template.render(**kwargs)
         file.write_text(output)
         return file

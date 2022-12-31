@@ -1,11 +1,12 @@
 import os
+import time
 import logging
-from enum import IntEnum
+import asyncio
 from cached_property import cached_property
-from typing import Optional, List
+from typing import Optional, NoReturn, Callable, ClassVar, List
 from contextlib import asynccontextmanager
 
-from anyio import BusyResourceError, sleep, Event
+from anyio import Event, to_thread, sleep
 from anyio.abc._sockets import SocketListener, UNIXSocketStream, SocketStream
 from anyio import create_unix_listener, create_tcp_listener, connect_unix, connect_tcp
 
@@ -14,29 +15,6 @@ from dafi.interface import ControllerI, NodeI, BackEndI
 
 
 logger = logging.getLogger(__name__)
-
-
-async def send_to_stream(stream: SocketStream, msg: List[bytes], stop_event: Optional[Event] = None):
-    attempts = 20
-    for chunk in msg:
-        for _ in range(attempts):
-            try:
-                await stream.send(chunk)
-                break
-            except BusyResourceError:
-                await sleep(0.1)
-            except Exception:
-                if stop_event:
-                    await stop_event.set()
-        else:
-            logger.error(f"Failed to send item message during {attempts} attempts.")
-            break
-
-
-class ControllerStatus(IntEnum):
-
-    RUNNING = 1
-    UNAVAILABLE = 2
 
 
 class UnixBase(ControllerI, NodeI):
@@ -85,6 +63,8 @@ class TcpBase(ControllerI, NodeI):
 
 class ComponentsBase(UnixBase, TcpBase):
     TIMEOUT = 6  # 6 sec
+    global_terminate_event: ClassVar[Event] = None
+    stop_callbacks: ClassVar[List[Callable]] = []
 
     def __init__(
         self,
@@ -95,8 +75,10 @@ class ComponentsBase(UnixBase, TcpBase):
     ):
         self.backend = backend
         self.process_name = process_name
+        # Initialize internal handler counter. It will help to understand when app is fully terminated.
+        self.handler_counter = 0
 
-        if port:
+        if port:  # Check only port. Full host/port validation already took place before.
             self._base = TcpBase
             self._base.__init__(self, host, port)
         else:
@@ -112,5 +94,30 @@ class ComponentsBase(UnixBase, TcpBase):
         async with self._base.connect_listener(self) as stream:
             yield stream
 
+    async def handle(self, global_terminate_event: Event) -> NoReturn:
+        if not ComponentsBase.global_terminate_event or ComponentsBase.global_terminate_event.is_set():
+            ComponentsBase.global_terminate_event = global_terminate_event
+            asyncio.create_task(self.on_stop(global_terminate_event))
+
     async def create_listener(self) -> SocketListener:
         return await self._base.create_listener(self)
+
+    async def on_stop(self, global_terminate_event) -> NoReturn:
+        await to_thread.run_sync(global_terminate_event.wait)
+        for callback in reversed(ComponentsBase.stop_callbacks):
+            res = callback()
+            if asyncio.iscoroutine(res):
+                await res
+        ComponentsBase.stop_callbacks.clear()
+        ComponentsBase.global_terminate_event = None
+
+    def register_on_stop_callback(self, callback: Callable) -> NoReturn:
+        ComponentsBase.stop_callbacks.append(callback)
+
+    def wait_termination(self) -> NoReturn:
+        while self.handler_counter:
+            time.sleep(0.1)
+
+    async def wait_termination_async(self) -> NoReturn:
+        while self.handler_counter:
+            await sleep(0.1)

@@ -9,7 +9,7 @@ from dafi.async_result import AsyncResult, SchedulerTask, AsyncSchedulerTask
 from dafi.exceptions import GlobalContextError
 from dafi.utils.timeparse import timeparse
 from dafi.utils.custom_types import P, RemoteResult, TimeUnits
-from dafi.utils.mappings import search_remote_callback_in_mapping, NODE_CALLBACK_MAPPING
+from dafi.utils.settings import search_remote_callback_in_mapping, NODE_CALLBACK_MAPPING
 from dafi.utils.misc import sync_to_async, Period
 
 
@@ -206,7 +206,7 @@ class RemoteCall:
 @dataclass
 class LazyRemoteCall:
     _ipc: "Ipc" = field(repr=False)
-    _global_event: Event = field(repr=False)
+    _global_terminate_event: Event = field(repr=False)
     _func_name: Optional[str] = field(repr=False, default=None)
     _inside_callback_context: Optional[bool] = field(repr=False, default=False)
 
@@ -258,7 +258,7 @@ class LazyRemoteCall:
         )
 
     def __getattr__(self, item) -> RemoteCall:
-        if self._global_event and self._global_event.is_set():
+        if self._global_terminate_event and self._global_terminate_event.is_set():
             raise GlobalContextError("Global can no longer accept remote calls because it was stopped")
         self._func_name = item
         return self

@@ -23,7 +23,7 @@ def main():
     print(f"wait for {remote_proc} process to be started...")
     g.wait_process(remote_proc)
 
-    for _ in range(10):
+    for _ in range(20):
         try:
             res = g.call.cheers1("foo", "bar").fg()
             print(res)
