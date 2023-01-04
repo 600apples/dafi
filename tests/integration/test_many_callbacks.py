@@ -78,7 +78,8 @@ async def test_many_callbacks_unix(remote_callbacks_path, exec_type, g):
         assert max_time < 1
 
     finally:
-        g.stop(True)
+        res = g.stop(True)
+        assert res == {'test_node': None}
 
 
 @pytest.mark.parametrize("exec_type", [PERIOD, NO_RETURN])
@@ -109,7 +110,8 @@ async def test_many_callbacks_unix_no_return(remote_callbacks_path, exec_type, g
         for file in all_files:
             assert file.read_text() == "4"
     finally:
-        g.stop(True)
+        res = g.stop(True)
+        assert res == {'test_node': None}
 
 
 @pytest.mark.parametrize("exec_type", [BG, FG])
@@ -134,7 +136,8 @@ async def test_many_callbacks_tcp(remote_callbacks_path, exec_type, g, free_port
         max_time = max(timings)
         assert max_time < 1
     finally:
-        g.stop(True)
+        res = g.stop(True)
+        assert res == {'test_node': None}
 
 
 @pytest.mark.parametrize("exec_type", [PERIOD, NO_RETURN])
@@ -166,4 +169,5 @@ async def test_many_callbacks_tcp_no_return(remote_callbacks_path, exec_type, g,
         for file in all_files:
             assert file.read_text() == "4"
     finally:
-        g.stop(True)
+        res = g.stop(True)
+        assert res == {'test_node': None}

@@ -5,10 +5,9 @@ from typing import NoReturn
 
 from anyio._backends._asyncio import TaskGroup
 from anyio.abc import TaskStatus
-from anyio.abc._sockets import SocketStream
 
 from dafi.async_result import AsyncResult
-from dafi.message import Message, MessageFlag, RemoteError
+from dafi.components.proto.message import RpcMessage, ServiceMessage, MessageFlag, RemoteError
 from dafi.utils.debug import with_debug_trace
 from dafi.components.scheduler import Scheduler
 from dafi.utils.misc import run_in_threadpool
@@ -17,7 +16,7 @@ from dafi.utils.settings import (
     LOCAL_CALLBACK_MAPPING,
     NODE_CALLBACK_MAPPING,
 )
-from dafi.components.operations.socket_store import SocketPipe
+from dafi.components.operations.channel_store import ChannelPipe
 
 import tblib.pickling_support
 
@@ -27,34 +26,35 @@ tblib.pickling_support.install()
 class NodeOperations:
     """Node operations specification object"""
 
-    def __init__(self, logger: logging.Logger, stream: SocketStream, global_terminate_event):
+    def __init__(self, logger: logging.Logger):
         self.logger = logger
         AsyncResult.fold_results()
-        self.initial_log_shown = False
+        self.channel = None
 
-        self.stream = SocketPipe(stream=stream, global_terminate_event=global_terminate_event)
+    def set_channel(self, channel: ChannelPipe):
+        self.channel = channel
 
     @with_debug_trace
-    async def on_stream_close(self) -> NoReturn:
+    async def on_channel_close(self) -> NoReturn:
+
+        self.channel.send_iterator.stop()
         NODE_CALLBACK_MAPPING.clear()
-        LOCAL_CALLBACK_MAPPING.clear()
-        await self.stream.aclose()
         for msg_uuid, ares in AsyncResult._awaited_results.items():
             AsyncResult._awaited_results[msg_uuid] = None
             if hasattr(ares, "_ready"):
                 ares._ready.set()
 
     @with_debug_trace
-    async def on_handshake(self, msg: Message, task_status: TaskStatus, process_name: str, info: str):
+    async def on_handshake(self, msg: ServiceMessage, task_status: TaskStatus, process_name: str, info: str):
+        msg.loads()
         NODE_CALLBACK_MAPPING.clear()
-        NODE_CALLBACK_MAPPING.update(msg.func_args[0])
+        NODE_CALLBACK_MAPPING.update(msg.data)
 
         if task_status._future._state == "PENDING":
             # Consider Node to be started only after handshake response is received.
             task_status.started("STARTED")
 
-        if not self.initial_log_shown:
-            self.initial_log_shown = True
+        if msg.transmitter == process_name:
             self.logger.info(
                 f"Node has been started successfully. Process identificator: {process_name!r}. Connection info: {info}"
             )
@@ -62,19 +62,20 @@ class NodeOperations:
     @with_debug_trace
     async def on_request(
         self,
-        msg: Message,
+        msg: RpcMessage,
         sg: TaskGroup,
         process_name: str,
         scheduler: Scheduler,
     ):
+        msg.loads()
         remote_callback = LOCAL_CALLBACK_MAPPING.get(msg.func_name)
         if not remote_callback:
             info = (
                 f"Function {msg.func_name!r} is not registered as callback locally."
                 f" Make sure python loaded module where callback is located."
             )
-            await self.stream.send(
-                Message(
+            self.channel.send(
+                RpcMessage(
                     flag=MessageFlag.SUCCESS,
                     transmitter=process_name,
                     receiver=msg.transmitter,
@@ -87,7 +88,7 @@ class NodeOperations:
             self.logger.error(info)
 
         elif msg.period:
-            await scheduler.register(msg=msg, stream=self.stream)
+            await scheduler.register(msg=msg, channel=self.channel)
 
         else:
             sg.start_soon(
@@ -98,9 +99,9 @@ class NodeOperations:
             )
 
     @with_debug_trace
-    async def on_success(self, msg: Message, scheduler: Scheduler):
+    async def on_success(self, msg: RpcMessage, scheduler: Scheduler):
+        msg.loads()
         error = msg.error
-
         if msg.return_result:
             ares = AsyncResult._awaited_results.get(msg.uuid)
             if not ares and not error:
@@ -124,7 +125,7 @@ class NodeOperations:
                     error.show_in_log(logger=self.logger)
 
     @with_debug_trace
-    async def on_scheduler_accept(self, msg: Message, process_name: str):
+    async def on_scheduler_accept(self, msg: RpcMessage, process_name: str):
         transmitter = msg.transmitter
         ares = AsyncResult._awaited_results.get(msg.uuid)
         if ares:
@@ -136,7 +137,8 @@ class NodeOperations:
             )
 
     @with_debug_trace
-    async def on_unable_to_find(self, msg):
+    async def on_unable_to_find(self, msg: RpcMessage):
+        msg.loads()
         if msg.return_result:
             ares = AsyncResult._awaited_results.get(msg.uuid)
             if ares:
@@ -149,7 +151,7 @@ class NodeOperations:
     async def _remote_func_executor(
         self,
         remote_callback: "RemoteCallback",
-        message: Message,
+        message: RpcMessage,
         process_name: str,
     ):
         result = error = None
@@ -172,9 +174,9 @@ class NodeOperations:
             self.logger.error(info + f" {e}")
             error = RemoteError(info=info, traceback=pickle.dumps(sys.exc_info()))
 
-        if message.flag != MessageFlag.BROADCAST:
+        if message.return_result or message.flag != MessageFlag.BROADCAST:
             try:
-                message_to_return = Message(
+                message_to_return = RpcMessage(
                     flag=MessageFlag.SUCCESS,
                     transmitter=process_name,
                     receiver=message.transmitter,
@@ -188,7 +190,7 @@ class NodeOperations:
                 info = f"Unsupported return type {type(result)}."
                 self.logger.error(info + f" {e}")
                 error = RemoteError(info=info, traceback=pickle.dumps(sys.exc_info()))
-                message_to_return = Message(
+                message_to_return = RpcMessage(
                     flag=MessageFlag.SUCCESS,
                     transmitter=process_name,
                     receiver=message.transmitter,
@@ -197,5 +199,4 @@ class NodeOperations:
                     return_result=message.return_result,
                     error=error,
                 )
-
-            await self.stream.send(message_to_return)
+            self.channel.send(message_to_return)

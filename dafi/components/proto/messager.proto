@@ -1,0 +1,65 @@
+syntax = "proto3";
+
+
+service MessagerService {
+  rpc communicate(stream Message) returns(stream Message);
+}
+
+message Message {
+  oneof realm {
+    RpcRealm rpc_realm = 1;
+    ServiceRealm service_realm = 2;
+  }
+}
+
+message RpcRealm {
+  MessageFlag flag = 1;
+  uint32 uuid = 2;
+  string transmitter = 3;
+  string receiver = 4;
+  string func_name = 5;
+  bytes data = 6;
+  bool return_result = 7;
+  Period period = 8;
+  bool complete_marker = 9;
+}
+
+message ServiceRealm {
+  MessageFlag flag = 1;
+  uint32 uuid = 2;
+  string transmitter = 3;
+  string receiver = 4;
+  bytes data = 5;
+  bool complete_marker = 6;
+}
+
+message IntervalCondition {
+  double value = 1;
+}
+
+message AtTimeCondition {
+  repeated double value = 1;
+}
+
+message Period {
+  oneof condition {
+    IntervalCondition interval = 1;
+    AtTimeCondition at_time = 2;
+  }
+}
+
+enum MessageFlag {
+  EMPTY = 0;
+  HANDSHAKE = 1;
+  REQUEST = 2;
+  SUCCESS = 3;
+  UPDATE_CALLBACKS = 4;
+  UNABLE_TO_FIND_CANDIDATE = 5;
+  UNABLE_TO_FIND_PROCESS = 6;
+  REMOTE_STOPPED_UNEXPECTEDLY = 7;
+  SCHEDULER_ERROR = 8;
+  SCHEDULER_ACCEPT = 9;
+  BROADCAST = 10;
+  RECK_REQUEST = 11;
+  RECK_ACCEPT = 12;
+}

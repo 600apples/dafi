@@ -36,13 +36,15 @@ classifiers = [
 ]
 dependencies = [
     "anyio>=3.6.2",
-    "uvloop>=0.17.0",
     "dill>=0.3.6",
+    "grpcio>=1.51.1",
+    "protobuf>=4.21.12",
     "filelock>=3.8.2",
     "tenacity>=8.1.0",
     "typing_extensions>=4.4.0",
     "tblib>=1.7.0",
     "cached-property>=1.5.2",
+     "uvloop>=0.17.0; sys.platform != 'win32'",
     "colorama>=0.4.6; sys.platform == 'win32'"
 ]
 dynamic = [
@@ -66,11 +68,14 @@ dependencies = [
     "pytest-cov",
     "pytest-asyncio==0.20.3",
     "Jinja2==3.1.2",
+    "grpcio-tools==1.51.1",
+    "types-protobuf==4.21.0.2",
 ]
 [tool.hatch.envs.default.scripts]
 cov = "pytest --cov-report=term-missing --cov-config=pyproject.toml --cov=dafi --cov=tests -s -vv {args}"
 cov_git = "pytest --cov=dafi --cov-report={env:COVERAGE_REPORT:term-missing} --cov-config=pyproject.toml"
 no_cov = "pytest -vv {args}"
+compile = "python -m grpc_tools.protoc -I dafi/components/proto --python_out=dafi/components/proto --grpc_python_out=dafi/components/proto messager.proto"
 
 [tool.hatch.envs.docs]
 dependencies = [

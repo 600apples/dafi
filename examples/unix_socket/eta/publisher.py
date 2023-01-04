@@ -20,10 +20,7 @@ def subtract(arg1: int, arg2: int) -> int:
 def main():
     # Process name is not required argument and will be generated automatically if not provided.
     g = Global(init_controller=True)
-    time.sleep(120)
-    print("Exit.")
-    g.stop()
-
+    g.join()
 
 if __name__ == "__main__":
     main()
