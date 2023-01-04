@@ -1,75 +1,78 @@
 import logging
-import asyncio
-from asyncio import Queue
 from typing import Union, Optional, NoReturn
 
-from anyio import create_task_group, TASK_STATUS_IGNORED, EndOfStream, maybe_async
+from anyio import create_task_group, sleep
 from anyio._backends._asyncio import TaskGroup
 from anyio.abc import TaskStatus
 
 from dafi.utils import colors
+
 from dafi.utils.logger import patch_logger
 from dafi.async_result import AsyncResult
 from dafi.components import ComponentsBase
-from dafi.message import Message, MessageFlag
+from dafi.components.proto.message import RpcMessage, ServiceMessage, MessageFlag
 from dafi.utils.debug import with_debug_trace
-from dafi.utils.retry import stoppable_retry, RetryInfo
 from dafi.components.scheduler import Scheduler
-
+from dafi.components.proto import messager_pb2_grpc as grpc_messager
 from dafi.exceptions import UnableToFindCandidate, RemoteStoppedUnexpectedly
 from dafi.utils.settings import LOCAL_CALLBACK_MAPPING, WELL_KNOWN_CALLBACKS
 from dafi.components.operations.node_operations import NodeOperations
-
-
-logger = patch_logger(logging.getLogger(__name__), colors.green)
+from dafi.components.operations.channel_store import ChannelPipe, MessageIterator
+from dafi.exceptions import ReckAcceptError
 
 
 class Node(ComponentsBase):
-    @stoppable_retry(wait=2)
-    async def handle(
-        self,
-        global_terminate_event,
-        retry_info: RetryInfo,
-        task_status: TaskStatus = TASK_STATUS_IGNORED,
-    ):
-        await super().handle(global_terminate_event)
-        self.loop = asyncio.get_running_loop()
-        self.item_store = Queue()
-        self.global_terminate_event = global_terminate_event
 
-        if self.global_terminate_event.is_set():
-            return
+    async def _handle(self, task_status: TaskStatus):
+        self.logger = patch_logger(logging.getLogger(__name__), colors.green)
 
-        if retry_info.attempt == 3 or not retry_info.attempt % 6:
-            logger.error(f"Unable to connect node {self.process_name}. Error = {retry_info.prev_error}. Retrying...")
-
-        async with self.connect_listener() as stream:
-
-            self.operations = NodeOperations(
-                logger=logger, stream=stream, global_terminate_event=global_terminate_event
+        async with self.connect_listener() as aio_listener:
+            stub = grpc_messager.MessagerServiceStub(aio_listener)
+            message_iterator = MessageIterator(global_terminate_event=self.global_terminate_event)
+            self.channel = ChannelPipe(
+                send_iterator=message_iterator, receive_iterator=stub.communicate(message_iterator)
             )
+            if not self.operations:
+                self.operations = NodeOperations(logger=self.logger)
+            self.operations.set_channel(self.channel)
 
             async with create_task_group() as sg:
                 self.scheduler = Scheduler(process_name=self.process_name, sg=sg)
+                sg.start_soon(self.read_commands, task_status, sg)
+                sg.start_soon(self.reconnect_request)
                 self.register_on_stop_callback(self.on_node_stop)
-                self.register_on_stop_callback(self.scheduler.on_scheduler_stop)
 
-                sg.start_soon(self._write_commands)
-                sg.start_soon(self._read_commands, task_status, sg)
+    async def reconnect_request(self):
+        if self.reconnect_freq:
+            while True:
+                await sleep(self.reconnect_freq)
+                self.channel.send(
+                    ServiceMessage(
+                        flag=MessageFlag.RECK_REQUEST,
+                        transmitter=self.process_name,
+                    )
+                )
 
     @with_debug_trace
-    async def on_node_stop(self):
-        await self.operations.on_stream_close()
+    async def on_node_stop(self) -> NoReturn:
+        await self.scheduler.on_scheduler_stop()
+        self.channel.send_iterator.stop()
+        LOCAL_CALLBACK_MAPPING.clear()
 
-    @with_debug_trace
-    async def _read_commands(self, task_status: TaskStatus, sg: TaskGroup):
+    async def read_commands(self, task_status: TaskStatus, sg: TaskGroup):
 
-        self.handler_counter += 1
-        async for msg in self.operations.stream:
+        local_mapping_without_well_known_callbacks = {
+            k: v for k, v in LOCAL_CALLBACK_MAPPING.items() if k not in WELL_KNOWN_CALLBACKS
+        }
+        self.channel.send(
+            ServiceMessage(
+                flag=MessageFlag.HANDSHAKE,
+                transmitter=self.process_name,
+                data=local_mapping_without_well_known_callbacks,
+            )
+        )
 
-            if not msg:
-                break
-
+        async for msg in self.channel:
             if msg.flag in (MessageFlag.HANDSHAKE, MessageFlag.UPDATE_CALLBACKS):
                 await self.operations.on_handshake(msg, task_status, self.process_name, self.info)
 
@@ -87,40 +90,26 @@ class Node(ComponentsBase):
                 MessageFlag.UNABLE_TO_FIND_PROCESS,
                 MessageFlag.REMOTE_STOPPED_UNEXPECTEDLY,
             ):
+                msg.loads()
                 if msg.flag == MessageFlag.REMOTE_STOPPED_UNEXPECTEDLY:
                     msg.error._awaited_error_type = RemoteStoppedUnexpectedly
                 else:
                     msg.error._awaited_error_type = UnableToFindCandidate
                 await self.operations.on_unable_to_find(msg)
 
-        await self.operations.on_stream_close()
-        self.handler_counter -= 1
-        await maybe_async(sg.cancel_scope.cancel())
+            elif msg.flag == MessageFlag.RECK_ACCEPT:
+                raise ReckAcceptError()
+
+        await self.operations.on_channel_close()
         if not self.global_terminate_event.is_set():
-            raise EndOfStream()
+            raise ReckAcceptError()
 
     @with_debug_trace
-    async def _write_commands(self):
-        local_mapping_without_well_known_callbacks = {
-            k: v for k, v in LOCAL_CALLBACK_MAPPING.items() if k not in WELL_KNOWN_CALLBACKS
-        }
-        await self.operations.stream.send(
-            Message(
-                flag=MessageFlag.HANDSHAKE,
-                transmitter=self.process_name,
-                func_args=(local_mapping_without_well_known_callbacks,),
-            )
-        )
-        while not self.global_terminate_event.is_set():
-            message, eta = await self.item_store.get()
-            await self.operations.stream.send(message, eta)
+    def send_threadsave(self, msg: RpcMessage, eta: Union[int, float]):
+        self.channel.send_threadsave(msg, eta)
 
-    @with_debug_trace
-    def send_threadsave(self, message: bytes, eta: Union[int, float]):
-        asyncio.run_coroutine_threadsafe(self.item_store.put((message, eta)), self.loop).result()
-
-    def send(self, message: Message, eta: Union[int, float]):
-        self.item_store.put_nowait((message, eta))
+    def send(self, msg: RpcMessage, eta: Union[int, float]):
+        self.channel.send(msg, eta)
 
     @with_debug_trace
     def register_result(self, result: Optional[AsyncResult]) -> NoReturn:

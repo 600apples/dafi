@@ -23,8 +23,6 @@ from typing import (
     Coroutine,
 )
 
-from anyio import sleep
-
 from dafi.utils import colors
 from dafi.utils.logger import patch_logger
 from dafi.backend import LocalBackEnd
@@ -47,7 +45,7 @@ from dafi.utils.settings import (
     WELL_KNOWN_CALLBACKS,
 )
 
-logger = patch_logger(logging.getLogger(__name__), colors.intense_grey)
+logger = patch_logger(logging.getLogger(__name__), colors.grey)
 
 __all__ = ["Global", "callback"]
 
@@ -102,6 +100,8 @@ class Global(metaclass=Singleton):
     init_node: Optional[bool] = True
     host: Optional[str] = None
     port: Optional[int] = None
+    reconnect_freq: Optional[int] = None
+
     _inside_callback_context: Optional[bool] = field(repr=False, default=False)
     """
     Args:
@@ -134,6 +134,7 @@ class Global(metaclass=Singleton):
             global_terminate_event=self._global_terminate_event,
             host=self.host,
             port=self.port,
+            reconnect_freq=self.reconnect_freq,
             logger=logger,
         )
 
@@ -165,16 +166,19 @@ class Global(metaclass=Singleton):
         self.ipc.join(timeout=timeout)
 
     def stop(self, kill_all_connected_nodes: Optional[bool] = False):
+        res = None
         if kill_all_connected_nodes:
             if not self.is_controller:
                 logger.error("You can kill all nodes only from a process that has a controller")
             else:
-                self.kill_all()
+                res = self.kill_all()
         self.ipc.stop()
+        return res
 
     def kill_all(self):
-        self.ipc.kill_all()
+        res = self.ipc.kill_all()
         time.sleep(5)
+        return res
 
     def transfer_and_call(
         self, remote_process: str, func: Callable[..., Any], *args, **kwargs
@@ -214,7 +218,7 @@ class callback(Generic[GlobalCallback]):
                     is_async=iscoroutinefunction(method),
                 )
                 LOCAL_CALLBACK_MAPPING[name] = cb
-                logger.info(f"{name!r} registered" + f" (required {fn.__name__} initialization)" if klass else "")
+                logger.info(f"{name!r} registered" + ("" if klass else f" (required {fn.__name__} initialization)"))
 
                 if self._ipc and self._ipc.is_running:
                     # Update remote callbacks if ips is running. It means callback was not registered during handshake
@@ -298,11 +302,12 @@ async def __async_transfer_and_call(func: Callable[..., Any], *args, **kwargs) -
 async def __cancel_scheduled_task(scheduler_type: SchedulerTaskType, msg_uuid: str, func_name: str) -> NoReturn:
     from dafi.components.scheduler import logger
 
-    if scheduler_type == "period" and func_name in SCHEDULER_PERIODICAL_TASKS:
+    if scheduler_type == "interval" and func_name in SCHEDULER_PERIODICAL_TASKS:
         task = SCHEDULER_PERIODICAL_TASKS.pop(func_name, None)
         if task:
             task.cancel()
         logger.warning(f"Task {func_name!r} (condition={scheduler_type!r}) has been canceled.")
+
     elif scheduler_type == "at_time" and msg_uuid in SCHEDULER_AT_TIME_TASKS:
         for task in SCHEDULER_AT_TIME_TASKS.pop(msg_uuid, []):
             task.cancel()
@@ -311,8 +316,9 @@ async def __cancel_scheduled_task(scheduler_type: SchedulerTaskType, msg_uuid: s
 
 @callback
 async def __kill_all(g: Global) -> NoReturn:
+    logger.info(f"Termination signal received.")
     try:
         loop = asyncio.get_running_loop()
-        loop.call_later(1, g.stop)
+        loop.call_later(2, g.stop)
     except Exception as e:
         logger.error(f"Unpredictable exception during termination of node {g.process_name!r}: {e}")

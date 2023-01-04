@@ -1,93 +1,73 @@
 import logging
-import time
-from typing import NoReturn
-from anyio import create_task_group, sleep, TASK_STATUS_IGNORED, ExceptionGroup, ClosedResourceError
-from anyio.abc._sockets import SocketStream
+import asyncio
+from functools import partial
+
+from anyio.abc import TaskStatus
+from anyio import create_task_group
+
 
 from dafi.utils import colors
 from dafi.utils.logger import patch_logger
 from dafi.components import ComponentsBase
-from dafi.message import Message, MessageFlag
-from dafi.utils.debug import with_debug_trace
-from dafi.utils.retry import stoppable_retry, RetryInfo
-from dafi.backend import BackEndKeys, ControllerStatus
-from dafi.components.operations.socket_store import SocketPipe
+from dafi.components.proto.message import MessageFlag
 from dafi.components.operations.controller_operations import ControllerOperations
+from dafi.components.operations.channel_store import ChannelPipe, MessageIterator
 
 
 logger = patch_logger(logging.getLogger(__name__), colors.blue)
 
 
 class Controller(ComponentsBase):
-    @stoppable_retry(wait=2, not_acceptable=(ClosedResourceError, ExceptionGroup))
-    async def handle(
-        self,
-        global_terminate_event,
-        retry_info: RetryInfo,
-        task_status=TASK_STATUS_IGNORED,
-    ):
-        await super().handle(global_terminate_event)
-        self.register_on_stop_callback(self.on_controller_stop)
+    async def _handle(self, task_status: TaskStatus):
 
-        self.listener = None
-        self.operations = ControllerOperations(logger=logger)
-        self.global_terminate_event = global_terminate_event
+        self.logger = patch_logger(logging.getLogger(__name__), colors.green)
 
-        if self.global_terminate_event.is_set():
-            return
+        if not self.operations:
+            self.operations = ControllerOperations(logger=logger)
 
-        if retry_info.attempt == 3 or not retry_info.attempt % 6:
-            logger.error(f"Unable to connect controller. Error = {retry_info.prev_error}. Retrying...")
+        listener = await self.create_listener()
+        self.register_on_stop_callback(partial(listener.stop, grace=True))
 
-        self.listener = await self.create_listener()
+        # sg.start_soon(listener.wait_for_termination)
         if task_status._future._state == "PENDING":
             task_status.started("STARTED")
+        logger.info(
+            f"Controller has been started successfully."
+            f" Process identificator: {self.process_name!r}."
+            f" Connection info: {self.info}"
+        )
+
+    async def handle_commands(self, channel: ChannelPipe):
 
         async with create_task_group() as sg:
-            sg.start_soon(self.healthcheck)
-            sg.start_soon(self.listener.serve, self._handle_commands, sg)
-            logger.info(f"Controller has been started successfully. Process identificator: {self.process_name!r}")
+            async for msg in channel:
+                if msg.flag in (MessageFlag.HANDSHAKE, MessageFlag.UPDATE_CALLBACKS):
 
-    @with_debug_trace
-    async def healthcheck(self) -> NoReturn:
-        while True:
-            self.backend.write(BackEndKeys.CONTROLLER_HEALTHCHECK_TS, time.time())
-            await sleep(self.TIMEOUT / 3)
+                    await self.operations.on_handshake(msg, channel)
 
-    @with_debug_trace
-    async def on_controller_stop(self) -> NoReturn:
-        self.backend.delete_key(BackEndKeys.CONTROLLER_HEALTHCHECK_TS)
-        self.backend.write(BackEndKeys.CONTROLLER_STATUS, ControllerStatus.UNAVAILABLE)
-        await self.operations.close_sockets()
-        if self.listener:
-            await self.listener.aclose()
+                elif msg.flag == MessageFlag.REQUEST:
 
-    @with_debug_trace
-    async def _handle_commands(self, stream: SocketStream):
-        self.handler_counter += 1
-        stream = SocketPipe(stream=stream, global_terminate_event=self.global_terminate_event)
+                    await self.operations.on_request(msg)
 
-        async for msg in stream:
-            if not msg:
-                break
+                elif msg.flag == MessageFlag.SUCCESS:
+                    await self.operations.on_success(msg)
 
-            if msg.flag == MessageFlag.HANDSHAKE:
-                await self.operations.on_handshake(msg, stream, self.global_terminate_event)
+                elif msg.flag == MessageFlag.SCHEDULER_ERROR:
+                    await self.operations.on_scheduler_error(msg)
 
-            elif msg.flag == MessageFlag.UPDATE_CALLBACKS:
-                await self.operations.on_update_callbacks(msg)
+                elif msg.flag == MessageFlag.BROADCAST:
+                    await self.operations.on_broadcast(msg, self.process_name)
 
-            elif msg.flag == MessageFlag.REQUEST:
-                await self.operations.on_request(msg, self.global_terminate_event)
+                elif msg.flag == MessageFlag.RECK_REQUEST:
+                    await self.operations.on_reconnect(msg, sg)
 
-            elif msg.flag == MessageFlag.SUCCESS:
-                await self.operations.on_success(msg)
+            await self.operations.on_channel_close(channel)
 
-            elif msg.flag == MessageFlag.SCHEDULER_ERROR:
-                await self.operations.on_scheduler_error(msg)
+    async def communicate(self, request_iterator, context):
 
-            elif msg.flag == MessageFlag.BROADCAST:
-                await self.operations.on_broadcast(msg, self.process_name)
+        message_iterator = MessageIterator(global_terminate_event=self.global_terminate_event)
+        channel = ChannelPipe(receive_iterator=request_iterator, send_iterator=message_iterator)
 
-        await self.operations.on_stream_close(stream)
-        self.handler_counter -= 1
+        asyncio.create_task(self.handle_commands(channel))
+        async for message in channel.send_iterator:
+            yield message

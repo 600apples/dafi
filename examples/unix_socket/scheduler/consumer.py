@@ -21,8 +21,10 @@ def main():
     g.call.some_func() & PERIOD(at_time=at_time)  # another syntax: g.call.some_func().period(at_time=at_time)
     time.sleep(15)
 
-    task = g.call.another_func(ts=3) & PERIOD(period="3s")  # another syntax: g.call.some_func().period(period="3s")
+    task = g.call.another_func(ts=3) & PERIOD(interval="3s")  # another syntax: g.call.some_func().period(period="3s")
     time.sleep(10)
+
+    print("Canceling task...")
     task.cancel()
     time.sleep(1)
 

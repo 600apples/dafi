@@ -26,9 +26,6 @@ class AsyncResult:
 
             if isinstance(self.result, RemoteError):
                 self.result.raise_with_trackeback()
-                import pdb
-
-                pdb.set_trace()
 
             if self.result == self:
                 self.result = None
@@ -71,9 +68,6 @@ class AwaitableAsyncResult(AsyncResult):
 
             if isinstance(self.result, RemoteError):
                 self.result.raise_with_trackeback()
-                import pdb
-
-                pdb.set_trace()
 
             if self.result == self:
                 self.result = None

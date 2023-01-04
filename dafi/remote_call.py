@@ -32,12 +32,14 @@ class NO_RETURN:
 @dataclass
 class PERIOD:
     at_time: Optional[Union[List[TimeUnits], TimeUnits]] = None
-    period: Optional[TimeUnits] = None
+    interval: Optional[TimeUnits] = None
 
 
 @dataclass
 class BROADCAST:
     eta: Optional[TimeUnits] = None
+    timeout: Optional[TimeUnits] = None  # Works only with return_result=True
+    return_result: Optional[bool] = False
 
 
 @dataclass
@@ -80,10 +82,10 @@ class RemoteCall:
             return self.no_return(eta=other.eta)
 
         elif isinstance(other, (PERIOD, type(PERIOD))):
-            return self.period(at_time=other.at_time, period=other.period)
+            return self.period(at_time=other.at_time, interval=other.interval)
 
         elif isinstance(other, (BROADCAST, type(BROADCAST))):
-            return self.broadcast(eta=other.eta)
+            return self.broadcast(eta=other.eta, return_result=other.return_result, timeout=other.timeout)
 
         else:
             valid_operands = ", ".join(map(lambda o: o.__name__, (FG, BG, NO_RETURN, PERIOD, BROADCAST)))
@@ -142,34 +144,42 @@ class RemoteCall:
         if asyncio.iscoroutine(res) and self._inside_callback_context:
             asyncio.create_task(res)
 
-    def broadcast(self, eta: Optional[TimeUnits] = None) -> NoReturn:
+    def broadcast(
+        self,
+        eta: Optional[TimeUnits] = None,
+        return_result: Optional[bool] = False,
+        timeout: Optional[TimeUnits] = None,
+    ) -> Optional[AsyncResult]:
+        timeout = self._get_duration(timeout, "timeout")
         eta = self._get_duration(eta, "eta", 0)
         res = self._ipc.call(
             self.func_name,
             args=self.args,
             kwargs=self.kwargs,
+            timeout=timeout,
             eta=eta,
-            async_=True,
-            return_result=False,
+            async_=not return_result,
+            return_result=return_result,
             broadcast=True,
             inside_callback_context=self._inside_callback_context,
         )
         if asyncio.iscoroutine(res) and self._inside_callback_context:
             asyncio.create_task(res)
+        return res
 
     def period(
         self,
         at_time: Optional[Union[List[TimeUnits], TimeUnits]],
-        period: Optional[TimeUnits],
+        interval: Optional[TimeUnits],
     ) -> Union[SchedulerTask, AsyncSchedulerTask]:
         if at_time is not None:
             if isinstance(at_time, (int, float, str, timedelta, datetime)):
                 at_time = [at_time]
             at_time = [self._get_duration(i, "at_time", 0) for i in at_time]
-        if period is not None:
-            period = self._get_duration(period, "period", 0)
+        if interval is not None:
+            interval = self._get_duration(interval, "interval", 0)
 
-        func_period = Period(at_time=at_time, period=period)
+        func_period = Period(at_time=at_time, interval=interval)
         func_period.validate()
 
         res = self._ipc.call(

@@ -25,7 +25,18 @@ async def call_remote(g, _range, exec_type):
 async def call_remote_broadcast(g, path):
     for i in range(5):
         callback_name = f"get_process_name1"
-        getattr(g.call, callback_name)(path=path / str(i)) & BROADCAST
+        res = getattr(g.call, callback_name)(path=path / str(i)) & BROADCAST(return_result=True)
+        assert res == {
+            "node-3": "node-3",
+            "node-1": "node-1",
+            "node-5": "node-5",
+            "node-6": "node-6",
+            "node-4": "node-4",
+            "node-8": "node-8",
+            "node-2": "node-2",
+            "node-9": "node-9",
+            "node-7": "node-7",
+        }
     await asyncio.sleep(1)
 
 
@@ -52,7 +63,18 @@ async def test_callback_per_node_unix(remote_callbacks_path, exec_type, g):
 
     await asyncio.gather(*[call_remote(g, range_, exec_type) for _ in range(500)])
 
-    g.stop(True)
+    res = g.stop(True)
+    assert res == {
+        "node-4": None,
+        "node-1": None,
+        "node-2": None,
+        "node-6": None,
+        "node-7": None,
+        "node-3": None,
+        "node-5": None,
+        "node-8": None,
+        "node-9": None,
+    }
 
 
 @pytest.mark.parametrize("exec_type", [FG, BG])
@@ -82,7 +104,18 @@ async def test_callback_per_node_tcp(remote_callbacks_path, exec_type, g, free_p
 
     await asyncio.gather(*[call_remote(g, range_, exec_type) for _ in range(500)])
 
-    g.stop(True)
+    res = g.stop(True)
+    assert res == {
+        "node-4": None,
+        "node-1": None,
+        "node-2": None,
+        "node-6": None,
+        "node-7": None,
+        "node-3": None,
+        "node-5": None,
+        "node-8": None,
+        "node-9": None,
+    }
 
 
 @pytest.mark.skipif(sys.platform == "win32", reason="Unix sockets dont work on windows")
@@ -119,7 +152,18 @@ async def test_callback_per_node_broadcast_unix(remote_callbacks_path, g):
         for proc_name in all_processes:
             assert proc_name in file_text
 
-    g.stop(True)
+    res = g.stop(True)
+    assert res == {
+        "node-1": None,
+        "node-4": None,
+        "node-3": None,
+        "node-6": None,
+        "node-7": None,
+        "node-5": None,
+        "node-8": None,
+        "node-2": None,
+        "node-9": None,
+    }
 
 
 async def test_callback_per_node_broadcast_tcp(remote_callbacks_path, g, free_port):
@@ -160,4 +204,15 @@ async def test_callback_per_node_broadcast_tcp(remote_callbacks_path, g, free_po
         for proc_name in all_processes:
             assert proc_name in file_text
 
-    g.stop(True)
+    res = g.stop(True)
+    assert res == {
+        "node-1": None,
+        "node-4": None,
+        "node-3": None,
+        "node-6": None,
+        "node-7": None,
+        "node-5": None,
+        "node-8": None,
+        "node-2": None,
+        "node-9": None,
+    }
