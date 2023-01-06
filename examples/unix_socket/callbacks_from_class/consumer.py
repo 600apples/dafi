@@ -11,7 +11,7 @@ async def main():
     g = Global()
 
     print("Wait for publisher process to be started...")
-    await g.wait_function("static_method")
+    g.wait_function("static_method")
 
     res = g.call.static_method(foo="bar") & FG
     print(res)

@@ -1,18 +1,21 @@
 import asyncio
 from random import choice
-from typing import Dict, DefaultDict, Optional, Tuple, Union, Sequence, Set, List
+from typing import Dict, DefaultDict, Optional, Tuple, Union, Sequence, Set, List, Any
 from dafi.utils.custom_types import GlobalCallback, K
 
-BYTES_CHUNK = 1024
-BYTES_LIMIT = 3e6  # 3 Mb
+BYTES_CHUNK = 4096
+BYTES_LIMIT = 1e7  # 10 Mb
 
 LOCAL_CLASS_CALLBACKS: Set = set()
 AWAITED_PROCS: Dict[str, Tuple[str, str]] = dict()
+AWAITED_BROADCAST_PROCS: Dict[str, Tuple[str, Dict[str, Any]]] = dict()
 LOCAL_CALLBACK_MAPPING: Dict[K, GlobalCallback] = dict()
 NODE_CALLBACK_MAPPING: Dict[K, Dict[K, GlobalCallback]] = dict()
 CONTROLLER_CALLBACK_MAPPING: Dict[K, Dict[K, GlobalCallback]] = dict()
 SCHEDULER_PERIODICAL_TASKS: Dict[str, asyncio.Task] = dict()
 SCHEDULER_AT_TIME_TASKS: Dict[str, List[asyncio.Task]] = dict()
+
+BROADCAST_RESULT_EMPTY = object()
 
 WELL_KNOWN_CALLBACKS: Set[str] = {
     "__transfer_and_call",

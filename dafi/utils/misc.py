@@ -5,10 +5,10 @@ import logging
 from uuid import uuid4
 from collections import deque
 from functools import partial
-from typing import Callable, Any, NamedTuple, List, Optional
+from typing import Callable, Any, NamedTuple, List, Optional, NoReturn
 
 import sniffio
-from anyio import sleep, to_thread
+from anyio import sleep, to_thread, Condition, move_on_after, CancelScope
 
 from dafi.utils.custom_types import SchedulerTaskType
 from dafi.exceptions import InitializationError
@@ -18,16 +18,16 @@ logger = logging.getLogger(__name__)
 
 class Period(NamedTuple):
     at_time: Optional[List[int]] = None
-    period: Optional[int] = None
+    interval: Optional[int] = None
 
     def validate(self):
 
-        if self.at_time is None and self.period is None:
+        if self.at_time is None and self.interval is None:
             raise InitializationError(
                 "Provide one of 'at_time' argument or 'period' argument during Period initialization"
             )
 
-        if self.at_time is not None and self.period is not None:
+        if self.at_time is not None and self.interval is not None:
             raise InitializationError("Only 1 time unit is allowed. Provide either 'at_time' or 'period' argument")
 
         if self.at_time is not None:
@@ -41,7 +41,7 @@ class Period(NamedTuple):
                     "Make sure you pass timestamps that are greater then current time"
                 )
 
-        if self.period is not None and self.period <= 0:
+        if self.interval is not None and self.interval <= 0:
             raise InitializationError(
                 "Provided 'period' timestamp is less then 0."
                 " Make sure you pass period that allows scheduler to execute task periodically"
@@ -52,7 +52,47 @@ class Period(NamedTuple):
         if self.at_time:
             return "at_time"
         else:
-            return "period"
+            return "interval"
+
+
+class ConditionObserver:
+    def __init__(self, condition_timeout: int):
+        self.condition = Condition()
+        self.condition_timeout = condition_timeout
+        self.locked = False
+
+        self._done_callbacks = []
+        self._fail_callbacks = []
+
+    def register_done_callback(self, cb: Callable[..., Any], *args, **kwargs) -> NoReturn:
+        self._done_callbacks.append((cb, args, kwargs))
+
+    def register_fail_callback(self, cb: Callable[..., Any], *args, **kwargs) -> NoReturn:
+        self._fail_callbacks.append((cb, args, kwargs))
+
+    async def done(self):
+        async with self.condition:
+            self.condition.notify_all()
+
+    async def wait(self):
+        async with self.condition:
+            await self.condition.wait()
+
+    async def fire(self):
+        with CancelScope(shield=True):
+            async with self.condition:
+                self.locked = True
+                with move_on_after(self.condition_timeout) as cancel_scope:
+                    await self.condition.wait()
+                if cancel_scope.cancel_called:
+                    self.condition.notify_all()
+                    callbacks = self._fail_callbacks
+                else:
+                    callbacks = self._done_callbacks
+            for cb, args, kwargs in callbacks:
+                res = cb(*args, **kwargs)
+                if asyncio.iscoroutine(res):
+                    await res
 
 
 class Singleton(type):

@@ -31,7 +31,7 @@ class TimeoutError(Exception):
     ...
 
 
-class DummyExeption(Exception):
+class ReckAcceptError(Exception):
     ...
 
 

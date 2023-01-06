@@ -2,7 +2,7 @@ import os
 import inspect
 from typing import Callable, Any
 from dafi.utils.custom_types import P
-from dafi.utils.settings import NODE_CALLBACK_MAPPING, WELL_KNOWN_CALLBACKS
+from dafi.utils.settings import NODE_CALLBACK_MAPPING
 
 
 def get_class_methods(klass):

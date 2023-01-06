@@ -26,13 +26,7 @@ class BackEndI(ABC):
         ...
 
 
-class ControllerI(ABC):
+class ComponentI(ABC):
     @abstractmethod
-    async def handle(self) -> NoReturn:
-        ...
-
-
-class NodeI(ABC):
-    @abstractmethod
-    async def handle(self) -> NoReturn:
+    async def handle(self, *args, **kwargs) -> NoReturn:
         ...
