@@ -1,0 +1,7 @@
+{% extends "layout/base.jinja2" %}
+
+{%- block content %}
+@callback
+def broadcast_callback(value: str):
+    return "{{ process_name }}." + value
+{% endblock %}

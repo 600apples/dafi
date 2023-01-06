@@ -1,12 +1,13 @@
 import sys
 import pickle
 import logging
-from typing import NoReturn
+from typing import NoReturn, Dict
 
 from anyio._backends._asyncio import TaskGroup
-from anyio.abc import TaskStatus
+from anyio.abc import TaskStatus, CancelScope
 
 from dafi.async_result import AsyncResult
+from dafi.utils.custom_types import GlobalCallback, K
 from dafi.components.proto.message import RpcMessage, ServiceMessage, MessageFlag, RemoteError
 from dafi.utils.debug import with_debug_trace
 from dafi.components.scheduler import Scheduler
@@ -14,9 +15,9 @@ from dafi.utils.misc import run_in_threadpool
 
 from dafi.utils.settings import (
     LOCAL_CALLBACK_MAPPING,
-    NODE_CALLBACK_MAPPING,
 )
 from dafi.components.operations.channel_store import ChannelPipe
+from dafi.exceptions import ReckAcceptError, StopComponentError
 
 import tblib.pickling_support
 
@@ -28,27 +29,22 @@ class NodeOperations:
 
     def __init__(self, logger: logging.Logger):
         self.logger = logger
-        AsyncResult.fold_results()
-        self.channel = None
+        self._channel = None
+        self.node_callback_mapping: Dict[K, Dict[K, GlobalCallback]] = dict()
 
-    def set_channel(self, channel: ChannelPipe):
-        self.channel = channel
+    @property
+    def channel(self) -> ChannelPipe:
+        return self._channel
 
-    @with_debug_trace
-    async def on_channel_close(self) -> NoReturn:
-
-        self.channel.send_iterator.stop()
-        NODE_CALLBACK_MAPPING.clear()
-        for msg_uuid, ares in AsyncResult._awaited_results.items():
-            AsyncResult._awaited_results[msg_uuid] = None
-            if hasattr(ares, "_ready"):
-                ares._ready.set()
+    @channel.setter
+    def channel(self, channel: ChannelPipe) -> NoReturn:
+        self._channel = channel
+        self._channel.proceed()
 
     @with_debug_trace
     async def on_handshake(self, msg: ServiceMessage, task_status: TaskStatus, process_name: str, info: str):
         msg.loads()
-        NODE_CALLBACK_MAPPING.clear()
-        NODE_CALLBACK_MAPPING.update(msg.data)
+        self.node_callback_mapping = msg.data
 
         if task_status._future._state == "PENDING":
             # Consider Node to be started only after handshake response is received.
@@ -91,12 +87,13 @@ class NodeOperations:
             await scheduler.register(msg=msg, channel=self.channel)
 
         else:
-            sg.start_soon(
-                self._remote_func_executor,
-                remote_callback,
-                msg,
-                process_name,
-            )
+            with CancelScope(shield=True):
+                sg.start_soon(
+                    self._remote_func_executor,
+                    remote_callback,
+                    msg,
+                    process_name,
+                )
 
     @with_debug_trace
     async def on_success(self, msg: RpcMessage, scheduler: Scheduler):
@@ -112,11 +109,8 @@ class NodeOperations:
                 error.show_in_log(logger=self.logger)
 
             else:
-                if error:
-                    AsyncResult._awaited_results[msg.uuid] = error
-                else:
-                    AsyncResult._awaited_results[msg.uuid] = msg.func_args[0]
-                ares._ready.set()
+                result = error if error else msg.func_args[0]
+                await AsyncResult._set_and_trigger(msg.uuid, result)
         else:
             if error:
                 if msg.period:
@@ -127,10 +121,8 @@ class NodeOperations:
     @with_debug_trace
     async def on_scheduler_accept(self, msg: RpcMessage, process_name: str):
         transmitter = msg.transmitter
-        ares = AsyncResult._awaited_results.get(msg.uuid)
-        if ares:
-            AsyncResult._awaited_results[msg.uuid] = transmitter
-            ares._ready.set()
+        if AsyncResult._awaited_results.get(msg.uuid):
+            await AsyncResult._set_and_trigger(msg.uuid, transmitter)
         else:
             self.logger.error(
                 f"Unable to find message uuid to accept {msg.func_name!r} scheduler task in process {process_name!r}"
@@ -140,12 +132,28 @@ class NodeOperations:
     async def on_unable_to_find(self, msg: RpcMessage):
         msg.loads()
         if msg.return_result:
-            ares = AsyncResult._awaited_results.get(msg.uuid)
-            if ares:
-                AsyncResult._awaited_results[msg.uuid] = msg.error
-                ares._ready.set()
+            if AsyncResult._awaited_results.get(msg.uuid):
+                await AsyncResult._set_and_trigger(msg.uuid, msg.error)
         else:
             self.logger.error(msg.error.info)
+
+    async def on_reconnection(self):
+        self.channel.freeze()
+        raise ReckAcceptError()
+
+    async def on_stop_request(self, msg: RpcMessage, process_name: str):
+        self.logger.info(f"Termination signal received.")
+        message_to_return = RpcMessage(
+            flag=MessageFlag.SUCCESS,
+            transmitter=process_name,
+            receiver=msg.transmitter,
+            uuid=msg.uuid,
+            func_name=msg.func_name,
+            return_result=True,
+            func_args=(None,),
+        )
+        self.channel.send(message_to_return)
+        raise StopComponentError()
 
     @with_debug_trace
     async def _remote_func_executor(
@@ -167,11 +175,11 @@ class NodeOperations:
             if "were given" in str(e) or "got an unexpected" in str(e) or "missing" in str(e):
                 info = f"{e}. Function signature is: {message.func_name}{remote_callback.signature}: ..."
             else:
-                info = f"Exception while processing function {message.func_name!r} on remote executor."
+                info = f"Exception while processing function {message.func_name!r} on remote executor. {e}"
             error = RemoteError(info=info, traceback=pickle.dumps(sys.exc_info()))
         except Exception as e:
-            info = f"Exception while processing function {message.func_name!r} on remote executor."
-            self.logger.error(info + f" {e}")
+            info = f"Exception while processing function {message.func_name!r} on remote executor. {e}"
+            self.logger.error(info)
             error = RemoteError(info=info, traceback=pickle.dumps(sys.exc_info()))
 
         if message.return_result or message.flag != MessageFlag.BROADCAST:

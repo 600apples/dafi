@@ -1,11 +1,11 @@
-import time
-from anyio import sleep
-from dataclasses import dataclass
-from threading import Event
-from typing import ClassVar, Dict, Optional, Union, NoReturn, Type
+from anyio import to_thread
+from dataclasses import dataclass, field
+from threading import Event as thEvent
+from typing import ClassVar, Dict, Optional, Union, NoReturn, Type, Any
 
-from dafi.exceptions import RemoteError, TimeoutError, RemoteStoppedUnexpectedly
+from dafi.exceptions import RemoteError, TimeoutError, RemoteStoppedUnexpectedly, GlobalContextError
 from dafi.utils.custom_types import RemoteResult, SchedulerTaskType
+from dafi.utils.misc import async_library
 
 
 @dataclass
@@ -15,11 +15,47 @@ class AsyncResult:
     func_name: str
     uuid: str
     result: Optional[RemoteResult] = None
+    async_context: Optional[str] = field(default_factory=async_library)
 
     def __post_init__(self):
-        self._ready = Event()
+        self._ready = thEvent()
+
+    async def __self_await__(self):
+        return self
+
+    def __await__(self):
+        return self.__self_await__().__await__()
+
+    def __and__(self, other):
+        return self
+
+    @classmethod
+    async def _fold_results(cls):
+        for msg_uuid, ares in AsyncResult._awaited_results.items():
+            AsyncResult._awaited_results[msg_uuid] = RemoteError(
+                info="Lost connection to Controller.",
+                _awaited_error_type=RemoteStoppedUnexpectedly,
+            )
+            ares.set()
+
+    @classmethod
+    async def _set_and_trigger(cls, msg_uuid: int, result: Any) -> NoReturn:
+        ares = AsyncResult._awaited_results[msg_uuid]
+        AsyncResult._awaited_results[msg_uuid] = result
+        ares.set()
 
     def __call__(self, timeout: Union[int, float] = None) -> RemoteResult:
+        return self.get(timeout=timeout)
+
+    def set(self):
+        self._ready.set()
+
+    def get(self, timeout: Union[int, float] = None) -> RemoteResult:
+        if self.async_context:
+            return self._get_async(timeout=timeout)
+        return self._get(timeout=timeout)
+
+    def _get(self, timeout: Union[int, float] = None) -> RemoteResult:
         if self.result is None:
             self._ready.wait(timeout=timeout)
             self.result = self._awaited_results.pop(self.uuid)
@@ -33,37 +69,9 @@ class AsyncResult:
 
         return self.result
 
-    def get(self, timeout: Union[int, float] = None) -> RemoteResult:
-        return self(timeout=timeout)
-
-    @classmethod
-    def fold_results(cls):
-        for msg_uuid, ares in AsyncResult._awaited_results.items():
-            AsyncResult._awaited_results[msg_uuid] = RemoteError(
-                info="Lost connection to Controller.",
-                _awaited_error_type=RemoteStoppedUnexpectedly,
-            )
-            ares._ready.set()
-
-
-@dataclass
-class AwaitableAsyncResult(AsyncResult):
-    async def __call__(self, timeout: Union[int, float] = None) -> RemoteResult:
+    async def _get_async(self, timeout: Union[int, float] = None) -> RemoteResult:
         if self.result is None:
-            if timeout is not None:
-                timeout = time.time() + timeout
-
-                def timeout_cond():
-                    return time.time() < timeout
-
-            else:
-
-                def timeout_cond():
-                    return True
-
-            while timeout_cond() and not self._ready.is_set():
-                await sleep(0.1)
-
+            await to_thread.run_sync(self._ready.wait, timeout)
             self.result = self._awaited_results.pop(self.uuid)
 
             if isinstance(self.result, RemoteError):
@@ -75,9 +83,6 @@ class AwaitableAsyncResult(AsyncResult):
 
         return self.result
 
-    async def get(self, timeout: Union[int, float] = None) -> RemoteResult:
-        return await self(timeout=timeout)
-
 
 @dataclass
 class BaseTask:
@@ -86,7 +91,7 @@ class BaseTask:
     _scheduler_type: SchedulerTaskType = None
 
     def cancel(self) -> NoReturn:
-        self._ipc.cancel_scheduler(self._transmitter, self._scheduler_type, self.uuid, self.func_name)
+        self._ipc.cancel_scheduler(remote_process=self._transmitter, msg_uuid=self.uuid, func_name=self.func_name)
 
 
 @dataclass
@@ -96,16 +101,7 @@ class SchedulerTask(BaseTask, AsyncResult):
         return self
 
 
-@dataclass
-class AsyncSchedulerTask(BaseTask, AwaitableAsyncResult):
-    async def get(self) -> "AsyncSchedulerTask":
-        self._transmitter = await super().get()
-        return self
-
-
-def get_result_type(
-    inside_callback_context: bool, is_period: bool
-) -> Type[Union[AsyncResult, AwaitableAsyncResult, SchedulerTask, AsyncSchedulerTask]]:
-    if inside_callback_context:
-        return AsyncSchedulerTask if is_period else AwaitableAsyncResult
+def get_result_type(inside_callback_context: bool, is_period: bool) -> Type[Union[AsyncResult, SchedulerTask]]:
+    if inside_callback_context and is_period:
+        raise GlobalContextError("Initialization of periodic tasks from the context of a remote callback is prohibited")
     return SchedulerTask if is_period else AsyncResult

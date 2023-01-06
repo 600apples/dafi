@@ -1,0 +1,17 @@
+{% extends "layout/base.jinja2" %}
+
+{%- block content %}
+@callback
+def {{ cb_name }}(g: Global):
+{% if last %}
+    return "My secret value"
+{% else %}
+    {%- if exec_type == "FG" %}
+    res = g.call.{{ next_cb_name }}() & FG
+    {% else %}
+    future = g.call.{{ next_cb_name }}() & BG
+    res = future.get()
+    {% endif %}
+    return res
+{% endif %}
+{% endblock %}

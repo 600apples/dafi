@@ -1,7 +1,6 @@
 """
 Publisher is the process that declares available remote functions
 """
-import time
 from dafi import Global, callback
 
 
@@ -21,6 +20,7 @@ def main():
     # Process name is not required argument and will be generated automatically if not provided.
     g = Global(init_controller=True)
     g.join()
+
 
 if __name__ == "__main__":
     main()

@@ -1,7 +1,7 @@
 import logging
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field, fields, replace
-from typing import Optional, Tuple, Dict, List, ClassVar, Set, Generator, Union, Any, AsyncIterable
+from typing import Optional, Tuple, Dict, List, ClassVar, Set, Generator, Union, Any, AsyncIterable, NoReturn
 
 import dill
 
@@ -29,6 +29,7 @@ class MessageFlag:
     BROADCAST = 10
     RECK_REQUEST = 11
     RECK_ACCEPT = 12
+    STOP_REQUEST = 13
 
 
 class Message(ABC):
@@ -42,7 +43,6 @@ class Message(ABC):
         merged_message: Union["RpcMessage", "ServiceMessage"] = None
 
         async for msg_chunk in message_iterator:
-
             if msg_chunk.HasField("rpc_realm"):
 
                 realm = msg_chunk.rpc_realm
@@ -116,8 +116,7 @@ class ServiceMessage(Message):
             data_len = len(raw_data)
             if data_len > BYTES_LIMIT:
                 raise InitializationError(
-                    f"Size {data_len} is too big for message. "
-                    f"Use messages no more then {BYTES_LIMIT} of size."
+                    f"Size {data_len} is too big for message. Use messages no more then {BYTES_LIMIT} of size."
                 )
 
             slices = [slice(i, i + BYTES_CHUNK) for i in range(0, data_len, BYTES_CHUNK)]
@@ -209,3 +208,7 @@ class RpcMessage(ServiceMessage):
         if self.data is not None:
             self.func_args, self.func_kwargs, self.error = dill.loads(b"".join(self.data))
             self.data = None
+
+    def set_error(self, error: RemoteError) -> NoReturn:
+        self.data = None
+        self.error = error

@@ -1,9 +1,11 @@
 import sys
-import time
 import pickle
 import logging
 import asyncio
+from datetime import datetime
 from dataclasses import dataclass
+from typing import Dict, List, Deque
+from collections import namedtuple, deque
 
 from anyio import sleep
 from anyio._backends._asyncio import TaskGroup
@@ -14,10 +16,16 @@ from dafi.components.proto.message import RpcMessage, RemoteError, MessageFlag
 from dafi.utils.logger import patch_logger
 from dafi.utils.misc import run_in_threadpool
 from dafi.utils.debug import with_debug_trace
-from dafi.utils.settings import LOCAL_CALLBACK_MAPPING, SCHEDULER_PERIODICAL_TASKS, SCHEDULER_AT_TIME_TASKS
+from dafi.utils.settings import LOCAL_CALLBACK_MAPPING
 
 
 logger = patch_logger(logging.getLogger(__name__), colors.magenta)
+
+TaskIdent = namedtuple("TaskIdent", ("process_name", "func_name", "msg_uuid"))
+
+SCHEDULER_PERIODICAL_TASKS: Dict[TaskIdent, asyncio.Task] = dict()
+SCHEDULER_AT_TIME_TASKS: Dict[TaskIdent, List[asyncio.Task]] = dict()
+FINISHED_TASKS: Deque[int] = deque(maxlen=1000)
 
 
 @dataclass
@@ -26,11 +34,15 @@ class Scheduler:
     process_name: str
 
     async def on_scheduler_stop(cls):
-        for task_group in SCHEDULER_AT_TIME_TASKS.values():
-            for task in task_group:
+        try:
+            for task_group in SCHEDULER_AT_TIME_TASKS.values():
+                for task in filter(None, task_group):
+                    task.cancel()
+            for task in SCHEDULER_PERIODICAL_TASKS.values():
                 task.cancel()
-        for task in SCHEDULER_PERIODICAL_TASKS.values():
-            task.cancel()
+        except RuntimeError:
+            ...
+        FINISHED_TASKS.clear()
 
     @with_debug_trace
     async def on_error(self, msg: RpcMessage):
@@ -39,20 +51,20 @@ class Scheduler:
     @with_debug_trace
     async def register(self, msg: RpcMessage, channel: ChannelPipe):
 
+        task_ident = TaskIdent(msg.transmitter, msg.func_name, msg.uuid)
         if msg.period.interval:
-            if msg.func_name in SCHEDULER_PERIODICAL_TASKS:
-                SCHEDULER_PERIODICAL_TASKS[msg.func_name].cancel()
-            SCHEDULER_PERIODICAL_TASKS[msg.func_name] = asyncio.create_task(
-                self.on_interval(msg.period.interval, channel, msg)
+            SCHEDULER_PERIODICAL_TASKS[task_ident] = asyncio.create_task(
+                self.on_interval(msg.period.interval, channel, msg, task_ident)
             )
 
         elif msg.period.at_time:
-            SCHEDULER_AT_TIME_TASKS[msg.uuid] = [
-                asyncio.create_task(self.on_at_time(ts, channel, msg)) for ts in msg.period.at_time
+            SCHEDULER_AT_TIME_TASKS[task_ident] = [
+                asyncio.create_task(self.on_at_time(ts, channel, msg, task_ident, ind))
+                for ind, ts in enumerate(msg.period.at_time)
             ]
 
     @with_debug_trace
-    async def on_interval(self, interval: int, channel: ChannelPipe, msg: RpcMessage):
+    async def on_interval(self, interval: int, channel: ChannelPipe, msg: RpcMessage, task_ident: TaskIdent):
         while True:
             await sleep(interval)
             if not await self._remote_func_executor(channel, msg, "interval"):
@@ -60,12 +72,13 @@ class Scheduler:
                     f"Callback {msg.func_name} cannot be executed periodically"
                     f" since unrecoverable error detected. Stop scheduling..."
                 )
-                SCHEDULER_PERIODICAL_TASKS.pop(msg.uuid, None)
+                SCHEDULER_PERIODICAL_TASKS.pop(task_ident, None)
+                FINISHED_TASKS.append(task_ident.msg_uuid)
                 break
 
     @with_debug_trace
-    async def on_at_time(self, ts: int, channel: ChannelPipe, msg: RpcMessage):
-        now = time.time()
+    async def on_at_time(self, ts: int, channel: ChannelPipe, msg: RpcMessage, task_ident: TaskIdent, task_index: int):
+        now = datetime.utcnow().timestamp()
         delta = ts - now
         if delta < 0:
             info = (
@@ -94,13 +107,22 @@ class Scheduler:
         else:
             await sleep(delta)
             await self._remote_func_executor(channel, msg, "at_time")
-        SCHEDULER_AT_TIME_TASKS.pop(msg.uuid, None)
+        at_time_list = SCHEDULER_AT_TIME_TASKS.get(task_ident)
+        if at_time_list:
+            at_time_list[task_index] = None
+            FINISHED_TASKS.append(task_ident.msg_uuid)
+            if all(task is None for task in at_time_list):
+                # Remove at time tasks list only when last task is completed
+                SCHEDULER_AT_TIME_TASKS.pop(task_ident, None)
 
     @with_debug_trace
     async def _remote_func_executor(self, channel: ChannelPipe, msg: RpcMessage, condition: str) -> bool:
         error = None
         success = True
-        remote_callback = LOCAL_CALLBACK_MAPPING[msg.func_name]
+        remote_callback = LOCAL_CALLBACK_MAPPING.get(msg.func_name)
+        if not remote_callback:
+            return False
+
         args = msg.func_args
         kwargs = msg.func_kwargs
 

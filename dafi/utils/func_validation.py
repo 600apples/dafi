@@ -1,8 +1,7 @@
 import os
 import inspect
-from typing import Callable, Any
+from typing import Callable, Any, Dict
 from dafi.utils.custom_types import P
-from dafi.utils.settings import NODE_CALLBACK_MAPPING
 
 
 def get_class_methods(klass):
@@ -32,17 +31,17 @@ def is_class_or_static_method(klass: type, name: str):
     assert getattr(klass, name) == value
 
     for cls in inspect.getmro(klass):
-        if inspect.isroutine(value):
-            if name in cls.__dict__:
-                bound_value = cls.__dict__[name]
-                if isinstance(bound_value, (staticmethod, classmethod)):
-                    return True
-    return False
+        if inspect.isroutine(value) and name in cls.__dict__:
+            bound_value = cls.__dict__[name]
+            if isinstance(bound_value, staticmethod):
+                return "static"
+            elif isinstance(bound_value, classmethod):
+                return "class"
 
 
-def pretty_callbacks(exclude_proc, format: str):
+def pretty_callbacks(mapping: Dict, exclude_proc, format: str):
     res = "" if format == "string" else dict()
-    for proc, func_mapping in NODE_CALLBACK_MAPPING.items():
+    for proc, func_mapping in mapping.items():
         if proc != exclude_proc:
             if format == "string":
                 res += f"process: {proc}\n"

@@ -1,0 +1,22 @@
+{% extends "layout/base.jinja2" %}
+
+{%- block content %}
+@callback
+def test_callback():
+    print("test callback triggered")
+
+
+@callback
+class MyClass:
+
+    def func1(self):
+        print("func1 triggered")
+
+    def func2(self, a, b):
+        import time
+        time.sleep(2)
+        print(f"calculated result = {a + b}")
+
+
+my_class_instance = MyClass()
+{% endblock %}

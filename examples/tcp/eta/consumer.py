@@ -21,6 +21,7 @@ async def main():
 
         # bg returns instance of AsyncResult.
         try:
+
             ares = g.call.add(5, 15) & BG(eta=5)
 
             # Simulate long running job

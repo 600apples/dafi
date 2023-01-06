@@ -35,15 +35,22 @@ class ReckAcceptError(Exception):
     ...
 
 
+class StopComponentError(Exception):
+    ...
+
+
 @dataclass
 class RemoteError:
     info: Optional[str] = None
     traceback: Optional[bytes] = None
+    _origin_traceback: TracebackType = field(repr=False, default=None)
     _awaited_error_type: Type[Exception] = field(repr=False, default=RemoteCallError)
 
     @cached_property
     def unpickled_trackeback(self) -> TracebackType:
-        if self.traceback:
+        if self._origin_traceback:
+            return self._origin_traceback
+        elif self.traceback:
             return pickle.loads(self.traceback)[2]
 
     def show_in_log(self, logger: Logger) -> NoReturn:

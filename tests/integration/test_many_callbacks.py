@@ -1,6 +1,7 @@
 import sys
 import time
 import asyncio
+from datetime import datetime
 from random import choices, choice
 from subprocess import Popen
 
@@ -45,13 +46,12 @@ async def call_remote_no_return(g, _range, exec_type, path):
     for i in range(5):
 
         func_args = dict(path=str(path), text=str(i))
-        start = time.time()
+        start = datetime.utcnow().timestamp()
         future = getattr(g.call, remote_type[bool(i % 2)] + str(choice(_range)))(**func_args)
 
         if exec_type == PERIOD:
-            future = future & PERIOD(at_time=start + 2)
+            future & PERIOD(at_time=start + 2)
             await asyncio.sleep(3)
-            future.cancel()
         elif exec_type == NO_RETURN:
             future & NO_RETURN
             await asyncio.sleep(2)
@@ -70,7 +70,7 @@ async def test_many_callbacks_unix(remote_callbacks_path, exec_type, g):
     )
 
     try:
-        Popen([sys.executable, executable_file])
+        remotes = [Popen([sys.executable, executable_file])]
         g.wait_process(process_name)
         await asyncio.gather(*[call_remote(g, range_, exec_type) for _ in range(500)])
 
@@ -79,7 +79,8 @@ async def test_many_callbacks_unix(remote_callbacks_path, exec_type, g):
 
     finally:
         res = g.stop(True)
-        assert res == {'test_node': None}
+        assert set(res) == {"test_node"}
+        [p.terminate() for p in remotes]
 
 
 @pytest.mark.parametrize("exec_type", [PERIOD, NO_RETURN])
@@ -101,7 +102,7 @@ async def test_many_callbacks_unix_no_return(remote_callbacks_path, exec_type, g
     path.mkdir()
 
     try:
-        Popen([sys.executable, executable_file])
+        remotes = [Popen([sys.executable, executable_file])]
         g.wait_process(process_name)
         await asyncio.gather(*[call_remote_no_return(g, range_, exec_type, path / str(i)) for i in range(500)])
 
@@ -111,7 +112,8 @@ async def test_many_callbacks_unix_no_return(remote_callbacks_path, exec_type, g
             assert file.read_text() == "4"
     finally:
         res = g.stop(True)
-        assert res == {'test_node': None}
+        assert set(res) == {"test_node"}
+        [p.terminate() for p in remotes]
 
 
 @pytest.mark.parametrize("exec_type", [BG, FG])
@@ -130,14 +132,15 @@ async def test_many_callbacks_tcp(remote_callbacks_path, exec_type, g, free_port
         port=free_port,
     )
     try:
-        Popen([sys.executable, executable_file])
+        remotes = [Popen([sys.executable, executable_file])]
         g.wait_process(process_name)
         await asyncio.gather(*[call_remote(g, range_, exec_type) for _ in range(500)])
         max_time = max(timings)
         assert max_time < 1
     finally:
         res = g.stop(True)
-        assert res == {'test_node': None}
+        assert set(res) == {"test_node"}
+        [p.terminate() for p in remotes]
 
 
 @pytest.mark.parametrize("exec_type", [PERIOD, NO_RETURN])
@@ -160,7 +163,7 @@ async def test_many_callbacks_tcp_no_return(remote_callbacks_path, exec_type, g,
     path.mkdir()
 
     try:
-        Popen([sys.executable, executable_file])
+        remotes = [Popen([sys.executable, executable_file])]
         g.wait_process(process_name)
         await asyncio.gather(*[call_remote_no_return(g, range_, exec_type, path / str(i)) for i in range(500)])
 
@@ -170,4 +173,5 @@ async def test_many_callbacks_tcp_no_return(remote_callbacks_path, exec_type, g,
             assert file.read_text() == "4"
     finally:
         res = g.stop(True)
-        assert res == {'test_node': None}
+        assert set(res) == {"test_node"}
+        [p.terminate() for p in remotes]

@@ -14,33 +14,54 @@ from dafi.components.proto.message import RpcMessage, ServiceMessage, MessageFla
 from dafi.utils.debug import with_debug_trace
 from dafi.components.scheduler import Scheduler
 from dafi.components.proto import messager_pb2_grpc as grpc_messager
-from dafi.exceptions import UnableToFindCandidate, RemoteStoppedUnexpectedly
+from dafi.exceptions import UnableToFindCandidate, RemoteStoppedUnexpectedly, InitializationError
 from dafi.utils.settings import LOCAL_CALLBACK_MAPPING, WELL_KNOWN_CALLBACKS
 from dafi.components.operations.node_operations import NodeOperations
-from dafi.components.operations.channel_store import ChannelPipe, MessageIterator
-from dafi.exceptions import ReckAcceptError
+from dafi.components.operations.channel_store import ChannelPipe, MessageIterator, FreezableQueue
 
 
 class Node(ComponentsBase):
 
-    async def _handle(self, task_status: TaskStatus):
+    # ------------------------------------------------------------------------------------------------------------------
+    # Node lifecycle ( on_init -> before_connect -> on_stop )
+    # ------------------------------------------------------------------------------------------------------------------
+
+    async def on_init(self) -> NoReturn:
         self.logger = patch_logger(logging.getLogger(__name__), colors.green)
+        self.operations = NodeOperations(logger=self.logger)
+
+    @with_debug_trace
+    async def on_stop(self) -> NoReturn:
+        await self.channel.clear_queue()
+        await self.channel.stop()
+        FreezableQueue.factory_remove(self.ident)
+        await super().on_stop()
+
+    async def before_connect(self) -> NoReturn:
+        self.channel = None
+        await AsyncResult._fold_results()
+
+    # ------------------------------------------------------------------------------------------------------------------
+
+    @property
+    def node_callback_mapping(self):
+        return self.operations.node_callback_mapping
+
+    async def handle_operations(self, task_status: TaskStatus) -> NoReturn:
 
         async with self.connect_listener() as aio_listener:
             stub = grpc_messager.MessagerServiceStub(aio_listener)
-            message_iterator = MessageIterator(global_terminate_event=self.global_terminate_event)
-            self.channel = ChannelPipe(
-                send_iterator=message_iterator, receive_iterator=stub.communicate(message_iterator)
-            )
-            if not self.operations:
-                self.operations = NodeOperations(logger=self.logger)
-            self.operations.set_channel(self.channel)
+
+            message_iterator = MessageIterator(FreezableQueue.factory(self.ident))
+            receive_iterator = stub.communicate(message_iterator, metadata=[("ident", self.ident)])
+
+            self.channel = ChannelPipe(send_iterator=message_iterator, receive_iterator=receive_iterator)
+            self.operations.channel = self.channel
 
             async with create_task_group() as sg:
                 self.scheduler = Scheduler(process_name=self.process_name, sg=sg)
                 sg.start_soon(self.read_commands, task_status, sg)
                 sg.start_soon(self.reconnect_request)
-                self.register_on_stop_callback(self.on_node_stop)
 
     async def reconnect_request(self):
         if self.reconnect_freq:
@@ -52,12 +73,6 @@ class Node(ComponentsBase):
                         transmitter=self.process_name,
                     )
                 )
-
-    @with_debug_trace
-    async def on_node_stop(self) -> NoReturn:
-        await self.scheduler.on_scheduler_stop()
-        self.channel.send_iterator.stop()
-        LOCAL_CALLBACK_MAPPING.clear()
 
     async def read_commands(self, task_status: TaskStatus, sg: TaskGroup):
 
@@ -98,11 +113,13 @@ class Node(ComponentsBase):
                 await self.operations.on_unable_to_find(msg)
 
             elif msg.flag == MessageFlag.RECK_ACCEPT:
-                raise ReckAcceptError()
+                await self.operations.on_reconnection()
 
-        await self.operations.on_channel_close()
+            elif msg.flag == MessageFlag.STOP_REQUEST:
+                await self.operations.on_stop_request(msg, self.process_name)
+
         if not self.global_terminate_event.is_set():
-            raise ReckAcceptError()
+            await self.operations.on_reconnection()
 
     @with_debug_trace
     def send_threadsave(self, msg: RpcMessage, eta: Union[int, float]):
@@ -115,3 +132,16 @@ class Node(ComponentsBase):
     def register_result(self, result: Optional[AsyncResult]) -> NoReturn:
         if result:
             AsyncResult._awaited_results[result.uuid] = result
+
+    def send_and_register_result(self, func_name: str, msg: RpcMessage) -> AsyncResult:
+        if msg.return_result is False:
+            raise InitializationError(
+                f"Unable to register result for callback {func_name}. return_result=False specified in message"
+            )
+        result = AsyncResult(
+            func_name=func_name,
+            uuid=msg.uuid,
+        )
+        self.register_result(result)
+        self.send_threadsave(msg, 0)
+        return result

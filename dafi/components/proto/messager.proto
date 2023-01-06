@@ -62,4 +62,5 @@ enum MessageFlag {
   BROADCAST = 10;
   RECK_REQUEST = 11;
   RECK_ACCEPT = 12;
+  STOP_REQUEST = 13;
 }

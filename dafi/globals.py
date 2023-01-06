@@ -1,19 +1,13 @@
 import sys
-import time
 import logging
-import inspect
-import asyncio
-from copy import copy
-from inspect import Signature
 from dataclasses import dataclass, field
 from cached_property import cached_property
-from inspect import iscoroutinefunction
+from inspect import iscoroutinefunction, signature
 from threading import Event
 from typing import (
     Callable,
     Any,
     Optional,
-    NamedTuple,
     Generic,
     List,
     Dict,
@@ -22,15 +16,17 @@ from typing import (
     NoReturn,
     Coroutine,
 )
+from anyio import sleep
+from tenacity import retry, retry_if_exception_type, wait_fixed, stop_after_attempt
 
 from dafi.utils import colors
 from dafi.utils.logger import patch_logger
-from dafi.backend import LocalBackEnd
-from dafi.exceptions import InitializationError, RemoteCallError
+from dafi.exceptions import InitializationError, GlobalContextError
 from dafi.ipc import Ipc
 from dafi.remote_call import LazyRemoteCall
-from dafi.utils.misc import Singleton, is_lambda_function, string_uuid
-from dafi.utils.custom_types import GlobalCallback, P, SchedulerTaskType
+from dafi.utils.misc import Singleton, is_lambda_function, string_uuid, async_library
+from dafi.utils.custom_types import GlobalCallback, P
+from dafi.callback_types import RemoteClassCallback, RemoteCallback
 from dafi.utils.func_validation import (
     get_class_methods,
     func_info,
@@ -40,57 +36,12 @@ from dafi.utils.func_validation import (
 from dafi.utils.settings import (
     LOCAL_CALLBACK_MAPPING,
     LOCAL_CLASS_CALLBACKS,
-    SCHEDULER_AT_TIME_TASKS,
-    SCHEDULER_PERIODICAL_TASKS,
     WELL_KNOWN_CALLBACKS,
 )
 
 logger = patch_logger(logging.getLogger(__name__), colors.grey)
 
 __all__ = ["Global", "callback"]
-
-
-class RemoteCallback(NamedTuple):
-    callback: GlobalCallback
-    module: str
-    origin_name: str
-    signature: Signature
-    is_async: bool
-
-    def __call__(self, *args, **kwargs):
-        if "g" in self.signature.parameters:
-            g = copy(Global._get_self(Global))
-            if self.is_async:
-                g._inside_callback_context = True
-            kwargs["g"] = g
-        return self.callback(*args, **kwargs)
-
-
-class RemoteClassCallback(NamedTuple):
-    klass: type
-    klass_name: str
-    module: str
-    origin_name: str
-    signature: Signature
-    is_async: bool
-
-    @property
-    def callback(self):
-        if not self.klass:
-            raise RemoteCallError(
-                f"Instance of {self.klass_name!r} is not initialized yet."
-                f" Create instance or mark method {self.origin_name!r}"
-                f" as classmethod or staticmethod"
-            )
-        return getattr(self.klass, self.origin_name)
-
-    def __call__(self, *args, **kwargs):
-        if "g" in self.signature.parameters:
-            g = copy(Global._get_self(Global))
-            if self.is_async:
-                g._inside_callback_context = True
-            kwargs["g"] = g
-        return self.callback(*args, **kwargs)
 
 
 @dataclass
@@ -128,7 +79,6 @@ class Global(metaclass=Singleton):
         self._global_terminate_event = Event()
         self.ipc = Ipc(
             process_name=self.process_name,
-            backend=LocalBackEnd(),
             init_controller=self.init_controller,
             init_node=self.init_node,
             global_terminate_event=self._global_terminate_event,
@@ -140,7 +90,16 @@ class Global(metaclass=Singleton):
 
         callback._ipc = self.ipc
         self.ipc.start()
-        self.ipc.wait()
+        if not self.ipc.wait():
+            raise GlobalContextError("Unable to start dafi components.")
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        self.stop()
+        if exc_type is not None:
+            return False
 
     @cached_property
     def call(self) -> LazyRemoteCall:
@@ -156,14 +115,17 @@ class Global(metaclass=Singleton):
 
     @property
     def registered_callbacks(self) -> Dict[str, List[str]]:
-        return pretty_callbacks(exclude_proc=self.process_name, format="dict")
+        return pretty_callbacks(mapping=self.ipc.node_callback_mapping, exclude_proc=self.process_name, format="dict")
 
-    def join(self, timeout: Optional[Union[int, float]] = None) -> NoReturn:
+    def join(self) -> NoReturn:
         """
         Join global to main thread.
         Don't use this method if you're running asynchronous application as it blocks event loop.
         """
-        self.ipc.join(timeout=timeout)
+        if async_library():
+            return self._join_async()
+        else:
+            return self.ipc.join()
 
     def stop(self, kill_all_connected_nodes: Optional[bool] = False):
         res = None
@@ -177,7 +139,6 @@ class Global(metaclass=Singleton):
 
     def kill_all(self):
         res = self.ipc.kill_all()
-        time.sleep(5)
         return res
 
     def transfer_and_call(
@@ -193,6 +154,16 @@ class Global(metaclass=Singleton):
     def wait_process(self, process_name: str) -> NoReturn:
         return LazyRemoteCall(_ipc=self.ipc, _global_terminate_event=None)._wait_process(process_name)
 
+    def get_scheduled_tasks(self, remote_process: str):
+        return self.ipc.get_all_scheduled_tasks(remote_process=remote_process)
+
+    def cancel_scheduled_task_by_uuid(self, remote_process: str, uuid: int) -> NoReturn:
+        return self.ipc.cancel_scheduler(remote_process=remote_process, msg_uuid=uuid)
+
+    async def _join_async(self):
+        while self.ipc.is_alive():
+            await sleep(0.5)
+
 
 class callback(Generic[GlobalCallback]):
     _ipc: ClassVar[Ipc] = None
@@ -204,46 +175,50 @@ class callback(Generic[GlobalCallback]):
             # Class wrapped
             self._klass = fn
             for method in get_class_methods(fn):
-                module, name = func_info(method)
+                _, name = func_info(method)
+
                 if name.startswith("_"):
                     continue
 
-                klass = fn if is_class_or_static_method(fn, name) else None
+                fn_type = is_class_or_static_method(fn, name)
+                klass = fn if fn_type else None
                 cb = RemoteClassCallback(
                     klass=klass,
                     klass_name=fn.__name__,
-                    module=module,
                     origin_name=name,
-                    signature=inspect.signature(method),
+                    signature=signature(method),
                     is_async=iscoroutinefunction(method),
+                    is_static=str(fn_type) == "static",
                 )
+                cb.validate_g_position_type()
                 LOCAL_CALLBACK_MAPPING[name] = cb
                 logger.info(f"{name!r} registered" + ("" if klass else f" (required {fn.__name__} initialization)"))
 
                 if self._ipc and self._ipc.is_running:
                     # Update remote callbacks if ips is running. It means callback was not registered during handshake
                     # or callback was added dynamically.
-                    self._ipc.update_callbacks({name: cb})
+                    self._ipc.update_callbacks(LOCAL_CALLBACK_MAPPING)
 
         elif callable(fn):
             if is_lambda_function(fn):
                 raise InitializationError("Lambdas is not supported.")
 
-            module, name = func_info(fn)
+            _, name = func_info(fn)
             self._fn = RemoteCallback(
                 callback=fn,
-                module=module,
                 origin_name=name,
-                signature=inspect.signature(fn),
+                signature=signature(fn),
                 is_async=iscoroutinefunction(fn),
             )
+            self._fn.validate_g_position_type()
             LOCAL_CALLBACK_MAPPING[name] = self._fn
             if name not in WELL_KNOWN_CALLBACKS:
-                logger.info(f"{name!r} registered")
+                # logger.info(f"{name!r} registered")
+                pass
             if self._ipc and self._ipc.is_running:
                 # Update remote callbacks if ips is running. It means callback was not registered during handshake
                 # or callback was added dynamically.
-                self._ipc.update_callbacks({name: self._fn})
+                self._ipc.update_callbacks(LOCAL_CALLBACK_MAPPING)
 
         else:
             raise InitializationError(f"Invalid type. Provide class or function.")
@@ -299,26 +274,111 @@ async def __async_transfer_and_call(func: Callable[..., Any], *args, **kwargs) -
 
 
 @callback
-async def __cancel_scheduled_task(scheduler_type: SchedulerTaskType, msg_uuid: str, func_name: str) -> NoReturn:
-    from dafi.components.scheduler import logger
+@retry(
+    wait=wait_fixed(0.1),
+    stop=stop_after_attempt(7),
+    retry=retry_if_exception_type(
+        RuntimeError,
+    ),
+    reraise=True,
+)
+async def __cancel_scheduled_task(msg_uuid: str, process_name: str, func_name: Optional[str] = None) -> bool:
+    from dafi.components.scheduler import (
+        logger,
+        SCHEDULER_PERIODICAL_TASKS,
+        SCHEDULER_AT_TIME_TASKS,
+        FINISHED_TASKS,
+        TaskIdent,
+    )
 
-    if scheduler_type == "interval" and func_name in SCHEDULER_PERIODICAL_TASKS:
-        task = SCHEDULER_PERIODICAL_TASKS.pop(func_name, None)
-        if task:
-            task.cancel()
-        logger.warning(f"Task {func_name!r} (condition={scheduler_type!r}) has been canceled.")
+    task_found = False
+    if msg_uuid and func_name and process_name:
+        task_ident = TaskIdent(process_name, func_name, msg_uuid)
+        period_task = SCHEDULER_PERIODICAL_TASKS.pop(task_ident, None)
+        if period_task:
+            period_task.cancel()
+            FINISHED_TASKS.append(task_ident.msg_uuid)
+            logger.warning(f"Task {func_name!r} (condition=period, executor={process_name}) has been canceled.")
+            task_found = True
+        else:
+            at_time_tasks = SCHEDULER_AT_TIME_TASKS.pop(task_ident, None)
+            if at_time_tasks:
+                for at_time_task in at_time_tasks:
+                    if at_time_task is not None:
+                        at_time_task.cancel()
+                        FINISHED_TASKS.append(task_ident.msg_uuid)
+                logger.warning(
+                    f"Task group {func_name!r} (condition=period, executor={process_name}) has been canceled."
+                )
+                task_found = True
 
-    elif scheduler_type == "at_time" and msg_uuid in SCHEDULER_AT_TIME_TASKS:
-        for task in SCHEDULER_AT_TIME_TASKS.pop(msg_uuid, []):
-            task.cancel()
-        logger.warning(f"Task group {func_name!r} (condition={scheduler_type!r}) has been canceled.")
+    elif msg_uuid:
+        for task_ident, period_task in SCHEDULER_PERIODICAL_TASKS.items():
+            if task_ident.msg_uuid == msg_uuid:
+                period_task.cancel()
+                SCHEDULER_PERIODICAL_TASKS.pop(task_ident, None)
+                FINISHED_TASKS.append(msg_uuid)
+                logger.warning(
+                    f"Task {task_ident.func_name!r} (condition=period, executor={task_ident.process_name}) has been canceled."
+                )
+                task_found = True
+                break
+        else:
+            for task_ident, at_time_tasks in SCHEDULER_AT_TIME_TASKS.items():
+                if task_ident.msg_uuid == msg_uuid and at_time_tasks:
+                    for at_time_task in at_time_tasks:
+                        if at_time_task is not None:
+                            at_time_task.cancel()
+                    SCHEDULER_AT_TIME_TASKS.pop(task_ident, None)
+                    FINISHED_TASKS.append(msg_uuid)
+                    logger.warning(
+                        f"Task group {task_ident.func_name!r} (condition=period, executor={task_ident.process_name}) has been canceled."
+                    )
+                    task_found = True
+                    break
+    if not task_found:
+        if msg_uuid in FINISHED_TASKS:
+            return False
+        raise GlobalContextError(f"Unable to find task by uuid: {msg_uuid}")
+    return True
 
 
 @callback
-async def __kill_all(g: Global) -> NoReturn:
-    logger.info(f"Termination signal received.")
-    try:
-        loop = asyncio.get_running_loop()
-        loop.call_later(2, g.stop)
-    except Exception as e:
-        logger.error(f"Unpredictable exception during termination of node {g.process_name!r}: {e}")
+@retry(
+    wait=wait_fixed(0.1),
+    stop=stop_after_attempt(7),
+    retry=retry_if_exception_type(
+        RuntimeError,
+    ),
+    reraise=True,
+)
+async def __get_all_period_tasks(process_name: str) -> List[Dict]:
+    from dafi.components.scheduler import SCHEDULER_PERIODICAL_TASKS, SCHEDULER_AT_TIME_TASKS
+
+    res = []
+    for task_ident in SCHEDULER_PERIODICAL_TASKS:
+        if task_ident.process_name == process_name:
+            res.append(
+                {
+                    "condition": "period",
+                    "func_name": task_ident.func_name,
+                    "uuid": task_ident.msg_uuid,
+                }
+            )
+
+    for task_ident, at_time_tasks in SCHEDULER_AT_TIME_TASKS.items():
+        if task_ident.process_name == process_name:
+            res.append(
+                {
+                    "condition": "at_time",
+                    "func_name": task_ident.func_name,
+                    "uuid": task_ident.msg_uuid,
+                    "number_of_active_tasks": list(filter(None, at_time_tasks)),
+                }
+            )
+    return res
+
+
+@callback
+async def __kill_all() -> NoReturn:
+    pass

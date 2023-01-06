@@ -1,68 +1,81 @@
 import logging
 import asyncio
-from asyncio import Queue
-from typing import Optional, Union, Generator
-from anyio import Event, sleep
+import traceback
+from typing import Optional, Union, Generator, NoReturn
 
-from grpc.aio._call import AioRpcError
 from grpc._cython.cygrpc import UsageError
 
 from dafi.components.proto.message import Message, RpcMessage, ServiceMessage
 from dafi.utils.debug import with_debug_trace
 from dafi.utils.misc import ConditionObserver
+from dafi.utils.settings import RECONNECTION_TIMEOUT
+from dafi.components.operations.freezable_queue import FreezableQueue, ItemPriority
+from dafi.async_result import AsyncResult, RemoteError
 
 
 logger = logging.getLogger(__name__)
 
 
 class MessageIterator:
+    """Iterator to recieve messages"""
 
-    STOP_MARKER = object()
+    def __init__(self, msg_queue: FreezableQueue):
 
-    def __init__(self, global_terminate_event: Event):
-
-        self.global_terminate_event = global_terminate_event
-        self.msg_queue = Queue()
         self.loop = asyncio.get_running_loop()
+        self.msg_queue = msg_queue
 
     # create an instance of the iterator
     async def __aiter__(self):
-        while not self.global_terminate_event.is_set():
-            message, eta = await self.msg_queue.get()
-
-            if message == self.STOP_MARKER:
-                raise StopAsyncIteration
+        async for message, eta in self.msg_queue.iterate():
 
             if eta:
-                await sleep(eta)
+                # Put to queue again after eta.
+                # It prevents other message to be pushed meanwhile.
+                self.loop.call_later(eta, self.send, message)
+            else:
+                try:
+                    for chunk in message.dumps():
+                        yield chunk
+                except Exception as e:
+                    if AsyncResult._awaited_results.get(message.uuid):
+                        await AsyncResult._set_and_trigger(
+                            message.uuid, RemoteError(info=str(e), _origin_traceback=e.__traceback__)
+                        )
+                    else:
+                        traceback.print_exc()
 
-            for chunk in message.dumps():
-                yield chunk
+    def send_threadsave(self, message: Message, eta: Optional[Union[int, float]] = None) -> NoReturn:
+        self.msg_queue.send_threadsave((message, eta))
 
-    def send_threadsave(self, message: Message, eta: Optional[Union[int, float]] = None):
-        asyncio.run_coroutine_threadsafe(self.msg_queue.put((message, eta)), self.loop).result()
+    def send(self, message: Message, eta: Optional[Union[int, float]] = None) -> NoReturn:
+        self.msg_queue.send((message, eta))
 
-    def send(self, message: Message, eta: Optional[Union[int, float]] = None):
-        self.msg_queue.put_nowait((message, eta))
+    async def stop(self, priority: Optional[ItemPriority] = ItemPriority.LAST) -> NoReturn:
+        await self.msg_queue.stop(priority)
 
-    def stop(self):
-        self.send(self.STOP_MARKER)
+    def freeze(self, timeout: int) -> NoReturn:
+        self.msg_queue.freeze(timeout=timeout)
+
+    def proceed(self) -> NoReturn:
+        self.msg_queue.proceed()
 
 
 class ChannelPipe(ConditionObserver):
-    def __init__(self, send_iterator: MessageIterator, receive_iterator: Generator):
+    def __init__(
+        self,
+        send_iterator: MessageIterator,
+        receive_iterator: Generator,
+        reconnection_timeout: Optional[int] = RECONNECTION_TIMEOUT,
+    ):
         self.send_iterator = send_iterator
         self.receive_iterator = receive_iterator
-        super().__init__(condition_timeout=15)
+        super().__init__(condition_timeout=reconnection_timeout)
 
     # create an instance of the iterator
     async def __aiter__(self) -> Generator[Union[RpcMessage, ServiceMessage], None, None]:
         try:
             async for msg in Message.from_message_iterator(self.receive_iterator):
                 yield msg
-        except AioRpcError:
-            self.send_iterator.stop()
-            raise
         except UsageError:
             ...
 
@@ -71,6 +84,19 @@ class ChannelPipe(ConditionObserver):
 
     def send(self, message: Message, eta: Optional[Union[int, float]] = None):
         self.send_iterator.send(message, eta)
+
+    def freeze(self, timeout: Optional[int] = RECONNECTION_TIMEOUT) -> NoReturn:
+        self.send_iterator.freeze(timeout=timeout)
+
+    def proceed(self) -> NoReturn:
+        self.send_iterator.proceed()
+
+    async def clear_queue(self):
+        await self.send_iterator.msg_queue.clear()
+        await self.send_iterator.msg_queue.wait()
+
+    async def stop(self):
+        await self.send_iterator.stop()
 
 
 class ChannelStore(dict):

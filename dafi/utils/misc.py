@@ -1,19 +1,19 @@
-import time
 import types
 import asyncio
-import logging
 from uuid import uuid4
-from collections import deque
+from random import choice
 from functools import partial
-from typing import Callable, Any, NamedTuple, List, Optional, NoReturn
+from datetime import datetime
+from queue import Queue
+from contextlib import contextmanager
+from typing import Callable, Any, NamedTuple, NoReturn, Dict, DefaultDict, Optional, Tuple, Union, Sequence, List
 
 import sniffio
-from anyio import sleep, to_thread, Condition, move_on_after, CancelScope
+from anyio import to_thread, Condition, move_on_after, CancelScope
 
 from dafi.utils.custom_types import SchedulerTaskType
 from dafi.exceptions import InitializationError
-
-logger = logging.getLogger(__name__)
+from dafi.utils.custom_types import GlobalCallback, K, AcceptableErrors
 
 
 class Period(NamedTuple):
@@ -24,14 +24,14 @@ class Period(NamedTuple):
 
         if self.at_time is None and self.interval is None:
             raise InitializationError(
-                "Provide one of 'at_time' argument or 'period' argument during Period initialization"
+                "Provide one of 'at_time' argument or 'interval' argument during Period initialization"
             )
 
         if self.at_time is not None and self.interval is not None:
-            raise InitializationError("Only 1 time unit is allowed. Provide either 'at_time' or 'period' argument")
+            raise InitializationError("Only 1 time unit is allowed. Provide either 'at_time' or 'interval' argument")
 
         if self.at_time is not None:
-            now = time.time()
+            now = datetime.utcnow().timestamp()
             if len(self.at_time) > 1000:
                 raise InitializationError("Too many scheduled at time periods. Provide no more then 1000 timestamps.")
             if any(i <= now for i in self.at_time):
@@ -95,15 +95,37 @@ class ConditionObserver:
                     await res
 
 
+class ConditionEvent:
+    """Register Event objects and wait for release when any of them is set"""
+
+    def __init__(self):
+        self._cond_q = Queue(maxsize=1)
+        self._is_success = False
+
+    @property
+    def success(self) -> bool:
+        return self._is_success
+
+    def mark_success(self) -> NoReturn:
+        self._cond_q.put(True)
+
+    def mark_fail(self) -> NoReturn:
+        self._cond_q.put(False)
+
+    def wait(self) -> bool:
+        self._is_success = self._cond_q.get()
+        return self._is_success
+
+
 class Singleton(type):
     _instances = {}
 
     def __call__(cls, *args, **kwargs):
-        if cls not in cls._instances:
-            cls._instances[cls] = super(Singleton, cls).__call__(*args, **kwargs)
+        if cls.__name__ not in cls._instances:
+            cls._instances[cls.__name__] = super(Singleton, cls).__call__(*args, **kwargs)
         else:
-            logger.warning("Object is singleton and should not be created several times.")
-        return cls._instances[cls]
+            raise ValueError("Object is singleton and should not be created several times.")
+        return cls._instances[cls.__name__]
 
     @classmethod
     def _get_self(cls, key: object):
@@ -117,13 +139,13 @@ class Singleton(type):
             raise KeyError(f"{key} is not initialized.")
 
 
-class AsyncDeque(deque):
-    async def get(self):
-        while True:
-            if not self:
-                await sleep(0.1)
-                continue
-            return self.popleft()
+@contextmanager
+def resilent(acceptable: AcceptableErrors = Exception):
+    """Suppress exceptions raised from the wrapped scope."""
+    try:
+        yield
+    except acceptable:
+        ...
 
 
 def async_library():
@@ -159,3 +181,28 @@ async def run_in_threadpool(func: Callable[..., Any], *args, **kwargs) -> Any:
         # run_sync doesn't accept 'kwargs', so bind them in here
         func = partial(func, **kwargs)
     return await to_thread.run_sync(func, *args)
+
+
+def search_remote_callback_in_mapping(
+    mapping: DefaultDict[K, Dict[K, GlobalCallback]],
+    func_name: str,
+    exclude: Optional[Union[str, Sequence]] = None,
+    take_all: Optional[bool] = False,
+) -> Optional[Union[Tuple[str, "RemoteCallback"], List[Tuple[str, "RemoteCallback"]]]]:
+
+    if isinstance(exclude, str):
+        exclude = [exclude]
+    exclude = exclude or []
+    found = []
+
+    for proc, func_mapping in mapping.items():
+        if proc not in exclude:
+            remote_callback = func_mapping.get(func_name)
+            if remote_callback:
+                found.append((proc, remote_callback))
+    try:
+        if take_all:
+            return found
+        return choice(found)
+    except IndexError:
+        ...

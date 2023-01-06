@@ -7,12 +7,18 @@ from dafi import Global, callback
 @callback
 async def some_func() -> None:
     """Used by 'consumer.py' process."""
-    print("Hey! I was called remotely. Just want to notify you!")
+    print("some_func triggered!!!")
+
+
+@callback
+async def another_func(ts) -> None:
+    """Used by 'consumer.py' process."""
+    print(f"another_func triggered (period = {ts} sec)!!!")
 
 
 def main():
     # Process name is not required argument and will be generated automatically if not provided.
-    Global(init_controller=True, host="localhost", port=8888)
+    Global(init_controller=True, host="localhost", port=8888).join()
 
     # Note:
     #   This process will be running infinitely.

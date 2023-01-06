@@ -8,21 +8,19 @@ from dafi import Global, FG
 
 async def main():
     # Process name is not required argument and will be generated automatically if not provided.
-    g = Global()
+    with Global() as g:
 
-    print("Wait for publisher process to be started...")
-    g.wait_function("static_method")
+        print("Wait for publisher process to be started...")
+        g.wait_function("static_method")
 
-    res = g.call.static_method(foo="bar") & FG
-    print(res)
+        res = g.call.static_method(foo="bar") & FG
+        print(res)
 
-    res = g.call.method1() & FG
-    print(res)
+        res = g.call.method1() & FG
+        print(res)
 
-    res = g.call.method2(foo="bar") & FG
-    print(res)
-
-    g.stop()
+        res = g.call.method2(foo="bar") & FG
+        print(res)
 
 
 if __name__ == "__main__":
