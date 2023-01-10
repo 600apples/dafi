@@ -1,9 +1,9 @@
 import pytest
 import asyncio
-from dafi import callback, Global
-from dafi.utils.settings import LOCAL_CALLBACK_MAPPING
-from dafi.globals import RemoteCallback
-from dafi.exceptions import InitializationError, GlobalContextError
+from daffi import callback, Global
+from daffi.utils.settings import LOCAL_CALLBACK_MAPPING
+from daffi.globals import RemoteCallback
+from daffi.exceptions import InitializationError, GlobalContextError
 
 
 class TestCallbackSuite:
@@ -18,6 +18,10 @@ class TestCallbackSuite:
         def substract(a: int, b: int) -> int:
             return a - b
 
+        @callback
+        def test_g(a: int, b: int, g) -> None:
+            return None
+
         # Assertion
         assert add(1, 2) == 3
         assert substract(10, 5) == 5
@@ -27,6 +31,57 @@ class TestCallbackSuite:
         assert "substract" in LOCAL_CALLBACK_MAPPING
         assert isinstance(add._fn, RemoteCallback)
         assert isinstance(substract._fn, RemoteCallback)
+
+        with Global(init_controller=True) as g:
+            with pytest.raises(TypeError):
+                substract(1, 2, 4)
+
+            with pytest.raises(TypeError):
+                substract(1)
+
+            with pytest.raises(TypeError):
+                substract(1, 2, 4)
+
+            with pytest.raises(TypeError):
+                test_g(1, 2, 3)
+
+            with pytest.raises(TypeError):
+                test_g(1)
+
+            with pytest.raises(TypeError):
+                test_g(g, 1, 2)
+
+            with pytest.raises(TypeError):
+                test_g(1, g, 2)
+
+            with pytest.raises(TypeError):
+                test_g(1, 2, g)
+
+            validate_provided_arguments = test_g.validate_provided_arguments
+
+            with pytest.raises(TypeError):
+                validate_provided_arguments()
+
+            with pytest.raises(GlobalContextError):
+                validate_provided_arguments(1, 2, 3, 4, 5)
+
+            with pytest.raises(GlobalContextError):
+                validate_provided_arguments(g)
+
+            with pytest.raises(GlobalContextError):
+                validate_provided_arguments(g=None)
+
+            with pytest.raises(TypeError):
+                validate_provided_arguments(foo="bar")
+
+            with pytest.raises(GlobalContextError):
+                validate_provided_arguments(g, 1, 2)
+
+            with pytest.raises(GlobalContextError):
+                validate_provided_arguments(1, g, 2)
+
+            with pytest.raises(GlobalContextError):
+                validate_provided_arguments(1, 2, g)
 
     async def test_local_callback_execution_with_g(self):
         Global._instances.clear()
@@ -72,6 +127,9 @@ class TestCallbackSuite:
             def func6(self, *args, g):
                 return None
 
+            def func7(self, a, b, g):
+                return None
+
         with Global(init_controller=True) as g:
             node_callback_mapping = g.ipc.node.node_callback_mapping
             controller_callback_mapping = g.ipc.controller.controller_callback_mapping
@@ -80,8 +138,19 @@ class TestCallbackSuite:
             node_process_mapping = next(v for k, v in node_callback_mapping.items())
             controller_process_mapping = next(v for k, v in controller_callback_mapping.items())
 
-            assert set(node_process_mapping) == {"func1", "func2", "func3", "func4", "func5", "func6"}
-            assert set(controller_process_mapping) == {"func1", "func2", "func3", "func4", "func5", "func6"}
+            assert set(node_process_mapping) == {"func1", "func2", "func3", "func4", "func5", "func6", "func7"}
+            assert set(controller_process_mapping) == {
+                "func1",
+                "func2",
+                "func3",
+                "func4",
+                "func5",
+                "func6",
+                "func7",
+            }
+
+            with pytest.raises(GlobalContextError):
+                Foo.func3()
 
             foo = Foo()
 
@@ -97,7 +166,7 @@ class TestCallbackSuite:
             validate_provided_arguments = foo.func6.validate_provided_arguments
 
             validate_provided_arguments()
-            validate_provided_arguments(1,2,3,4,5)
+            validate_provided_arguments(1, 2, 3, 4, 5)
 
             with pytest.raises(GlobalContextError):
                 validate_provided_arguments(g)
@@ -106,4 +175,25 @@ class TestCallbackSuite:
                 validate_provided_arguments(g=None)
 
             with pytest.raises(TypeError):
-                validate_provided_arguments(foo='bar')
+                validate_provided_arguments(foo="bar")
+
+            validate_provided_arguments = foo.func7.validate_provided_arguments
+
+            with pytest.raises(TypeError):
+
+                validate_provided_arguments()
+
+            with pytest.raises(GlobalContextError):
+                validate_provided_arguments(1, 2, 3)
+
+            with pytest.raises(GlobalContextError):
+                validate_provided_arguments(1, 2, 3, 4)
+
+            with pytest.raises(GlobalContextError):
+                validate_provided_arguments(g)
+
+            with pytest.raises(GlobalContextError):
+                validate_provided_arguments(g=None)
+
+            with pytest.raises(TypeError):
+                validate_provided_arguments(foo="bar")

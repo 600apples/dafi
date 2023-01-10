@@ -1,5 +1,5 @@
-site_name: dafi
-site_url: https://600apples.github.io/dafi/
+site_name: daffi
+site_url: https://600apples.github.io/daffi/
 site_dir: mkdocs_files
 extra_css:
   - stylesheets/extra.css
@@ -21,11 +21,18 @@ theme:
         icon: material/brightness-4
         name: Switch to light mode
 nav:
-  - Home: index.md
+  - Overview: index.md
+  - Installtion: installation.md
+  - Main concepts: main-concepts-and-architecture.md
+  - Getting started: getting-started.md
+  - Execution modifiers: execution-modifiers.md
+  - Asynchronous applications: async-apps.md
+
 
 plugins:
   - search
   - section-index
+  - glightbox
 
 markdown_extensions:
   - admonition

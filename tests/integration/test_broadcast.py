@@ -1,6 +1,6 @@
 import pytest
 import sys
-from dafi import BROADCAST
+from daffi import BROADCAST
 from subprocess import Popen
 
 

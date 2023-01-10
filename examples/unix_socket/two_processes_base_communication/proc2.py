@@ -1,5 +1,5 @@
 import time
-from dafi import Global, callback, RemoteStoppedUnexpectedly, GlobalContextError
+from daffi import Global, callback, RemoteStoppedUnexpectedly, GlobalContextError
 
 PROC_NAME = "Brown Fox"
 

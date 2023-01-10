@@ -5,7 +5,7 @@ from pathlib import Path
 from lxml import etree  # nosec B410
 
 PACKAGES = {
-    "dafi/": "dafi",
+    "daffi/": "daffi",
     "tests/": "tests",
 }
 

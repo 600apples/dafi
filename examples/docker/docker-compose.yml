@@ -1,7 +1,7 @@
 version: "3"
 
 x-common-env: &common-env
-  DAFI_HOST: email_processor # [ web or colorizer ] to change dafi controller process.
+  DAFI_HOST: email_processor # [ web or colorizer ] to change daffi controller process.
   DAFI_PORT: 8888
 
 services:

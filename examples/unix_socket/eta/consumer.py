@@ -4,7 +4,7 @@ Consumer is the process that consumes available remote functions.
 
 import time
 import asyncio
-from dafi import Global, BG
+from daffi import Global, BG
 
 
 async def main():
@@ -27,7 +27,7 @@ async def main():
             print("Job finished")
 
             # Here execution stuck for additional 3 seconds due to eta
-            res = await ares.get()
+            res = ares.get()
             if res:
                 print(f"Calculated result = {res}. Total exec time: {time.time() - start}")
 

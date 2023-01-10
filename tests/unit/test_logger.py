@@ -2,8 +2,8 @@ import logging
 from logging import LoggerAdapter
 
 import pytest
-from dafi.utils import colors
-from dafi.utils.logger import patch_logger, ColoredFormatter
+from daffi.utils import colors
+from daffi.utils.logger import patch_logger, ColoredFormatter
 
 
 class MockLevelRecord:

@@ -12,6 +12,6 @@ EXPOSE 5000 8888
 
 COPY . .
 
-#RUN python3 -m pip install dafi-0.0.1-py3-none-any.whl # TODO release package
+RUN python3 -m pip install daffi
 
 CMD [ "python3", "-u", "app.py" ]

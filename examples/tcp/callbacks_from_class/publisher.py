@@ -2,7 +2,7 @@
 Publisher is the process that declares available remote functions
 """
 import time
-from dafi import Global, callback
+from daffi import Global, callback
 
 
 @callback
