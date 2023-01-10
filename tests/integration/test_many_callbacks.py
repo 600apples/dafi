@@ -117,8 +117,8 @@ async def test_many_callbacks_unix_no_return(remote_callbacks_path, exec_type, g
 
 
 @pytest.mark.parametrize("exec_type", [BG, FG])
-async def test_many_callbacks_tcp(remote_callbacks_path, exec_type, g, free_port):
-    g = g(host="localhost", port=free_port)
+async def test_many_callbacks_tcp(remote_callbacks_path, exec_type, g):
+    g = g(host="localhost")
     process_name = "test_node"
     start_range = 1
     end_range = 1000
@@ -129,7 +129,7 @@ async def test_many_callbacks_tcp(remote_callbacks_path, exec_type, g, free_port
         start_range=start_range,
         end_range=end_range,
         host="localhost",
-        port=free_port,
+        port=g.port,
     )
     try:
         remotes = [Popen([sys.executable, executable_file])]
@@ -144,8 +144,8 @@ async def test_many_callbacks_tcp(remote_callbacks_path, exec_type, g, free_port
 
 
 @pytest.mark.parametrize("exec_type", [PERIOD, NO_RETURN])
-async def test_many_callbacks_tcp_no_return(remote_callbacks_path, exec_type, g, free_port):
-    g = g(host="0.0.0.0", port=free_port)
+async def test_many_callbacks_tcp_no_return(remote_callbacks_path, exec_type, g):
+    g = g(host="0.0.0.0")
     process_name = "test_node"
     start_range = 1
     end_range = 1000
@@ -157,7 +157,7 @@ async def test_many_callbacks_tcp_no_return(remote_callbacks_path, exec_type, g,
         end_range=end_range,
         write_to_file=True,
         host="0.0.0.0",
-        port=free_port,
+        port=g.port,
     )
     path = executable_file.parent / "test_data"
     path.mkdir()

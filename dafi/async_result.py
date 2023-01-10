@@ -1,11 +1,9 @@
-from anyio import to_thread
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from threading import Event as thEvent
 from typing import ClassVar, Dict, Optional, Union, NoReturn, Type, Any
 
 from dafi.exceptions import RemoteError, TimeoutError, RemoteStoppedUnexpectedly, GlobalContextError
 from dafi.utils.custom_types import RemoteResult, SchedulerTaskType
-from dafi.utils.misc import async_library
 
 
 @dataclass
@@ -15,19 +13,9 @@ class AsyncResult:
     func_name: str
     uuid: str
     result: Optional[RemoteResult] = None
-    async_context: Optional[str] = field(default_factory=async_library)
 
     def __post_init__(self):
         self._ready = thEvent()
-
-    async def __self_await__(self):
-        return self
-
-    def __await__(self):
-        return self.__self_await__().__await__()
-
-    def __and__(self, other):
-        return self
 
     @classmethod
     async def _fold_results(cls):
@@ -36,7 +24,8 @@ class AsyncResult:
                 info="Lost connection to Controller.",
                 _awaited_error_type=RemoteStoppedUnexpectedly,
             )
-            ares.set()
+            if isinstance(ares, AsyncResult):
+                ares.set()
 
     @classmethod
     async def _set_and_trigger(cls, msg_uuid: int, result: Any) -> NoReturn:
@@ -51,27 +40,8 @@ class AsyncResult:
         self._ready.set()
 
     def get(self, timeout: Union[int, float] = None) -> RemoteResult:
-        if self.async_context:
-            return self._get_async(timeout=timeout)
-        return self._get(timeout=timeout)
-
-    def _get(self, timeout: Union[int, float] = None) -> RemoteResult:
         if self.result is None:
             self._ready.wait(timeout=timeout)
-            self.result = self._awaited_results.pop(self.uuid)
-
-            if isinstance(self.result, RemoteError):
-                self.result.raise_with_trackeback()
-
-            if self.result == self:
-                self.result = None
-                raise TimeoutError(f"Function {self.func_name} result timed out")
-
-        return self.result
-
-    async def _get_async(self, timeout: Union[int, float] = None) -> RemoteResult:
-        if self.result is None:
-            await to_thread.run_sync(self._ready.wait, timeout)
             self.result = self._awaited_results.pop(self.uuid)
 
             if isinstance(self.result, RemoteError):

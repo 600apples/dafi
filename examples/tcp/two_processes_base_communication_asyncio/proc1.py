@@ -18,26 +18,25 @@ async def greeting2():
 
 async def main():
     remote_proc = "Async Brown Fox"
-    g = Global(process_name=PROC_NAME, init_controller=False, host="localhost", port=8888)
 
-    print(f"wait for {remote_proc} process to be started...")
-    await g.wait_process(remote_proc)
+    with Global(process_name=PROC_NAME, init_controller=False, host="localhost", port=8888) as g:
 
-    for _ in range(10):
-        try:
-            res = g.call.cheers1("foo", "bar").fg()  # another syntax: g.call.cheers1("foo", "bar") & FG
-            print(res)
-            await sleep(2)
-            res = g.call.cheers2().fg()
-            print(res)
-            await sleep(2)
-        except RemoteStoppedUnexpectedly as e:
-            # We need to handle GlobalContextError in order one process exit earlier.
-            # It means remote callbacks becomes unavailable.
-            print(e)
-            break
+        print(f"wait for {remote_proc} process to be started...")
+        g.wait_process(remote_proc)
 
-    g.stop()
+        for _ in range(10):
+            try:
+                res = g.call.cheers1("foo", "bar").fg()  # another syntax: g.call.cheers1("foo", "bar") & FG
+                print(res)
+                await sleep(2)
+                res = g.call.cheers2().fg()
+                print(res)
+                await sleep(2)
+            except RemoteStoppedUnexpectedly as e:
+                # We need to handle GlobalContextError in order one process exit earlier.
+                # It means remote callbacks becomes unavailable.
+                print(e)
+                break
 
 
 if __name__ == "__main__":

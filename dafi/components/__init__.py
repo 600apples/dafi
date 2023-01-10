@@ -71,6 +71,8 @@ class TcpBase(ComponentI, grpc_messager.MessagerServiceServicer):
             yield aio_channel
 
     async def create_listener(self, task_status: TaskStatus = TASK_STATUS_IGNORED) -> NoReturn:
+        if not self.port:
+            await self.find_random_port()
         server = aio.server()
         grpc_messager.add_MessagerServiceServicer_to_server(self, server)
         listen_addr = f"{self.host}:{self.port}"
@@ -78,6 +80,21 @@ class TcpBase(ComponentI, grpc_messager.MessagerServiceServicer):
         await server.start()
         task_status.started()
         return server
+
+    async def find_random_port(self, min_port: Optional[int] = 49152, max_port: Optional[int] = 65536) -> NoReturn:
+        """
+        Bind this controller to a random port in a range.
+        If the port range is unspecified, the system will choose the port.
+        Args:
+            min_port : int, optional
+                The minimum port in the range of ports to try (inclusive).
+            max_port : int, optional
+                The maximum port in the range of ports to try (exclusive).
+        """
+        for port in range(min_port, max_port):
+            self.port = port
+            if not await self.check_endpoint_is_busy():
+                break
 
 
 class ComponentsBase(UnixBase, TcpBase):
@@ -102,7 +119,7 @@ class ComponentsBase(UnixBase, TcpBase):
         self.ident = string_uuid()
         self._stopped = self._connected = False
 
-        if port:  # Check only port. Full host/port validation already took place before.
+        if host:  # Check only host. Full host/port validation already took place before.
             if self.reconnect_freq and reconnect_freq < 30:
                 raise InitializationError(
                     "Too little reconnect frequency was specified."
@@ -142,19 +159,10 @@ class ComponentsBase(UnixBase, TcpBase):
             yield stream
 
     async def create_listener(self):
-        async with self.connect_listener() as channel:
-            for _ in range(10):
-                state = channel.get_state(try_to_connect=True)
-                if state == ChannelConnectivity.TRANSIENT_FAILURE:
-                    # Ready to connect
-                    break
-                elif state != ChannelConnectivity.IDLE:
-                    self.logger.error(f"{self.info} is already allocated")
-                    self._stopped = True
-                    raise StopComponentError()
-
-                await asyncio.sleep(0.1)
-
+        if await self.check_endpoint_is_busy():
+            self.logger.error(f"{self.info} is already allocated")
+            self._stopped = True
+            raise StopComponentError()
         listener = await self._base.create_listener(self)
         self._connected = True
         return listener
@@ -232,3 +240,15 @@ class ComponentsBase(UnixBase, TcpBase):
 
         # Assign the excepthook to the handler
         sys.excepthook = handle_unhandled_exception
+
+    async def check_endpoint_is_busy(self) -> bool:
+        """Check if unix socket/host-port is already allocated"""
+        async with self.connect_listener() as channel:
+            for _ in range(30):
+                state = channel.get_state(try_to_connect=True)
+                if state == ChannelConnectivity.TRANSIENT_FAILURE:
+                    # Ready to connect
+                    return False
+                elif state == ChannelConnectivity.READY:
+                    return True
+                await asyncio.sleep(0.3)

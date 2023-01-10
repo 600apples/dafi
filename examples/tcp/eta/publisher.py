@@ -18,8 +18,7 @@ def subtract(arg1: int, arg2: int) -> int:
 
 def main():
     # Process name is not required argument and will be generated automatically if not provided.
-    g = Global(init_controller=True, host="localhost", port=8888)
-    g.join()
+    Global(init_controller=True, host="localhost", port=8888).join()
 
 
 if __name__ == "__main__":

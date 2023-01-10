@@ -128,13 +128,7 @@ class Ipc(Thread):
         return result
 
     def run(self) -> NoReturn:
-        if self.init_controller:
-            self.controller = Controller(self.process_name, self.host, self.port)
-
-        if self.init_node:
-            self.node = Node(self.process_name, self.host, self.port, reconnect_freq=self.reconnect_freq)
-
-        if self.node or self.controller:
+        if self.init_controller or self.init_node:
             # TODO add windows support
             if sys.platform == "win32":
                 backend_options = {}
@@ -143,14 +137,19 @@ class Ipc(Thread):
             c_future = n_future = None
             with resilent(RuntimeError):
                 with start_blocking_portal(backend="asyncio", backend_options=backend_options) as portal:
-                    if self.controller:
+                    if self.init_controller:
+                        self.controller = Controller(self.process_name, self.host, self.port)
+
                         c_future, _ = portal.start_task(
                             self.controller.handle,
                             self.global_terminate_event,
                             name=Controller.__class__.__name__,
                         )
+                        self.port = getattr(self.controller, "port", None)
 
-                    if self.node:
+                    if self.init_node:
+                        self.node = Node(self.process_name, self.host, self.port, reconnect_freq=self.reconnect_freq)
+
                         n_future, _ = portal.start_task(
                             self.node.handle,
                             self.global_terminate_event,
@@ -174,6 +173,9 @@ class Ipc(Thread):
 
             LOCAL_CALLBACK_MAPPING.clear()
             LOCAL_CLASS_CALLBACKS.clear()
+        else:
+            self.logger.error("At least one of init_controller or init_node argument must be provided")
+            self.global_condition_event.mark_fail()
 
     def update_callbacks(self, func_info: Dict[str, "RemoteCallback"]) -> NoReturn:
         if self.node:

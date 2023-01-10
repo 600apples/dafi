@@ -8,8 +8,7 @@ from dafi import Global
 
 async def main():
     # Process name is not required argument and will be generated automatically if not provided.
-    g = Global(host="localhost", port=8888)
-    g.join()
+    Global(host="localhost", port=8888).join()
 
 
 if __name__ == "__main__":

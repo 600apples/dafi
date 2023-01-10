@@ -57,8 +57,8 @@ async def test_callback_per_node_unix(remote_callbacks_path, g):
     [p.terminate() for p in remotes]
 
 
-async def test_callback_per_node_tcp(remote_callbacks_path, g, free_port):
-    g = g(host="localhost", port=free_port)
+async def test_callback_per_node_tcp(remote_callbacks_path, g):
+    g = g(host="localhost")
     start_range = 1
     end_range = 10
     range_ = list(range(start_range, end_range))
@@ -69,7 +69,7 @@ async def test_callback_per_node_tcp(remote_callbacks_path, g, free_port):
             template_name="broadcast.jinja2",
             process_name=f"node-{i}",
             host="localhost",
-            port=free_port,
+            port=g.port,
         )
         for i in range_
     ]

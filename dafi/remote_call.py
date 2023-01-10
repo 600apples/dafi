@@ -1,12 +1,9 @@
-import re
-import sys
 import time
 import asyncio
-from inspect import getframeinfo
 from dataclasses import dataclass, field
 from datetime import timedelta, datetime
 from threading import Event
-from typing import Optional, Union, NoReturn, Callable, Coroutine, List, Any
+from typing import Optional, Union, NoReturn, Callable, Coroutine, List
 
 from dafi.async_result import AsyncResult, SchedulerTask
 from dafi.exceptions import GlobalContextError, InitializationError
@@ -46,11 +43,6 @@ class BROADCAST:
     return_result: Optional[bool] = False
 
 
-_empty_result = object()
-_available_operands = "|".join([o.__name__ for o in (FG, BG, NO_RETURN, PERIOD, BROADCAST)])
-_available_operands_search_pattern = re.compile(f"\s*&\s*({_available_operands})\s*(\(.*?\))?")
-
-
 @dataclass
 class RemoteCall:
     _ipc: "Ipc" = field(repr=False)
@@ -58,7 +50,6 @@ class RemoteCall:
     args: P.args = field(default_factory=tuple)
     kwargs: P.kwargs = field(default_factory=dict)
     _inside_callback_context: Optional[bool] = field(repr=False, default=False)
-    _result: Optional[Any] = field(repr=False, default=_empty_result)
 
     def __str__(self):
         sep = ", "
@@ -67,32 +58,13 @@ class RemoteCall:
         args_kwargs = f"{args}{kwargs}".strip(",").strip()
         return f"<{self.__class__.__name__} {self.func_name}({args_kwargs})>"
 
-    async def __self_await__(self, next_operand: Union[FG, BG, BROADCAST, NO_RETURN, PERIOD]):
-        self._result = await (self & next_operand)
+    async def __self_await__(self):
         return self
 
     def __await__(self):
-        frame = sys._getframe(1)
-        info = getframeinfo(frame)
-        code_context = info.code_context
-        frame_locals = frame.f_locals
-        frame_globals = frame.f_globals
-        try:
-            next_operand, next_operand_args = re.findall(_available_operands_search_pattern, "".join(code_context))[0]
-        except (ValueError, IndexError):
-            raise InitializationError(
-                f"Object of {self.__class__.__name__} doesn't support await expressions. "
-                f"Use await g.call.<callback_name> & {_available_operands}[(*args, **kwargs)].\n"
-                f"Do not use pre-initialization of operands either.\n"
-                f"For instance this is wrong:\nop=BG(eta=15)\nawait g.call.<callback_name> & op\n"
-            )
-        next_operand = eval(f"{next_operand}{next_operand_args}", frame_globals, frame_locals)
-        return self.__self_await__(next_operand).__await__()
+        return self.__self_await__().__await__()
 
     def __and__(self, other) -> Union[RemoteResult, Coroutine]:
-        if self._result != _empty_result:
-            return self._result
-
         if type(other) == type:
             other = other()
 
@@ -114,8 +86,8 @@ class RemoteCall:
             return self.broadcast(eta=other.eta, return_result=other.return_result, timeout=other.timeout)
 
         else:
-            valid_operands = ", ".join(_available_operands)
-            raise GlobalContextError(f"Invalid operand {type(other)}. Use one of {valid_operands}")
+            _available_operands = "|".join([o.__name__ for o in (FG, BG, NO_RETURN, PERIOD, BROADCAST)])
+            raise GlobalContextError(f"Invalid operand {type(other)}. Use one of {_available_operands}")
 
     @property
     def info(self) -> Optional["RemoteCallback"]:
@@ -128,45 +100,6 @@ class RemoteCall:
         return bool(self.info)
 
     def fg(self, timeout: Optional[TimeUnits] = None) -> RemoteResult:
-        return self._fg(timeout=timeout)
-
-    def bg(self, timeout: Optional[TimeUnits] = None, eta: Optional[TimeUnits] = None) -> AsyncResult:
-        return self._bg(timeout=timeout, eta=eta)
-
-    def no_return(self, eta: Optional[TimeUnits] = None) -> NoReturn:
-        return self._no_return(eta=eta)
-
-    def broadcast(
-        self,
-        eta: Optional[TimeUnits] = None,
-        return_result: Optional[bool] = False,
-        timeout: Optional[TimeUnits] = None,
-    ) -> Optional[AsyncResult]:
-        return self._broadcast(eta=eta, return_result=return_result, timeout=timeout)
-
-    def period(
-        self, at_time: Optional[Union[List[TimeUnits], TimeUnits]], interval: Optional[TimeUnits]
-    ) -> SchedulerTask:
-        return self._period(at_time=at_time, interval=interval)
-
-    def _get_duration(self, val: TimeUnits, arg_name: str, default: Optional[int] = None) -> Union[int, float]:
-        if val:
-            if isinstance(val, timedelta):
-                val = val.total_seconds()
-            elif isinstance(val, str):
-                val = timeparse(val)
-            elif isinstance(val, datetime):
-                val = time.mktime(val.timetuple())
-            elif not isinstance(val, (float, int)):
-                raise GlobalContextError(
-                    f"Invalid {arg_name} format. Should be string, int, float or datetime.timedelta."
-                )
-
-            if val < 0:
-                raise GlobalContextError(f"{arg_name} cannot be negative.")
-        return val or default
-
-    def _fg(self, timeout: Optional[TimeUnits] = None) -> RemoteResult:
         timeout = self._get_duration(timeout, "timeout")
         return self._ipc.call(
             self.func_name,
@@ -178,7 +111,7 @@ class RemoteCall:
             inside_callback_context=self._inside_callback_context,
         )
 
-    def _bg(self, timeout: Optional[TimeUnits] = None, eta: Optional[TimeUnits] = None) -> AsyncResult:
+    def bg(self, timeout: Optional[TimeUnits] = None, eta: Optional[TimeUnits] = None) -> AsyncResult:
         timeout = self._get_duration(timeout, "timeout")
         eta = self._get_duration(eta, "eta", 0)
         return self._ipc.call(
@@ -192,7 +125,7 @@ class RemoteCall:
             inside_callback_context=self._inside_callback_context,
         )
 
-    def _no_return(self, eta: Optional[TimeUnits] = None) -> NoReturn:
+    def no_return(self, eta: Optional[TimeUnits] = None) -> NoReturn:
         eta = self._get_duration(eta, "eta", 0)
         res = self._ipc.call(
             self.func_name,
@@ -206,7 +139,7 @@ class RemoteCall:
         if asyncio.iscoroutine(res) and self._inside_callback_context:
             asyncio.create_task(res)
 
-    def _broadcast(
+    def broadcast(
         self,
         eta: Optional[TimeUnits] = None,
         return_result: Optional[bool] = False,
@@ -229,7 +162,7 @@ class RemoteCall:
             asyncio.create_task(res)
         return res
 
-    def _period(
+    def period(
         self, at_time: Optional[Union[List[TimeUnits], TimeUnits]], interval: Optional[TimeUnits]
     ) -> SchedulerTask:
         if at_time is not None:
@@ -254,6 +187,23 @@ class RemoteCall:
         if asyncio.iscoroutine(res) and self._inside_callback_context:
             return asyncio.create_task(res)
         return res
+
+    def _get_duration(self, val: TimeUnits, arg_name: str, default: Optional[int] = None) -> Union[int, float]:
+        if val:
+            if isinstance(val, timedelta):
+                val = val.total_seconds()
+            elif isinstance(val, str):
+                val = timeparse(val)
+            elif isinstance(val, datetime):
+                val = time.mktime(val.timetuple())
+            elif not isinstance(val, (float, int)):
+                raise GlobalContextError(
+                    f"Invalid {arg_name} format. Should be string, int, float or datetime.timedelta."
+                )
+
+            if val < 0:
+                raise GlobalContextError(f"{arg_name} cannot be negative.")
+        return val or default
 
 
 @dataclass

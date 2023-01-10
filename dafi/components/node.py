@@ -32,8 +32,9 @@ class Node(ComponentsBase):
 
     @with_debug_trace
     async def on_stop(self) -> NoReturn:
-        await self.channel.clear_queue()
-        await self.channel.stop()
+        if self.channel:
+            await self.channel.clear_queue()
+            await self.channel.stop()
         FreezableQueue.factory_remove(self.ident)
         await super().on_stop()
 

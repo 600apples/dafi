@@ -78,8 +78,8 @@ async def test_callback_per_node_unix(remote_callbacks_path, exec_type, g):
 
 
 @pytest.mark.parametrize("exec_type", [FG, BG])
-async def test_callback_per_node_tcp(remote_callbacks_path, exec_type, g, free_port):
-    g = g(host="localhost", port=free_port)
+async def test_callback_per_node_tcp(remote_callbacks_path, exec_type, g):
+    g = g(host="localhost")
     start_range = 1
     end_range = 10
     range_ = list(range(start_range, end_range))
@@ -91,7 +91,7 @@ async def test_callback_per_node_tcp(remote_callbacks_path, exec_type, g, free_p
             template_name="callback_per_node.jinja2",
             process_name=f"node-{i}",
             host="localhost",
-            port=free_port,
+            port=g.port,
         )
         for i in range_
     ]
@@ -168,8 +168,8 @@ async def test_callback_per_node_broadcast_unix(remote_callbacks_path, g):
     [p.terminate() for p in remotes]
 
 
-async def test_callback_per_node_broadcast_tcp(remote_callbacks_path, g, free_port):
-    g = g(host="localhost", port=free_port)
+async def test_callback_per_node_broadcast_tcp(remote_callbacks_path, g):
+    g = g(host="localhost")
     start_range = 1
     end_range = 10
     range_ = list(range(start_range, end_range))
@@ -181,7 +181,7 @@ async def test_callback_per_node_broadcast_tcp(remote_callbacks_path, g, free_po
             template_name="callback_per_node.jinja2",
             process_name=f"node-{i}",
             host="localhost",
-            port=free_port,
+            port=g.port,
         )
         for i in range_
     ]

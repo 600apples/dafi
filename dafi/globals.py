@@ -70,10 +70,10 @@ class Global(metaclass=Singleton):
                 " `init_controller=True` or `init_node=True`."
             )
 
-        if (self.host and not self.port) or (self.port and not self.host):
-            raise InitializationError("To work through the TCP socket, the host and port arguments must be defined.")
+        # if (self.host and not self.port) or (self.port and not self.host):
+        #     raise InitializationError("To work through the TCP socket, the host and port arguments must be defined.")
 
-        if (not self.host and not self.port) and sys.platform == "win32":
+        if not self.host and sys.platform == "win32":
             raise InitializationError("Windows platform doesn't support unix sockets. Provide host and port to use TCP")
 
         self._global_terminate_event = Event()
@@ -92,6 +92,7 @@ class Global(metaclass=Singleton):
         self.ipc.start()
         if not self.ipc.wait():
             raise GlobalContextError("Unable to start dafi components.")
+        self.port = self.ipc.port
 
     def __enter__(self):
         return self
@@ -122,10 +123,11 @@ class Global(metaclass=Singleton):
         Join global to main thread.
         Don't use this method if you're running asynchronous application as it blocks event loop.
         """
-        if async_library():
-            return self._join_async()
-        else:
-            return self.ipc.join()
+        return self.ipc.join()
+
+    async def join_async(self):
+        while self.ipc.is_alive():
+            await sleep(0.5)
 
     def stop(self, kill_all_connected_nodes: Optional[bool] = False):
         res = None
@@ -159,10 +161,6 @@ class Global(metaclass=Singleton):
 
     def cancel_scheduled_task_by_uuid(self, remote_process: str, uuid: int) -> NoReturn:
         return self.ipc.cancel_scheduler(remote_process=remote_process, msg_uuid=uuid)
-
-    async def _join_async(self):
-        while self.ipc.is_alive():
-            await sleep(0.5)
 
 
 class callback(Generic[GlobalCallback]):
