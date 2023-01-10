@@ -1,6 +1,6 @@
 import time
 import asyncio
-from dafi.components.operations.freezable_queue import FreezableQueue, ItemPriority, STOP_MARKER
+from daffi.components.operations.freezable_queue import FreezableQueue, ItemPriority, STOP_MARKER
 
 
 class TestFreezebleQueue:

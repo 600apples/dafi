@@ -1,0 +1,60 @@
+{% extends "layout/base.jinja2" %}
+
+{%- block content %}
+
+import trio
+
+
+async def child1():
+    await trio.sleep(2)
+
+
+async def child2():
+    await trio.sleep(3)
+
+
+@callback
+async def test_callback():
+    print("parent: started!")
+    async with trio.open_nursery() as nursery:
+        print("parent: spawning child1...")
+        nursery.start_soon(child1)
+
+        print("parent: spawning child2...")
+        nursery.start_soon(child2)
+
+        print("parent: waiting for children to finish...")
+    print("parent: all done!")
+
+    return "Ok"
+
+{% endblock %}
+
+
+{% block build %}
+async def main():
+    g = Global(
+        {%- if process_name %}
+        process_name={{ macros.quote(process_name) }},
+        {% endif %}
+        {%- if host %}
+        host={{ macros.quote(host) }},
+        {% endif %}
+        {%- if port %}
+        port={{ port }},
+        {% endif -%}
+        {%- if init_controller %}
+        init_controller={{ init_controller }},
+        {% endif -%}
+    )
+    await g.join_async()
+{% endblock -%}
+
+
+if __name__ == "__main__":
+
+{% block exec %}
+    trio.run(main)
+{% endblock %}
+
+

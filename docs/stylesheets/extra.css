@@ -29,11 +29,13 @@ header:after{
     color: white !important;
 }
 
-.admonition.warning {
-    background-color: #ff9100 !important;
-    color: white !important;
-}
-
 .admonition-title {
     background-color: #b3b3f1d6 !important;
+}
+
+a[href$=".png"]>img {
+  clear: both;
+  float: left;
+  width: 50%;
+  margin: 0 3rem 0.4rem 0.4rem;
 }

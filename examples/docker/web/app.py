@@ -1,6 +1,6 @@
 import os
 import logging
-from dafi import Global, FG
+from daffi import Global, FG
 
 from flask import (
     Flask,

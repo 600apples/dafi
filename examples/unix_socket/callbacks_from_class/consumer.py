@@ -3,7 +3,7 @@ Consumer is the process that consumes available remote functions.
 """
 
 import asyncio
-from dafi import Global, FG
+from daffi import Global, FG
 
 
 async def main():

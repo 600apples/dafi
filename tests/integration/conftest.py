@@ -2,7 +2,7 @@ import pytest
 from pathlib import Path
 import socketserver
 
-from dafi import Global
+from daffi import Global
 from jinja2 import FileSystemLoader, Environment
 
 

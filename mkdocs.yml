@@ -1,5 +1,5 @@
-site_name: dafi
-site_url: https://600apples.github.io/dafi/
+site_name: daffi
+site_url: https://600apples.github.io/daffi/
 site_dir: mkdocs_files
 extra_css:
   - stylesheets/extra.css
@@ -21,11 +21,39 @@ theme:
         icon: material/brightness-4
         name: Switch to light mode
 nav:
-  - Home: index.md
+  - Overview: index.md
+  - Installtion: installation.md
+  - Main concepts: main-concepts-and-architecture.md
+  - Getting started: getting-started.md
+  - Execution modifiers: execution-modifiers.md
+  - Asynchronous applications: async-apps.md
+  - Advanced:
+    - Callback classes: callback-classes.md
+    - Broadcasting: broadcasting.md
+    - Pipeline and g object injection: pipeline.md
+    - Scheduling tasks: scheduling-tasks.md
+  - Code reference:
+     - Global: code-reference/global.md
+     - callback: code-reference/callback.md
 
 plugins:
   - search
   - section-index
+  - glightbox
+  - mkdocstrings:
+      default_handler: python
+      handlers:
+        python:
+          selection:
+            filters:
+              - "!^_" # exlude all members starting with _
+              - "^__init__$" # but always include __init__ modules and methods
+          rendering:
+            show_signature_annotations: true
+            inherited_members: true
+            show_source: false
+            show_object_full_path: false
+            show_root_members_full_path: false
 
 markdown_extensions:
   - admonition

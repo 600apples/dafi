@@ -1,13 +1,12 @@
 {%- import "layout/macros.jinja2" as macros -%}
 import time
-from dafi import *
+from daffi import *
 from anyio import sleep
 
 {% block content %}{% endblock %}
 
-
-if __name__ == "__main__":
 {% block build %}
+def main():
     g = Global(
         {%- if process_name %}
         process_name={{ macros.quote(process_name) }},
@@ -22,9 +21,15 @@ if __name__ == "__main__":
         init_controller={{ init_controller }},
         {% endif -%}
     )
+    g.join()
 {% endblock -%}
 
-{% block exec %}{% endblock %}
-    g.join()
+
+if __name__ == "__main__":
+
+{% block exec %}
+    main()
+{% endblock %}
+
 
 

@@ -1,7 +1,7 @@
 import os
 import logging
 from itertools import cycle
-from dafi import Global, callback, NO_RETURN
+from daffi import Global, callback, NO_RETURN
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)

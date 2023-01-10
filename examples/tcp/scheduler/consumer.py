@@ -4,7 +4,7 @@ Consumer is the process that consumes available remote functions.
 
 import time
 from datetime import datetime, timedelta
-from dafi import Global, PERIOD
+from daffi import Global, PERIOD
 
 
 def main():

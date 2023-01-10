@@ -1,8 +1,7 @@
 import pytest
 import sys
-import time
 from datetime import datetime
-from dafi import PERIOD, GlobalContextError, RemoteCallError
+from daffi import PERIOD, GlobalContextError, RemoteCallError
 from subprocess import Popen
 
 

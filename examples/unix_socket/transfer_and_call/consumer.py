@@ -4,7 +4,7 @@ Make sure you started publisher.py first in order to transfer and execute functi
 """
 
 import os
-from dafi import Global
+from daffi import Global
 
 
 PROC_NAME = "Brown Fox"

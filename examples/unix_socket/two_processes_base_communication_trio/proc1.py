@@ -1,5 +1,5 @@
 from trio import sleep, run
-from dafi import Global, callback, RemoteStoppedUnexpectedly
+from daffi import Global, callback, RemoteStoppedUnexpectedly
 
 PROC_NAME = "Trio White Rabbit"
 
