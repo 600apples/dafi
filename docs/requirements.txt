@@ -1,3 +1,0 @@
-mkdocs==1.4.2
-mkdocs-material==8.5.9
-mkdocs-section-index==0.3.4

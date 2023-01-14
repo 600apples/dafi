@@ -9,7 +9,7 @@ But `Global` also has `join_async` method which fits async non blocking model.
 
 Also there are two methods `get` and `get_async` to take result depending on application tipe.
 
-For instance in [getting-started](getting-started.md) section we used `get_async` method to obtain result asynchronously:
+For instance in [full example](full-example.md) section we used `get_async` method to obtain result asynchronously:
 ```python
 result = await future.get_async()
 ```
