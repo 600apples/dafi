@@ -6,6 +6,7 @@
 [![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/ambv/black)
 [![Linux](https://svgshare.com/i/Zhy.svg)](https://svgshare.com/i/Zhy.svg)
 [![macOS](https://svgshare.com/i/ZjP.svg)](https://svgshare.com/i/ZjP.svg)
+[![Downloads](https://static.pepy.tech/personalized-badge/daffi?period=month&units=international_system&left_color=black&right_color=orange&left_text=Downloads)](https://pepy.tech/project/daffi)
 
 Daffi's goal is to move away from the traditional server-client communication approach where processes are unequal. This concept has been replaced by the controller-node principle. Each process can contain either a controller or a node, or both.
 Each daffi node gets the ability to create remote callbacks and execute callbacks created on other nodes. 
@@ -14,6 +15,8 @@ This can best be described as a multiprocessing [observer](https://refactoring.g
 This approach allows you to create both simple architectural solutions such as one-to-one communication between nodes and more complex schemes such as a pipeline chain or one-to-many broadcasting.
 It is worth to note that the daffi's syntax is very easy. Unlike many other similar libraries, on the surface, daffi contains only a few top-level classes for initializing the process as a node or controller. 
 
+Briefly speaking about the area of use. Daffi takes the best of several worlds and can be used as a task dispatcher or to transfer high-load streams from one process to another.
+
 ### Features
  
 - All processes where daffi is running have equal opportunities. Any process (Node) can trigger a remote callback on any other process (Node).
@@ -21,3 +24,5 @@ It is worth to note that the daffi's syntax is very easy. Unlike many other simi
 - Daffi works equally well with both synchronous and asynchronous applications. You can call asynchronous remote callback from synchronous application and vice versa. [Trio](https://trio.readthedocs.io/en/stable/) support is also included.
 - Simple syntax. Calling remote callback is as simple as execution of local method. 
 - Daffi can work via TCP or via UNIX socket.
+- Daffi can either manage single on demand tasks or be using for streaming.
+

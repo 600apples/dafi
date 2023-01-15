@@ -2,7 +2,7 @@ import re
 import sys
 import time
 from inspect import getframeinfo
-from anyio import to_thread
+from anyio import to_thread, sleep
 from dataclasses import dataclass, field
 from datetime import timedelta, datetime
 from threading import Event
@@ -46,8 +46,13 @@ class BROADCAST:
     return_result: Optional[bool] = False
 
 
+@dataclass
+class STREAM:
+    ...
+
+
 _empty_result = object()
-_available_operands = "|".join([o.__name__ for o in (FG, BG, NO_RETURN, PERIOD, BROADCAST)])
+_available_operands = "|".join([o.__name__ for o in (FG, BG, NO_RETURN, PERIOD, BROADCAST, STREAM)])
 _available_operands_search_pattern = re.compile(f"\\s*&\\s*({_available_operands})\\s*(\\(.*?\\))?")
 
 
@@ -67,10 +72,10 @@ class RemoteCall:
         args_kwargs = f"{args}{kwargs}".strip(",").strip()
         return f"<{self.__class__.__name__} {self.func_name}({args_kwargs})>"
 
-    def obtain_result_in_thread(self, next_operand: Union[FG, BG, BROADCAST, NO_RETURN, PERIOD]):
+    def obtain_result_in_thread(self, next_operand: Union[FG, BG, BROADCAST, NO_RETURN, PERIOD, STREAM]):
         self._result = self & next_operand
 
-    async def __self_await__(self, next_operand: Union[FG, BG, BROADCAST, NO_RETURN, PERIOD]):
+    async def __self_await__(self, next_operand: Union[FG, BG, BROADCAST, NO_RETURN, PERIOD, STREAM]):
         await to_thread.run_sync(self.obtain_result_in_thread, next_operand)
         return self
 
@@ -113,6 +118,9 @@ class RemoteCall:
 
         elif isinstance(other, (BROADCAST, type(BROADCAST))):
             return self.broadcast(eta=other.eta, return_result=other.return_result, timeout=other.timeout)
+
+        elif isinstance(other, (STREAM, type(STREAM))):
+            return self.stream()
 
         else:
             _available_operands = "|".join([o.__name__ for o in (FG, BG, NO_RETURN, PERIOD, BROADCAST)])
@@ -208,6 +216,15 @@ class RemoteCall:
             inside_callback_context=self._inside_callback_context,
         )
 
+    def stream(self) -> NoReturn:
+        return self._ipc.call(
+            self.func_name,
+            args=self.args,
+            kwargs=None,
+            stream=True,
+            inside_callback_context=self._inside_callback_context,
+        )
+
     def _get_duration(self, val: TimeUnits, arg_name: str, default: Optional[int] = None) -> Union[int, float]:
         if val:
             if isinstance(val, timedelta):
@@ -264,22 +281,26 @@ class LazyRemoteCall:
     def _exist(self) -> bool:
         return bool(self._info)
 
-    def _wait_function(self) -> NoReturn:
+    def _wait_function(self, _async: Optional[bool] = False) -> NoReturn:
         interval = 0.5
 
         def condition_executable():
             return self._exist
 
-        self._wait(condition_executable, interval)
+        if _async:
+            return self._wait_async(condition_executable, interval)
+        return self._wait(condition_executable, interval)
 
-    def _wait_process(self, process_name: str) -> NoReturn:
+    def _wait_process(self, process_name: str, _async: Optional[bool] = False) -> NoReturn:
         self._ipc._check_node()
         interval = 0.5
 
         def condition_executable():
             return process_name in self._ipc.node.node_callback_mapping
 
-        self._wait(condition_executable, interval)
+        if _async:
+            return self._wait_async(condition_executable, interval)
+        return self._wait(condition_executable, interval)
 
     def __call__(__self__, *args, **kwargs) -> RemoteCall:
         if not __self__._func_name:
@@ -305,3 +326,9 @@ class LazyRemoteCall:
             if condition_executable():
                 break
             time.sleep(interval)
+
+    async def _wait_async(self, condition_executable: Callable, interval: float) -> NoReturn:
+        while True:
+            if condition_executable():
+                break
+            await sleep(interval)

@@ -22,7 +22,7 @@ But in some cases it is helpful to give nodes meaningful names.
 For example one process can wait another process by its name:
 
 ```python
-g.wait_process('process name here')
+g.wait_process('node name here')
 ```
 
 `init_controller=True` Means we want to start `Controller` in this process.
@@ -106,7 +106,7 @@ result2 = g.call.subtract_two_numbers(22, 13) & FG
 `FG` in this example is execution modifier. You can read about execution modifiers [here](execution-modifiers.md)
  
 !!! warning
-    Do not use the same callback names in different processes unless you want to use `BROADCAST` execution modifier.
+    Do not use the same callback names in different processes unless you want to use `BROADCAST` or `STREAM` execution modifiers.
     
     For singular execution, for instance if you have `sum_two_numbers` callback registered in process `A` and in process `B` then
     only one of them will be triggered. Daffi use random strategy to execute callback by name. You cannot control which one

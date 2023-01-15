@@ -1,5 +1,6 @@
 import os
 import sys
+from itertools import chain
 from logging import Logger
 from inspect import iscoroutinefunction
 from threading import Thread, Event
@@ -13,7 +14,14 @@ from daffi.components.node import Node
 from daffi.exceptions import InitializationError, GlobalContextError, TimeoutError
 from daffi.components.proto.message import RpcMessage, ServiceMessage, MessageFlag
 from daffi.signals import set_signal_handler
-from daffi.utils.misc import Period, search_remote_callback_in_mapping, resilent, ConditionEvent, async_library
+from daffi.utils.misc import (
+    Period,
+    search_remote_callback_in_mapping,
+    resilent,
+    ConditionEvent,
+    async_library,
+    iterable,
+)
 from daffi.utils.func_validation import pretty_callbacks
 from daffi.utils.settings import LOCAL_CALLBACK_MAPPING, LOCAL_CLASS_CALLBACKS
 
@@ -71,6 +79,7 @@ class Ipc(Thread):
         func_period: Optional[Period] = None,
         broadcast: Optional[bool] = False,
         inside_callback_context: Optional[bool] = False,
+        stream: Optional[bool] = False,
     ):
         self._check_node()
         assert func_name is not None
@@ -93,6 +102,10 @@ class Ipc(Thread):
                     if available_callbacks
                     else ""
                 )
+
+        if stream:
+            # Stream has special initialization and validation process.
+            return self.stream(func_name, args)
 
         _, remote_callback = data
         remote_callback.validate_provided_arguments(*args, **kwargs)
@@ -179,6 +192,57 @@ class Ipc(Thread):
 
         LOCAL_CALLBACK_MAPPING.clear()
         LOCAL_CLASS_CALLBACKS.clear()
+
+    def stream(self, func_name, args: Tuple) -> NoReturn:
+        if self.is_running:
+            self._check_node()
+
+            if len(args) != 1:
+                raise InitializationError(
+                    "Pass exactly 1 positional argument to initialize stream."
+                    " It can be list, tuple generator etc. In general it should be iterable object"
+                )
+            stream_items = args[0]
+            if not iterable(stream_items):
+                raise InitializationError("Stream support only iterable objects like lists, tuples, generators etc.")
+
+            stream_items = iter(stream_items)
+            try:
+                first_item = next(stream_items)
+            except StopIteration:
+                raise InitializationError("Stream is empty")
+
+            data = search_remote_callback_in_mapping(
+                self.node.node_callback_mapping, func_name, exclude=self.process_name
+            )
+            _, remote_callback = data
+            remote_callback.validate_provided_arguments(first_item)
+            stream_items = chain([first_item], stream_items)
+
+            msg = RpcMessage(
+                flag=MessageFlag.INIT_STREAM,
+                transmitter=self.process_name,
+                func_name=func_name,
+            )
+            # Register result in order to obtain all available receivers
+            result = self.node.send_and_register_result(func_name=func_name, msg=msg)
+            receivers = result.get()
+
+            if not receivers:
+                raise InitializationError("Unable to find receivers for stream.")
+
+            # Register the same result second time to track stream errors (If happened)
+            result = result._clone_and_register()
+            with self.node.stream_store.request_multi_connection(
+                receivers=receivers, msg_uuid=str(msg.uuid)
+            ) as stream_pair_group:
+                for stream_item in stream_items:
+                    if stream_pair_group.closed:
+                        break
+                    for msg in ServiceMessage.build_stream_message(data=stream_item):
+                        stream_pair_group.send_threadsave(msg)
+            # Wait all receivers to finish stream processing.
+            result.get()
 
     def update_callbacks(self, func_info: Dict[str, "RemoteCallback"]) -> NoReturn:
         if self.node:

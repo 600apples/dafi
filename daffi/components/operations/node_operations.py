@@ -1,16 +1,19 @@
 import sys
 import pickle
 import logging
-from typing import NoReturn, Dict, Optional
+from typing import NoReturn, Dict
+from queue import Queue as thQueue
 
+from anyio import run, create_task_group
 from anyio._backends._asyncio import TaskGroup
 from anyio.abc import TaskStatus, CancelScope
 
 from daffi.async_result import AsyncResult
 from daffi.utils.custom_types import GlobalCallback, K
-from daffi.components.proto.message import RpcMessage, ServiceMessage, MessageFlag, RemoteError
+from daffi.components.proto.message import RpcMessage, ServiceMessage, MessageFlag, RemoteError, messager_pb2, Message
 from daffi.utils.debug import with_debug_trace
 from daffi.components.scheduler import Scheduler
+from daffi.utils.misc import iterable
 from daffi.utils.misc import run_in_threadpool, run_from_working_thread
 
 from daffi.utils.settings import (
@@ -18,6 +21,7 @@ from daffi.utils.settings import (
 )
 from daffi.components.operations.channel_store import ChannelPipe
 from daffi.exceptions import ReckAcceptError, StopComponentError
+from daffi.components.operations.streams_store import StreamPairStore, ItemPriority
 
 import tblib.pickling_support
 
@@ -30,6 +34,7 @@ class NodeOperations:
     def __init__(self, logger: logging.Logger, async_backend: str):
         self.logger = logger
         self._channel = None
+        self.stream_store = StreamPairStore()
         self.async_backend = async_backend
         self.node_callback_mapping: Dict[K, Dict[K, GlobalCallback]] = dict()
 
@@ -71,7 +76,7 @@ class NodeOperations:
                 f"Function {msg.func_name!r} is not registered as callback locally."
                 f" Make sure python loaded module where callback is located."
             )
-            self.channel.send(
+            await self.channel.send(
                 RpcMessage(
                     flag=MessageFlag.SUCCESS,
                     transmitter=process_name,
@@ -153,8 +158,117 @@ class NodeOperations:
             return_result=True,
             func_args=(None,),
         )
-        self.channel.send(message_to_return)
+        await self.channel.send(message_to_return)
         raise StopComponentError()
+
+    @with_debug_trace
+    async def on_stream_init(self, msg: RpcMessage, stub, sg, process_name):
+        msg.loads()
+        remote_callback = LOCAL_CALLBACK_MAPPING.get(msg.func_name)
+        if not remote_callback:
+            info = (
+                f"Function {msg.func_name!r} is not registered as callback locally."
+                f" Make sure python loaded module where callback is located."
+            )
+            self.logger.error(info)
+
+        else:
+            with CancelScope(shield=True):
+                sg.start_soon(
+                    self._remote_func_stream_executor,
+                    remote_callback,
+                    msg,
+                    process_name,
+                    stub,
+                )
+
+    @with_debug_trace
+    async def on_stream_error(self, msg: RpcMessage):
+        msg.loads()
+        error = msg.error
+        ares = AsyncResult._awaited_results.get(msg.uuid)
+        if not ares:
+            self.logger.warning(f"Result {msg.uuid} was taken by timeout")
+        elif not ares and error:
+            # Result already taken by timeout. No need to raise error but need to notify about
+            # finally remote call returned exception.
+            error.show_in_log(logger=self.logger)
+        AsyncResult._set_and_trigger(msg.uuid, error)
+
+        stream_pair = self.stream_store.get(f"{msg.transmitter}-{msg.uuid}")
+        if stream_pair:
+            stream_pair.closed = True
+            await stream_pair.stop(ItemPriority.FIRST)
+
+    @with_debug_trace
+    async def _remote_func_stream_executor(
+        self,
+        remote_callback: "RemoteCallback",
+        message: RpcMessage,
+        process_name: str,
+        stub,
+    ):
+        message_iterator = stub.stream_from_controller(
+            messager_pb2.Empty(), metadata=[("receiver", message.receiver), ("uuid", str(message.uuid))]
+        )
+        error = result = None
+        items_queue = thQueue()
+        _stop_marker = object()
+
+        def _stream_executor(callback: GlobalCallback, queue: thQueue, backend: str):
+            nonlocal result
+
+            async def _run_async():
+                nonlocal result
+                while True:
+                    args = queue.get()
+                    if args is _stop_marker:
+                        return
+                    result = await callback(args)
+
+            if callback.is_async:
+                run(_run_async, backend=backend)
+            else:
+                while True:
+                    args = queue.get()
+                    if args is _stop_marker:
+                        return
+                    result = callback(args)
+
+        try:
+            async with create_task_group() as sg:
+                sg.start_soon(run_in_threadpool, _stream_executor, remote_callback, items_queue, self.async_backend)
+                async for msg in Message.from_message_iterator(message_iterator):
+                    msg.loads()
+                    items_queue.put_nowait(msg.data)
+                items_queue.put_nowait(_stop_marker)
+        except Exception as e:
+            info = f"Exception while streaming function {message.func_name!r} on remote executor {process_name!r}. {e}"
+            error = RemoteError(info=info, traceback=pickle.dumps(sys.exc_info()))
+
+        try:
+            message_to_return = RpcMessage(
+                flag=MessageFlag.SUCCESS,
+                transmitter=process_name,
+                receiver=message.transmitter,
+                uuid=message.uuid,
+                func_name=message.func_name,
+                func_args=(result,),
+                error=error,
+            )
+        except TypeError as e:
+            info = f"Unsupported return type {type(result)}."
+            self.logger.error(info + f" {e}")
+            error = RemoteError(info=info, traceback=pickle.dumps(sys.exc_info()))
+            message_to_return = RpcMessage(
+                flag=MessageFlag.SUCCESS,
+                transmitter=process_name,
+                receiver=message.transmitter,
+                uuid=message.uuid,
+                func_name=message.func_name,
+                error=error,
+            )
+        await self.channel.send(message_to_return)
 
     @with_debug_trace
     async def _remote_func_executor(
@@ -208,4 +322,4 @@ class NodeOperations:
                     return_result=message.return_result,
                     error=error,
                 )
-            self.channel.send(message_to_return)
+            await self.channel.send(message_to_return)

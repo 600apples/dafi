@@ -19,7 +19,7 @@ from tenacity import AsyncRetrying, wait_fixed, retry_if_exception_type, RetryCa
 from daffi.exceptions import InitializationError, ReckAcceptError, StopComponentError
 from daffi.interface import ComponentI
 from daffi.components.proto import messager_pb2_grpc as grpc_messager
-from daffi.utils.misc import string_uuid
+from daffi.utils.misc import string_uuid, ReconnectFreq
 
 
 class UnixBase(ComponentI, grpc_messager.MessagerServiceServicer):
@@ -120,14 +120,14 @@ class ComponentsBase(UnixBase, TcpBase):
         async_backend: Optional[str] = None,
     ):
         self.process_name = process_name
-        self.reconnect_freq = reconnect_freq
+        self.reconnect_freq = ReconnectFreq(reconnect_freq)
         self.async_backend = async_backend or "asyncio"
         self.operations = None
         self.ident = string_uuid()
         self._stopped = self._connected = False
 
         if host:  # Check only host. Full host/port validation already took place before.
-            if self.reconnect_freq and reconnect_freq < 30:
+            if self.reconnect_freq and self.reconnect_freq.value < 15:
                 raise InitializationError(
                     "Too little reconnect frequency was specified."
                     " Specify value for 'reconnect_freq' argument greater than one minute."
@@ -136,7 +136,7 @@ class ComponentsBase(UnixBase, TcpBase):
             self._base = TcpBase
             self._base.__init__(self, host, port)
         else:
-            self.reconnect_freq = None
+            self.reconnect_freq = ReconnectFreq(None)
             self._base = UnixBase
             self._base.__init__(self, unix_sock_path)
 

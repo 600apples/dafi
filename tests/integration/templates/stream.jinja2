@@ -1,0 +1,18 @@
+{% extends "layout/base.jinja2" %}
+
+{%- block content %}
+
+arr = []
+
+@callback
+def process_stream(value: int):
+    global arr
+    arr.append(value)
+
+
+@callback
+async def stream_result_{{ cb_name }}():
+    global arr
+    return arr
+
+{% endblock %}

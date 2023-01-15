@@ -38,10 +38,11 @@ class FreezableQueue(AbstractQueue):
 
     queues: ClassVar[Dict[str, Any]] = dict()
 
-    def __init__(self):
+    def __init__(self, loop: Optional[asyncio.AbstractEventLoop] = None):
+        self.loop = loop or asyncio.get_running_loop()
         self._queue = PriorityQueue()
+        self._queue._loop = self.loop
         self._is_frozen = False  # Flag that indicated whether currently queue receiving is frozen.
-        self.loop = asyncio.get_running_loop()
         self._closed = False
 
     @property
@@ -95,6 +96,9 @@ class FreezableQueue(AbstractQueue):
                 break
         self.reset()
 
+    async def get(self):
+        return await self._queue.get()
+
     async def iterate(self):
         """Start handling tasks in the cycle."""
 
@@ -134,13 +138,13 @@ class FreezableQueue(AbstractQueue):
             except RuntimeError:
                 ...
 
-    def send(self, data: Any, priority: Optional[ItemPriority] = ItemPriority.NORMAL):
+    async def send(self, data: Any, priority: Optional[ItemPriority] = ItemPriority.NORMAL):
         """
         Threadsave option to send item to queue.
         Put one item into queue.
         Item will be processed with NORMAL priority. This value cannot be changed.
         """
-        self._queue.put_nowait(PriorityEntry(priority=priority, data=data))
+        await self._queue.put(PriorityEntry(priority=priority, data=data))
 
     async def wait(self) -> None:
         """Wait until queue is empty and all tasks finished."""

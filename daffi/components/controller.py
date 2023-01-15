@@ -9,12 +9,28 @@ from anyio import create_task_group, move_on_after
 from daffi.utils import colors
 from daffi.utils.logger import patch_logger
 from daffi.components import ComponentsBase
-from daffi.components.proto.message import MessageFlag
+from daffi.components.proto.message import MessageFlag, messager_pb2
 from daffi.components.operations.controller_operations import ControllerOperations
 from daffi.components.operations.channel_store import ChannelPipe, MessageIterator, FreezableQueue
 
 
 class Controller(ComponentsBase):
+
+    # ------------------------------------------------------------------------------------------------------------------
+    # Properties
+    # ------------------------------------------------------------------------------------------------------------------
+
+    @property
+    def controller_callback_mapping(self):
+        return self.operations.controller_callback_mapping
+
+    @property
+    def channel_store(self):
+        return self.operations.channel_store
+
+    @property
+    def stream_store(self):
+        return self.operations.stream_store
 
     # ------------------------------------------------------------------------------------------------------------------
     # Controller lifecycle ( on_init -> before_connect -> on_stop )
@@ -39,10 +55,8 @@ class Controller(ComponentsBase):
         self.listener = None
 
     # ------------------------------------------------------------------------------------------------------------------
-
-    @property
-    def controller_callback_mapping(self):
-        return self.operations.controller_callback_mapping
+    # Message operations
+    # ------------------------------------------------------------------------------------------------------------------
 
     async def handle_operations(self, task_status: TaskStatus) -> NoReturn:
         self.listener = await self.create_listener()
@@ -78,6 +92,9 @@ class Controller(ComponentsBase):
                 elif msg.flag == MessageFlag.RECK_REQUEST:
                     await self.operations.on_reconnect(msg, sg)
 
+                elif msg.flag == MessageFlag.INIT_STREAM:
+                    await self.operations.on_stream_init(msg)
+
             await self.operations.on_channel_close(channel, process_identificator)
 
     async def communicate(self, request_iterator, context):
@@ -94,3 +111,27 @@ class Controller(ComponentsBase):
         asyncio.create_task(self.handle_commands(channel, ident))
         async for message in channel.send_iterator:
             yield message
+
+    # ------------------------------------------------------------------------------------------------------------------
+    # Streaming
+    # ------------------------------------------------------------------------------------------------------------------
+
+    async def stream_to_controller(self, request_iterator, context):
+        """Dedicated method for stream transmitter -> controller"""
+
+        receiver = next(v for k, v in context.invocation_metadata() if k == "receiver")
+        msg_uuid = next(v for k, v in context.invocation_metadata() if k == "uuid")
+
+        async with self.stream_store.request_paired_connection(receiver, msg_uuid, request_iterator) as wait:
+            await wait()
+        return messager_pb2.Empty()
+
+    async def stream_from_controller(self, request, context):
+        """Dedicated method for stream controller -> receiver"""
+
+        receiver = next(v for k, v in context.invocation_metadata() if k == "receiver")
+        msg_uuid = next(v for k, v in context.invocation_metadata() if k == "uuid")
+
+        async with self.stream_store.accept_paired_connection(receiver, msg_uuid) as iterator:
+            async for message in iterator:
+                yield message

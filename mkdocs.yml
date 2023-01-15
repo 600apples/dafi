@@ -35,6 +35,7 @@ nav:
     - Broadcasting: broadcasting.md
     - Pipeline and g object injection: pipeline.md
     - Scheduling tasks: scheduling-tasks.md
+    - Streams: stream.md
   - Code reference:
      - Global: code-reference/global.md
      - callback: code-reference/callback.md

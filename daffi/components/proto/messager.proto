@@ -3,7 +3,12 @@ syntax = "proto3";
 
 service MessagerService {
   rpc communicate(stream Message) returns(stream Message);
+  rpc stream_to_controller(stream Message) returns(Empty);
+  rpc stream_from_controller(Empty) returns(stream Message);
 }
+
+
+message Empty{}
 
 message Message {
   oneof realm {
@@ -11,6 +16,7 @@ message Message {
     ServiceRealm service_realm = 2;
   }
 }
+
 
 message RpcRealm {
   MessageFlag flag = 1;
@@ -63,4 +69,6 @@ enum MessageFlag {
   RECK_REQUEST = 11;
   RECK_ACCEPT = 12;
   STOP_REQUEST = 13;
+  INIT_STREAM = 14;
+  STREAM_ERROR = 15;
 }

@@ -72,10 +72,9 @@ class Global(metaclass=Singleton):
     host: Optional[str] = None
     port: Optional[int] = None
     unix_sock_path: Optional[os.PathLike] = None
-    reconnect_freq: Optional[int] = None
+    reconnect_freq: Optional[int] = 30
 
     _inside_callback_context: Optional[bool] = field(repr=False, default=False)
-
 
     def __post_init__(self):
         self.process_name = str(self.process_name)
@@ -212,6 +211,18 @@ class Global(metaclass=Singleton):
         """
         return LazyRemoteCall(_ipc=self.ipc, _global_terminate_event=None, _func_name=func_name)._wait_function()
 
+    async def wait_function_async(self, func_name: str) -> NoReturn:
+        """
+        Wait particular remote callback by name to be available (async version).
+        This method is useful when callback with the same name is registered on different nodes and you need
+        at leas one node to be available.
+        Args:
+            func_name: Name of remote callback to wait.
+        """
+        return await LazyRemoteCall(_ipc=self.ipc, _global_terminate_event=None, _func_name=func_name)._wait_function(
+            _async=True
+        )
+
     def wait_process(self, process_name: str) -> NoReturn:
         """
         Wait particular Node to be alive.
@@ -219,6 +230,16 @@ class Global(metaclass=Singleton):
             process_name: Name of `Node`
         """
         return LazyRemoteCall(_ipc=self.ipc, _global_terminate_event=None)._wait_process(process_name)
+
+    async def wait_process_async(self, process_name: str) -> NoReturn:
+        """
+        Wait particular Node to be alive (async version).
+        Args:
+            process_name: Name of `Node`
+        """
+        return await LazyRemoteCall(_ipc=self.ipc, _global_terminate_event=None)._wait_process(
+            process_name, _async=True
+        )
 
     def get_scheduled_tasks(self, remote_process: str):
         """
@@ -254,6 +275,7 @@ class callback(Generic[GlobalCallback]):
         2. Only one instance of class can be instantiated.
         3. Only publicly available methods become callback (means methods which name doensn't start with underscore)
     """
+
     _ipc: ClassVar[Ipc] = None
 
     def __init__(self, fn: Callable[P, Any]):

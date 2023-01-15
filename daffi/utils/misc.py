@@ -6,6 +6,7 @@ from functools import partial
 from datetime import datetime
 from queue import Queue
 from contextlib import contextmanager
+from collections.abc import Iterable
 from typing import Callable, Any, NamedTuple, NoReturn, Dict, DefaultDict, Optional, Tuple, Union, Sequence, List
 
 import sniffio
@@ -52,6 +53,30 @@ class Period(NamedTuple):
             return "at_time"
         else:
             return "interval"
+
+
+class ReconnectFreq:
+    LIMIT = 15
+
+    def __init__(self, reconnect_freq: int):
+        self.reconnect_freq = reconnect_freq
+        self._limited = False
+
+    def __bool__(self):
+        return self.reconnect_freq is not None
+
+    @property
+    def value(self):
+        if self._limited:
+            return self.LIMIT
+        return self.reconnect_freq
+
+    def limit_freq(self):
+        self._limited = True
+
+    def restore_freq(self):
+        self._limited = False
+
 
 
 class ConditionObserver:
@@ -162,6 +187,10 @@ def string_uuid() -> str:
 
 def is_lambda_function(obj):
     return isinstance(obj, types.LambdaType) and obj.__name__ == "<lambda>"
+
+
+def iterable(obj):
+    return isinstance(obj, Iterable) and not isinstance(obj, (str, bytes, dict))
 
 
 async def run_in_threadpool(func: Callable[..., Any], *args, **kwargs) -> Any:
