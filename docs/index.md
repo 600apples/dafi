@@ -15,11 +15,12 @@ This can best be described as a multiprocessing [observer](https://refactoring.g
 This approach allows you to create both simple architectural solutions such as one-to-one communication between nodes and more complex schemes such as a pipeline chain or one-to-many broadcasting.
 It is worth to note that the daffi's syntax is very easy. Unlike many other similar libraries, on the surface, daffi contains only a few top-level classes for initializing the process as a node or controller. 
 
-Briefly speaking about the area of use. Daffi takes the best of several worlds and can be used as a task dispatcher or to transfer high-load streams from one process to another.
+Briefly speaking about the area of use. Daffi takes the best of several worlds and can be used as a task dispatcher or for streaming.
 
 ### Features
  
 - All processes where daffi is running have equal opportunities. Any process (Node) can trigger a remote callback on any other process (Node).
+- A centralized approach to registering callbacks in microservices. You do not need to run dozens of microservers and register callbacks separately for each, which can turn into a difficult to manage architecture.
 - Super fast and strong serialization/deserialization system based on [grpc](https://grpc.io/docs/) streams and [dill](https://pypi.org/project/dill/). You can serialize dataclasses, functions (with yield statements as well), lambdas, modules and many other types.
 - Daffi works equally well with both synchronous and asynchronous applications. You can call asynchronous remote callback from synchronous application and vice versa. [Trio](https://trio.readthedocs.io/en/stable/) support is also included.
 - Simple syntax. Calling remote callback is as simple as execution of local method. 

@@ -29,6 +29,7 @@ nav:
     - full-example.md
     - another-examples.md
   - Execution modifiers: execution-modifiers.md
+  - G object injection: g-object-injection.md
   - Asynchronous applications: async-apps.md
   - Advanced:
     - Callback classes: callback-classes.md

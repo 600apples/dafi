@@ -9,7 +9,7 @@ It is possible to trigger chain of callbacks where one callback takes result fro
 
 For this feature there is special ability of daffi we didn't mentioned before:
 
-One can create and register callback that takes special argument `g`
+One can create and register callback that takes special argument `g` (You can read more about [g object injection](g-object-injection.md))
 
 
 process `node-1`:
@@ -44,12 +44,6 @@ def pipeline_cb3():
     return "my secret sting"
 ```
 
-You might noticed we didn't pass `g` argument while triggering `pipeline_cb2` from node-1 process although `pipeline_cb2` requires this argument to be provided.
-
-In fact `g` argument works like [fixture](https://docs.pytest.org/en/6.2.x/fixture.html) in pytest. 
-Once `g` is specified as argument on remote callback it will be automatically injected on remote process.  
-
-You should never pass [Global](code-reference/global.md) object directly as argument. Instead just specify that remote callback requires this argument.
 
 So if we execute `pipeline_cb1` from separate process:
 
