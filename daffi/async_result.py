@@ -42,7 +42,7 @@ class AsyncResult:
 
             if self.result == self:
                 self.result = None
-                raise TimeoutError(f"Function {self.func_name} result timed out")
+                TimeoutError(f"Function {self.func_name} result timed out").fire()
 
         return self.result
 
@@ -69,7 +69,7 @@ class AsyncResult:
 
             if self.result == self:
                 self.result = None
-                raise TimeoutError(f"Function {self.func_name} result timed out")
+                TimeoutError(f"Function {self.func_name} result timed out").fire()
 
         return self.result
 
@@ -116,5 +116,7 @@ class SchedulerTask(BaseTask, AsyncResult):
 
 def get_result_type(inside_callback_context: bool, is_period: bool) -> Type[Union[AsyncResult, SchedulerTask]]:
     if inside_callback_context and is_period:
-        raise GlobalContextError("Initialization of periodic tasks from the context of a remote callback is prohibited")
+        GlobalContextError(
+            "Initialization of periodic tasks from the context of a remote callback is prohibited"
+        ).fire()
     return SchedulerTask if is_period else AsyncResult

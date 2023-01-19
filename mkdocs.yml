@@ -23,11 +23,14 @@ theme:
 nav:
   - Overview: index.md
   - Installtion: installation.md
-  - Main concepts:
-    - Node and Controller: node-and-controller.md
-    - Daffi objects: daffi-objects.md
-    - full-example.md
-    - another-examples.md
+  - Getting started: getting-started.md
+  - Node and Controller: node-and-controller.md
+  - Global object: global-object.md
+  - callback decorator: callback-decorator.md
+#  - Daffi objects:
+#    - daffi-objects.md
+#    - full-example.md
+#    - another-examples.md
   - Execution modifiers: execution-modifiers.md
   - G object injection: g-object-injection.md
   - Asynchronous applications: async-apps.md

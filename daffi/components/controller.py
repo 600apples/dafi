@@ -9,6 +9,7 @@ from anyio import create_task_group, move_on_after
 from daffi.utils import colors
 from daffi.utils.logger import patch_logger
 from daffi.components import ComponentsBase
+from daffi.exceptions import GlobalContextError
 from daffi.components.proto.message import MessageFlag, messager_pb2
 from daffi.components.operations.controller_operations import ControllerOperations
 from daffi.components.operations.channel_store import ChannelPipe, MessageIterator, FreezableQueue
@@ -103,7 +104,7 @@ class Controller(ComponentsBase):
             # Modify ident in order to handle cases when Node and Controller are running in the same process
             ident = f"{ident}-node"
         except StopIteration:
-            raise KeyError("Process name is not provided in metadata.")
+            GlobalContextError("Process name is not provided in metadata.").fire()
 
         message_iterator = MessageIterator(FreezableQueue.factory(ident))
         channel = ChannelPipe(receive_iterator=request_iterator, send_iterator=message_iterator)

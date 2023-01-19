@@ -43,6 +43,13 @@ class Node(ComponentsBase):
         self.operations = NodeOperations(logger=self.logger, async_backend=self.async_backend)
 
     async def on_stop(self) -> NoReturn:
+        for msg_uuid, ares in AsyncResult._awaited_results.items():
+            if isinstance(ares, AsyncResult):
+                AsyncResult._awaited_results[msg_uuid] = RemoteError(
+                    info="Lost connection to Controller.",
+                    _awaited_error_type=RemoteStoppedUnexpectedly,
+                )
+                ares._set()
         if self.channel:
             await self.channel.clear_queue()
             await self.channel.stop()
@@ -51,13 +58,6 @@ class Node(ComponentsBase):
 
     async def before_connect(self) -> NoReturn:
         self.channel = None
-        for msg_uuid, ares in AsyncResult._awaited_results.items():
-            if isinstance(ares, AsyncResult):
-                AsyncResult._awaited_results[msg_uuid] = RemoteError(
-                    info="Lost connection to Controller.",
-                    _awaited_error_type=RemoteStoppedUnexpectedly,
-                )
-                ares._set()
 
     # ------------------------------------------------------------------------------------------------------------------
     # Message operations
@@ -155,9 +155,9 @@ class Node(ComponentsBase):
 
     def send_and_register_result(self, func_name: str, msg: RpcMessage) -> AsyncResult:
         if msg.return_result is False:
-            raise InitializationError(
+            InitializationError(
                 f"Unable to register result for callback {func_name}. return_result=False specified in message"
-            )
+            ).fire()
         result = AsyncResult(func_name=func_name, uuid=msg.uuid)._register()
         self.send_threadsave(msg, 0)
         return result

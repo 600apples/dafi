@@ -91,8 +91,8 @@ This argument becomes stream item on each iteration of stream process.
 
 You might be wondering why not just use `BROADCAST` and `NO_RETURN` execution modifiers in the cycle?
 
-Answering briefly `STREAM` is much more optimized for passing big ranges to remote callback but modifiers 
-like `BROADCAST`, `NO_RETURN`, `FG`, `BG` etc are more optimized for single callback execution
+Answering briefly `STREAM` is much more optimized for passing big ranges to remote callback whereas 
+`BROADCAST`, `NO_RETURN`, `FG`, `BG` modifiers are more optimized for single callback execution
 
 
 #### Example with opencv camera stream

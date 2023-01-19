@@ -1,4 +1,5 @@
 import pickle
+import logging
 import traceback
 from logging import Logger
 from dataclasses import dataclass, field
@@ -7,27 +8,37 @@ from types import TracebackType
 from typing import Optional, NoReturn, Type
 
 
-class RemoteCallError(Exception):
+class BaseException(Exception):
+    def __init__(self, message):
+        self.message = message
+        super().__init__(message)
+
+    def fire(self):
+        logging.error(self.message)
+        raise self
+
+
+class RemoteCallError(BaseException):
     ...
 
 
-class UnableToFindCandidate(Exception):
+class UnableToFindCandidate(BaseException):
     ...
 
 
-class RemoteStoppedUnexpectedly(Exception):
+class RemoteStoppedUnexpectedly(BaseException):
     ...
 
 
-class InitializationError(Exception):
+class InitializationError(BaseException):
     ...
 
 
-class GlobalContextError(Exception):
+class GlobalContextError(BaseException):
     ...
 
 
-class TimeoutError(Exception):
+class TimeoutError(BaseException):
     ...
 
 
@@ -63,6 +74,10 @@ class RemoteError:
 
     def raise_with_trackeback(self):
         if self.unpickled_trackeback:
-            raise RemoteCallError(self.info).with_traceback(self.unpickled_trackeback)
+            RemoteCallError(self.info).with_traceback(self.unpickled_trackeback).fire()
         else:
-            raise self._awaited_error_type(self.info)
+            err = self._awaited_error_type(self.info)
+            if hasattr(err, "fire"):
+                err.fire()
+            else:
+                raise err

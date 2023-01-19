@@ -23,29 +23,29 @@ class Period(NamedTuple):
     def validate(self):
 
         if self.at_time is None and self.interval is None:
-            raise InitializationError(
+            InitializationError(
                 "Provide one of 'at_time' argument or 'interval' argument during Period initialization"
-            )
+            ).fire()
 
         if self.at_time is not None and self.interval is not None:
-            raise InitializationError("Only 1 time unit is allowed. Provide either 'at_time' or 'interval' argument")
+            InitializationError("Only 1 time unit is allowed. Provide either 'at_time' or 'interval' argument").fire()
 
         if self.at_time is not None:
             now = datetime.utcnow().timestamp()
             if len(self.at_time) > 1000:
-                raise InitializationError("Too many scheduled at time periods. Provide no more then 1000 timestamps.")
+                InitializationError("Too many scheduled at time periods. Provide no more then 1000 timestamps.").fire()
             if any(i <= now for i in self.at_time):
-                raise InitializationError(
+                InitializationError(
                     "One or mote timestamps in 'at_time' argument "
                     "are less then current timestamp. "
                     "Make sure you pass timestamps that are greater then current time"
-                )
+                ).fire()
 
         if self.interval is not None and self.interval <= 0:
-            raise InitializationError(
+            InitializationError(
                 "Provided 'period' timestamp is less then 0."
                 " Make sure you pass period that allows scheduler to execute task periodically"
-            )
+            ).fire()
 
     @property
     def scheduler_type(self) -> SchedulerTaskType:
@@ -157,7 +157,7 @@ class Singleton(type):
         try:
             return cls._instances[key]
         except KeyError:
-            raise KeyError(f"{key} is not initialized.")
+            InitializationError(f"{key} is not initialized.").fire()
 
 
 @contextmanager

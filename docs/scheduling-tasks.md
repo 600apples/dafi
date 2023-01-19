@@ -1,12 +1,12 @@
-It is possible to start reccuring callback execution or set bunch of delayed callback executions at one.
+It is possible to start reccuring callback execution or set bunch of delayed callback executions at once.
 
-For this reason special class modifier `PERIOD` is using
+For this reason special class modifier `PERIOD` is used.
 
 `PERIOD` take 2 optional arguments `at_time` and `interval` but only one of them is allowed to be provided.
 
 #### at_time
 
-- `at_time` - take one timestamp or list of timestamps. They all should be timestamps related to UTC time.
+- `at_time` - take one timestamp or list of timestamps. They all should be timestamps related to UTC time (and timestamps in the future).
 
 For instance lets consider you want to execute remote callback `my_callback` 3 times, After 2 seconds after 10 seconds and after a minute:
 
@@ -17,7 +17,7 @@ from daffi import Global, PERIOD
 g = Global(host="localhost", port=8888)
 
 # Wait my_callback function to be available on remote
-g.wait_function("my_callback")
+g.wait_function("some_func")
 
 now = datetime.utcnow().timestamp()
 
@@ -54,7 +54,7 @@ from daffi import Global, PERIOD
 g = Global(host="localhost", port=8888)
 
 # Wait my_callback function to be available on remote
-g.wait_function("my_callback")
+g.wait_function("some_func")
 
 now = datetime.utcnow().timestamp()
 

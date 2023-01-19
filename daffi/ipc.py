@@ -56,7 +56,7 @@ class Ipc(Thread):
         self.controller = self.node = None
 
         if not (self.init_controller or self.init_node):
-            raise InitializationError("At least one of 'init_controller' or 'init_node' must be True.")
+            InitializationError("At least one of 'init_controller' or 'init_node' must be True.").fire()
 
         set_signal_handler(self.stop)
 
@@ -86,22 +86,22 @@ class Ipc(Thread):
         data = search_remote_callback_in_mapping(self.node.node_callback_mapping, func_name, exclude=self.process_name)
         if not data:
             if self.node.node_callback_mapping.get(self.process_name, {}).get(func_name):
-                raise GlobalContextError(
+                GlobalContextError(
                     f"function {func_name} not found on remote processes but found locally."
                     f" Communication between local node and the controller is prohibited."
                     f" You can always call the callback locally via regular python syntax as usual function."
-                )
+                ).fire()
             else:
                 # Get all callbacks without local
                 available_callbacks = pretty_callbacks(
                     mapping=self.node.node_callback_mapping, exclude_proc=self.process_name, format="string"
                 )
-                raise GlobalContextError(
+                GlobalContextError(
                     f"function {func_name} not found on remote.\n"
                     + f"Available registered callbacks:\n {available_callbacks}"
                     if available_callbacks
                     else ""
-                )
+                ).fire()
 
         if stream:
             # Stream has special initialization and validation process.
@@ -198,19 +198,19 @@ class Ipc(Thread):
             self._check_node()
 
             if len(args) != 1:
-                raise InitializationError(
+                InitializationError(
                     "Pass exactly 1 positional argument to initialize stream."
                     " It can be list, tuple generator etc. In general it should be iterable object"
-                )
+                ).fire()
             stream_items = args[0]
             if not iterable(stream_items):
-                raise InitializationError("Stream support only iterable objects like lists, tuples, generators etc.")
+                InitializationError("Stream support only iterable objects like lists, tuples, generators etc.").fire()
 
             stream_items = iter(stream_items)
             try:
                 first_item = next(stream_items)
             except StopIteration:
-                raise InitializationError("Stream is empty")
+                InitializationError("Stream is empty").fire()
 
             data = search_remote_callback_in_mapping(
                 self.node.node_callback_mapping, func_name, exclude=self.process_name
@@ -229,7 +229,7 @@ class Ipc(Thread):
             receivers = result.get()
 
             if not receivers:
-                raise InitializationError("Unable to find receivers for stream.")
+                InitializationError("Unable to find receivers for stream.").fire()
 
             # Register the same result second time to track stream errors (If happened)
             result = result._clone_and_register()
@@ -259,10 +259,10 @@ class Ipc(Thread):
         if self.is_running:
             self._check_node()
             if not callable(func):
-                raise InitializationError("Provided func is not callable.")
+                InitializationError("Provided func is not callable.").fire()
 
             if remote_process not in self.node.node_callback_mapping:
-                raise InitializationError(f"Seems process {remote_process!r} is not running.")
+                InitializationError(f"Seems process {remote_process!r} is not running.").fire()
 
             func_name = "__async_transfer_and_call" if iscoroutinefunction(func) else "__transfer_and_call"
             msg = RpcMessage(
@@ -279,10 +279,10 @@ class Ipc(Thread):
         if self.is_running:
             self._check_node()
             if not callable(func):
-                raise InitializationError("Provided func is not callable.")
+                InitializationError("Provided func is not callable.").fire()
 
             if remote_process not in self.node.node_callback_mapping:
-                raise InitializationError(f"Seems process {remote_process!r} is not running.")
+                InitializationError(f"Seems process {remote_process!r} is not running.").fire()
 
             func_name = "__async_transfer_and_call" if iscoroutinefunction(func) else "__transfer_and_call"
             msg = RpcMessage(
@@ -339,8 +339,8 @@ class Ipc(Thread):
 
     def _check_node(self) -> NoReturn:
         if not self.node:
-            raise GlobalContextError(
+            GlobalContextError(
                 "Support for invoking remote calls is not enabled"
                 " The node has not been initialized in the current process."
                 " Make sure you passed 'init_node' = True in Global object."
-            )
+            ).fire()

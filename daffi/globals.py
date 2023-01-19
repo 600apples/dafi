@@ -80,20 +80,22 @@ class Global(metaclass=Singleton):
         self.process_name = str(self.process_name)
 
         if not (self.init_controller or self.init_node):
-            raise InitializationError(
+            InitializationError(
                 "No components were found in current process."
                 " Provide at least one required argument"
                 " `init_controller=True` or `init_node=True`."
-            )
+            ).fire()
 
         if self.unix_sock_path and self.host:
-            raise InitializationError(
+            InitializationError(
                 "Provide either 'unix_sock_path' argument or combination "
                 "of 'host' and 'port' to connect via unix socket or via tcp respectively"
-            )
+            ).fire()
 
         if not self.host and sys.platform == "win32":
-            raise InitializationError("Windows platform doesn't support unix sockets. Provide host and port to use TCP")
+            InitializationError(
+                "Windows platform doesn't support unix sockets. Provide host and port to use TCP"
+            ).fire()
 
         self._global_terminate_event = Event()
         self.ipc = Ipc(
@@ -111,7 +113,7 @@ class Global(metaclass=Singleton):
         callback._ipc = self.ipc
         self.ipc.start()
         if not self.ipc.wait():
-            raise GlobalContextError("Unable to start daffi components.")
+            GlobalContextError("Unable to start daffi components.").fire()
         self.port = self.ipc.port
 
     def __enter__(self):
@@ -167,6 +169,7 @@ class Global(metaclass=Singleton):
             else:
                 res = self.kill_all()
         self.ipc.stop()
+        logger.warning("global stopped.")
         return res
 
     def kill_all(self):
@@ -311,7 +314,7 @@ class callback(Generic[GlobalCallback]):
 
         elif callable(fn):
             if is_lambda_function(fn):
-                raise InitializationError("Lambdas is not supported.")
+                InitializationError("Lambdas is not supported.").fire()
 
             _, name = func_info(fn)
             self._fn = RemoteCallback(
@@ -330,7 +333,7 @@ class callback(Generic[GlobalCallback]):
                 self._ipc.update_callbacks(LOCAL_CALLBACK_MAPPING)
 
         else:
-            raise InitializationError(f"Invalid type. Provide class or function.")
+            InitializationError(f"Invalid type. Provide class or function.").fire()
 
     def __call__(self, *args, **kwargs) -> object:
         if self._klass:
@@ -352,7 +355,7 @@ class callback(Generic[GlobalCallback]):
         else:
             class_name = self._klass.__class__.__name__
         if class_name in LOCAL_CLASS_CALLBACKS:
-            raise InitializationError(f"Only one callback instance of {class_name!r} should be created.")
+            InitializationError(f"Only one callback instance of {class_name!r} should be created.").fire()
 
         LOCAL_CLASS_CALLBACKS.add(self._klass.__name__)
         self._klass = self._klass(*args, **kwargs)
@@ -448,7 +451,7 @@ async def __cancel_scheduled_task(msg_uuid: str, process_name: str, func_name: O
     if not task_found:
         if msg_uuid in FINISHED_TASKS:
             return False
-        raise GlobalContextError(f"Unable to find task by uuid: {msg_uuid}")
+        GlobalContextError(f"Unable to find task by uuid: {msg_uuid}").fire()
     return True
 
 

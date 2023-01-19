@@ -88,12 +88,12 @@ class RemoteCall:
         try:
             next_operand, next_operand_args = re.findall(_available_operands_search_pattern, "".join(code_context))[0]
         except (ValueError, IndexError):
-            raise InitializationError(
+            InitializationError(
                 f"Object of {self.__class__.__name__} doesn't support await expressions. "
                 f"Use await g.call.<callback_name> & {_available_operands}[(*args, **kwargs)].\n"
                 f"Do not use pre-initialization of operands either.\n"
                 f"For instance this is wrong:\nop=BG(eta=15)\nawait g.call.<callback_name> & op\n"
-            )
+            ).fire()
         next_operand = eval(f"{next_operand}{next_operand_args}", frame_globals, frame_locals)
         return self.__self_await__(next_operand).__await__()
 
@@ -124,7 +124,7 @@ class RemoteCall:
 
         else:
             _available_operands = "|".join([o.__name__ for o in (FG, BG, NO_RETURN, PERIOD, BROADCAST)])
-            raise GlobalContextError(f"Invalid operand {type(other)}. Use one of {_available_operands}")
+            GlobalContextError(f"Invalid operand {type(other)}. Use one of {_available_operands}").fire()
 
     @property
     def info(self) -> Optional["RemoteCallback"]:
@@ -234,12 +234,12 @@ class RemoteCall:
             elif isinstance(val, datetime):
                 val = time.mktime(val.timetuple())
             elif not isinstance(val, (float, int)):
-                raise GlobalContextError(
+                GlobalContextError(
                     f"Invalid {arg_name} format. Should be string, int, float or datetime.timedelta."
-                )
+                ).fire()
 
             if val < 0:
-                raise GlobalContextError(f"{arg_name} cannot be negative.")
+                GlobalContextError(f"{arg_name} cannot be negative.").fire()
         return val or default
 
 
@@ -257,24 +257,24 @@ class LazyRemoteCall:
         if type(other) == type:
             other = other()
         other_name = other.__class__.__name__
-        raise InitializationError(
+        InitializationError(
             f"Invalid syntax. "
             f"You forgot to use parentheses to trigger remote callback."
             f"\nCorrect syntax is "
             f"g.call.{self._func_name}(**args, **kwargs) & {other_name}"
             f" or g.call.{self._func_name}(**args, **kwargs) & {other_name}(**<invocation kwargs>)"
-        )
+        ).fire()
 
     @property
     def _info(self):
         self._ipc._check_node()
         if self._func_name is None:
-            raise GlobalContextError(
+            GlobalContextError(
                 "Not allowed in current context."
                 " Use `Global.call.func_name(*args, **kwargs)` to build RemoteCall instance."
-            )
+            ).fire()
         elif self._func_name == "":
-            raise GlobalContextError("Empty function name is not allowed.")
+            GlobalContextError("Empty function name is not allowed.").fire()
         return RemoteCall(_ipc=self._ipc, func_name=self._func_name).info
 
     @property
@@ -304,9 +304,9 @@ class LazyRemoteCall:
 
     def __call__(__self__, *args, **kwargs) -> RemoteCall:
         if not __self__._func_name:
-            raise GlobalContextError(
+            GlobalContextError(
                 "Invalid syntax. Use `Global.call.func_name(*args, **kwargs)` to build RemoteCall instance."
-            )
+            ).fire()
         return RemoteCall(
             _ipc=__self__._ipc,
             func_name=__self__._func_name,
@@ -317,7 +317,7 @@ class LazyRemoteCall:
 
     def __getattr__(self, item) -> RemoteCall:
         if self._global_terminate_event and self._global_terminate_event.is_set():
-            raise GlobalContextError("Global can no longer accept remote calls because it was stopped")
+            GlobalContextError("Global can no longer accept remote calls because it was stopped").fire()
         self._func_name = item
         return self
 

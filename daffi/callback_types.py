@@ -37,30 +37,30 @@ def validate_g_position(
         " (or locally if you're using it as regular function)"
     )
     if "g" in kwargs:
-        raise GlobalContextError(error_msg)
+        GlobalContextError(error_msg).fire()
     g_param, index = get_g_param(signature=signature, is_static_method=is_static_method)
     if g_param and (g_param.kind == Parameter.POSITIONAL_OR_KEYWORD and len(args) > index):
-        raise GlobalContextError(error_msg)
+        GlobalContextError(error_msg).fire()
     return g_param
 
 
 def validate_g_presence_in_arguments(*args: P.args, **kwargs: P.kwargs) -> NoReturn:
     g_obj = Singleton._get_self("Global")
     if any(isinstance(arg, g_obj.__class__) for arg in chain(args, kwargs.values())):
-        raise GlobalContextError(
+        GlobalContextError(
             "'g' object cannot be serialized or passed to remote callback as argument. "
             "If you want to have 'g' object inside remote callback you can specify it as 'g' argument."
             " 'g' will be injected in callback automatically during invocation."
-        )
+        ).fire()
 
 
 def validate_g_position_type(self) -> NoReturn:
     g_param, index = get_g_param(signature=self.signature)
     if g_param and g_param.kind not in (Parameter.POSITIONAL_OR_KEYWORD, Parameter.KEYWORD_ONLY):
-        raise InitializationError(
+        InitializationError(
             f"The 'g' object can be either 'keyword_or_positional' or 'keyword_only' argument. "
             f"Please refactor the {self.origin_name!r} callback so that it takes the correct value of 'g'"
-        )
+        ).fire()
 
 
 def __call__(self, *args, **kwargs) -> RemoteResult:
@@ -89,7 +89,7 @@ class RemoteCallback(NamedTuple):
             exec(f"def _{self.signature}: pass\n_(*args, **kwargs)", {"args": args, "kwargs": kwargs, "daffi": daffi})
         except TypeError as e:
             e.args += (f"Function signature: def {self.origin_name}{self.signature}",)
-            raise
+            GlobalContextError("\n".join(e.args)).fire()
 
 
 class RemoteClassCallback(NamedTuple):
@@ -106,11 +106,11 @@ class RemoteClassCallback(NamedTuple):
     @property
     def callback(self) -> GlobalCallback:
         if not self.klass:
-            raise GlobalContextError(
+            GlobalContextError(
                 f"Instance of {self.klass_name!r} is not initialized yet."
                 f" Create instance or mark method {self.origin_name!r}"
                 f" as classmethod or staticmethod"
-            )
+            ).fire()
         return getattr(self.klass, self.origin_name)
 
     def validate_provided_arguments(self, *args, **kwargs):
@@ -128,4 +128,4 @@ class RemoteClassCallback(NamedTuple):
                 f"Reminder: you should not provide arguments belonging"
                 f" to the class or to the instance of the class eg 'self', 'cls' etc.",
             )
-            raise
+            GlobalContextError("\n".join(e.args)).fire()

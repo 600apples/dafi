@@ -117,9 +117,9 @@ class ServiceMessage(Message):
             raw_data = dill.dumps(self.data)
             data_len = len(raw_data)
             if data_len > BYTES_LIMIT:
-                raise InitializationError(
+                InitializationError(
                     f"Size {data_len} is too big for message. Use messages no more then {BYTES_LIMIT} of size."
-                )
+                ).fire()
 
             slices = [slice(i, i + BYTES_CHUNK) for i in range(0, data_len, BYTES_CHUNK)]
             self.data = [raw_data[sl] for sl in slices]

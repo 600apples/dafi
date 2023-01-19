@@ -59,7 +59,7 @@ class TestCallbackSuite:
 
             validate_provided_arguments = test_g.validate_provided_arguments
 
-            with pytest.raises(TypeError):
+            with pytest.raises(GlobalContextError):
                 validate_provided_arguments()
 
             with pytest.raises(GlobalContextError):
@@ -71,7 +71,7 @@ class TestCallbackSuite:
             with pytest.raises(GlobalContextError):
                 validate_provided_arguments(g=None)
 
-            with pytest.raises(TypeError):
+            with pytest.raises(GlobalContextError):
                 validate_provided_arguments(foo="bar")
 
             with pytest.raises(GlobalContextError):
@@ -90,7 +90,7 @@ class TestCallbackSuite:
         def func_with_g(g: Global) -> Global:
             return g
 
-        with pytest.raises(KeyError):
+        with pytest.raises(InitializationError):
             func_with_g()
 
         with Global(init_node=False, init_controller=True, process_name="foo"):
@@ -174,12 +174,12 @@ class TestCallbackSuite:
             with pytest.raises(GlobalContextError):
                 validate_provided_arguments(g=None)
 
-            with pytest.raises(TypeError):
+            with pytest.raises(GlobalContextError):
                 validate_provided_arguments(foo="bar")
 
             validate_provided_arguments = foo.func7.validate_provided_arguments
 
-            with pytest.raises(TypeError):
+            with pytest.raises(GlobalContextError):
 
                 validate_provided_arguments()
 
@@ -195,5 +195,5 @@ class TestCallbackSuite:
             with pytest.raises(GlobalContextError):
                 validate_provided_arguments(g=None)
 
-            with pytest.raises(TypeError):
+            with pytest.raises(GlobalContextError):
                 validate_provided_arguments(foo="bar")

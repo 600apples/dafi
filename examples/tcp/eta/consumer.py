@@ -20,22 +20,16 @@ async def main():
         start = time.time()
 
         # bg returns instance of AsyncResult.
-        try:
 
-            ares = g.call.add(5, 15) & BG(eta=5)
+        ares = g.call.add(5, 15) & BG(eta=5)
 
-            # Simulate long running job
-            time.sleep(2)
-            print("Job finished")
+        # Simulate long running job
+        time.sleep(2)
+        print("Job finished")
 
-            # Here execution stuck for additional 3 seconds due to eta
-            res = ares.get()
-            if res:
-                print(f"Calculated result = {res}. Total exec time: {time.time() - start}")
-
-        except (GlobalContextError, UnableToFindCandidate) as e:
-            print(e)
-            break
+        # Here execution stuck for additional 3 seconds due to eta
+        res = ares.get()
+        print(f"Calculated result = {res}. Total exec time: {time.time() - start}")
 
     g.stop()
 

@@ -128,10 +128,10 @@ class ComponentsBase(UnixBase, TcpBase):
 
         if host:  # Check only host. Full host/port validation already took place before.
             if self.reconnect_freq and self.reconnect_freq.value < 15:
-                raise InitializationError(
+                InitializationError(
                     "Too little reconnect frequency was specified."
                     " Specify value for 'reconnect_freq' argument greater than one minute."
-                )
+                ).fire()
 
             self._base = TcpBase
             self._base.__init__(self, host, port)
