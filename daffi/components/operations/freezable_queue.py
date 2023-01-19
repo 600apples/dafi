@@ -46,6 +46,7 @@ class FreezableQueue(AbstractQueue):
             except RuntimeError:
                 existing_loop = loop
             asyncio.set_event_loop(existing_loop)
+
         self._queue = PriorityQueue()
         self._queue._loop = self.loop
         self._is_frozen = False  # Flag that indicated whether currently queue receiving is frozen.
