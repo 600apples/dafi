@@ -1,8 +1,8 @@
 from typing import Dict, Set
 from daffi.utils.custom_types import GlobalCallback, K
 
-BYTES_CHUNK = 4096
-BYTES_LIMIT = 1e7  # 10 Mb
+BYTES_CHUNK = int(4e6)  # 4 Mb
+BYTES_LIMIT = int(8e6)  # 8 Mb
 
 RECONNECTION_TIMEOUT = 15  # sec
 

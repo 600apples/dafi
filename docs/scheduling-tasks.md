@@ -4,6 +4,8 @@ For this reason special class modifier `PERIOD` is using
 
 `PERIOD` take 2 optional arguments `at_time` and `interval` but only one of them is allowed to be provided.
 
+#### at_time
+
 - `at_time` - take one timestamp or list of timestamps. They all should be timestamps related to UTC time.
 
 For instance lets consider you want to execute remote callback `my_callback` 3 times, After 2 seconds after 10 seconds and after a minute:
@@ -27,7 +29,7 @@ task = g.call.some_func() & PERIOD(at_time=at_time)
 
 Execution with `PERIOD` modifier returns `ScheduledTask` instance as result of execution.
 
-You can cancel all tasks triggered from this task:
+You can cancel all tasks triggered from this execution:
 ```python
 ...
 at_time = [now + 2, now + 10, now + 60]
@@ -40,6 +42,7 @@ task.cancel()
 
 As we slept 3 seconds before canceling only two executions that remains in `at_time` bunch will be canceled as first of them was already triggered earlier.
 
+#### interval
 
 Using `interval` has the same execution signature and also returns instance of `ScheduledTask` as result so you can cancel reccuring task any time you want
 
@@ -62,7 +65,7 @@ time.sleep(60)
 task.cancel()
 ```
 
-On example above we started reccuring execution each 5 second and canceled it after sleep
+On example above we started recurring execution each 5 second and canceled it after sleep
 
 !!! note
     interval also takes special string formatted expressions as values

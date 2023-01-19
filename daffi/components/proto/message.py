@@ -30,6 +30,8 @@ class MessageFlag:
     RECK_REQUEST = 11
     RECK_ACCEPT = 12
     STOP_REQUEST = 13
+    INIT_STREAM = 14
+    STREAM_ERROR = 15
 
 
 class Message(ABC):
@@ -151,6 +153,12 @@ class ServiceMessage(Message):
     def set_data(self, data: Any):
         self._loaded = True
         self.data = data
+
+    @classmethod
+    def build_stream_message(cls, data: Any):
+        # Build lightweight message without uuid and other unrelated info.
+        for msg_chunk in cls(data=data, uuid=0).dumps():
+            yield msg_chunk
 
 
 @dataclass

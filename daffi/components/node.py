@@ -1,6 +1,6 @@
 import logging
-from typing import Union, Optional, NoReturn
-
+from typing import Union, NoReturn, List
+from contextlib import contextmanager
 from anyio import create_task_group, sleep
 from anyio._backends._asyncio import TaskGroup
 from anyio.abc import TaskStatus
@@ -21,6 +21,18 @@ from daffi.components.operations.channel_store import ChannelPipe, MessageIterat
 
 
 class Node(ComponentsBase):
+
+    # ------------------------------------------------------------------------------------------------------------------
+    # Properties
+    # ------------------------------------------------------------------------------------------------------------------
+
+    @property
+    def node_callback_mapping(self):
+        return self.operations.node_callback_mapping
+
+    @property
+    def stream_store(self):
+        return self.operations.stream_store
 
     # ------------------------------------------------------------------------------------------------------------------
     # Node lifecycle ( on_init -> before_connect -> on_stop )
@@ -49,10 +61,8 @@ class Node(ComponentsBase):
                 ares._set()
 
     # ------------------------------------------------------------------------------------------------------------------
-
-    @property
-    def node_callback_mapping(self):
-        return self.operations.node_callback_mapping
+    # Message operations
+    # ------------------------------------------------------------------------------------------------------------------
 
     async def handle_operations(self, task_status: TaskStatus) -> NoReturn:
 
@@ -67,26 +77,27 @@ class Node(ComponentsBase):
 
             async with create_task_group() as sg:
                 self.scheduler = Scheduler(process_name=self.process_name, sg=sg, async_backend=self.async_backend)
-                sg.start_soon(self.read_commands, task_status, sg)
+                sg.start_soon(self.read_commands, task_status, sg, stub)
                 sg.start_soon(self.reconnect_request)
+                sg.start_soon(self.read_streams, sg, stub)
 
     async def reconnect_request(self):
         if self.reconnect_freq:
             while True:
-                await sleep(self.reconnect_freq)
-                self.channel.send(
+                await sleep(self.reconnect_freq.value)
+                self.reconnect_freq.limit_freq()
+                await self.channel.send(
                     ServiceMessage(
                         flag=MessageFlag.RECK_REQUEST,
                         transmitter=self.process_name,
                     )
                 )
 
-    async def read_commands(self, task_status: TaskStatus, sg: TaskGroup):
-
+    async def read_commands(self, task_status: TaskStatus, sg: TaskGroup, stub):
         local_mapping_without_well_known_callbacks = {
             k: v for k, v in LOCAL_CALLBACK_MAPPING.items() if k not in WELL_KNOWN_CALLBACKS
         }
-        self.channel.send(
+        await self.channel.send(
             ServiceMessage(
                 flag=MessageFlag.HANDSHAKE,
                 transmitter=self.process_name,
@@ -120,10 +131,17 @@ class Node(ComponentsBase):
                 await self.operations.on_unable_to_find(msg)
 
             elif msg.flag == MessageFlag.RECK_ACCEPT:
+                self.reconnect_freq.restore_freq()
                 await self.operations.on_reconnection()
 
             elif msg.flag == MessageFlag.STOP_REQUEST:
                 await self.operations.on_stop_request(msg, self.process_name)
+
+            elif msg.flag == MessageFlag.INIT_STREAM:
+                await self.operations.on_stream_init(msg, stub, sg, self.process_name)
+
+            elif msg.flag == MessageFlag.STREAM_ERROR:
+                await self.operations.on_stream_error(msg)
 
         if not self.global_terminate_event.is_set():
             await self.operations.on_reconnection()
@@ -145,3 +163,16 @@ class Node(ComponentsBase):
         result = AsyncResult(func_name=func_name, uuid=msg.uuid)._register()
         self.send_threadsave(msg, 0)
         return result
+
+    # ------------------------------------------------------------------------------------------------------------------
+    # Streaming
+    # ------------------------------------------------------------------------------------------------------------------
+
+    async def read_streams(self, sg: TaskGroup, stub):
+        while True:
+            stream_pair_group, receivers, msg_uuid = await self.stream_store.accept_multi_connection()
+            for stream_pair, receiver in zip(stream_pair_group, receivers):
+                sg.start_soon(self.fire_stream, stream_pair, msg_uuid, receiver, stub)
+
+    async def fire_stream(self, stream_pair, msg_uuid: str, receiver: str, stub):
+        await stub.stream_to_controller(stream_pair, metadata=[("receiver", receiver), ("uuid", msg_uuid)])

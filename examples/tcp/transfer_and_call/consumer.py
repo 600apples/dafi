@@ -29,5 +29,6 @@ def main():
         remote_pid = g.transfer_and_call(remote_process=remote_proc, func=func_to_transfer)
         print(f"Pid of White Rabbit process: {remote_pid}")
 
+
 if __name__ == "__main__":
     main()

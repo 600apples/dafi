@@ -10,11 +10,11 @@ class TestFreezebleQueue:
 
         # Execution & Assertion
         assert fq.size == 0
-        fq.send(1)
+        await fq.send(1)
         assert fq.size == 1
 
         for _ in range(100):
-            fq.send(1)
+            await fq.send(1)
 
         assert fq.size == 101
         await fq._queue.get()
@@ -34,7 +34,7 @@ class TestFreezebleQueue:
         fq = FreezableQueue()
 
         for _ in range(3):
-            fq.send(1)
+            await fq.send(1)
 
         await fq.stop(priority=ItemPriority.LAST)
 
@@ -57,7 +57,7 @@ class TestFreezebleQueue:
         fq = FreezableQueue()
 
         for _ in range(3):
-            fq.send(1)
+            await fq.send(1)
 
         await fq.stop(ItemPriority.FIRST)
 
@@ -69,7 +69,7 @@ class TestFreezebleQueue:
         fq = FreezableQueue()
 
         for _ in range(3):
-            fq.send(1)
+            await fq.send(1)
 
         # Execution & Assertion
         assert fq.unfinished_tasks == 3
@@ -87,7 +87,7 @@ class TestFreezebleQueue:
         fq = FreezableQueue()
 
         for _ in range(100):
-            fq.send(1)
+            await fq.send(1)
 
         assert fq.unfinished_tasks == 100
         fq.reset()
@@ -98,7 +98,7 @@ class TestFreezebleQueue:
         fq = FreezableQueue()
 
         for _ in range(100):
-            fq.send(1)
+            await fq.send(1)
 
         # Normally it just send stop marker which allow cycle to be terminated after all items are processed
         await fq.stop(priority=ItemPriority.LAST)
@@ -121,7 +121,7 @@ class TestFreezebleQueue:
         """
         # Preparation
         fq = FreezableQueue()
-        fq.send(1)
+        await fq.send(1)
 
         # Normally it just send stop marker which allow cycle to be terminated after all items are processed
         await fq.stop(priority=ItemPriority.LAST)

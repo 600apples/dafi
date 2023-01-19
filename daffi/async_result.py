@@ -20,8 +20,17 @@ class AsyncResult:
     def __post_init__(self):
         self._ready = thEvent()
 
-    def __call__(self, timeout: Union[int, float] = None) -> RemoteResult:
-        return self.get(timeout=timeout)
+    @property
+    def ready(self) -> bool:
+        return self._ready.is_set()
+
+    @property
+    def error(self):
+        if not self.result:
+            return
+        res = self._awaited_results.get(self.uuid)
+        if isinstance(res, RemoteError):
+            return res
 
     def get(self, timeout: Union[int, float] = None) -> RemoteResult:
         if self.result is None:
@@ -68,14 +77,20 @@ class AsyncResult:
         AsyncResult._awaited_results[self.uuid] = self
         return self
 
+    def _clone_and_register(self):
+        result_copy = self.__class__(func_name=self.func_name, uuid=self.uuid)
+        result_copy._register()
+        return result_copy
+
     def _set(self):
         self._ready.set()
 
     @classmethod
     def _set_and_trigger(cls, msg_uuid: int, result: Any) -> NoReturn:
         ares = AsyncResult._awaited_results[msg_uuid]
-        AsyncResult._awaited_results[msg_uuid] = result
-        ares._set()
+        if isinstance(ares, AsyncResult):
+            AsyncResult._awaited_results[msg_uuid] = result
+            ares._set()
 
 
 @dataclass

@@ -36,7 +36,6 @@ class TestAsyncResultSuite:
         assert res == "test"
         # second time the same result
         assert ares.get() == "test"
-        assert ares() == "test"
 
     async def test_get_result_async(self):
         ares = AsyncResult(func_name="abc", uuid=12345)._register()
@@ -45,7 +44,6 @@ class TestAsyncResultSuite:
         assert res == "test"
         # second time the same result
         assert ares.get() == "test"
-        assert ares() == "test"
 
     async def test_get_result_type(self):
         res = get_result_type(False, False)

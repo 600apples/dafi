@@ -10,4 +10,4 @@ from daffi.exceptions import (
     RemoteStoppedUnexpectedly,
 )
 from daffi.globals import Global, callback
-from daffi.remote_call import FG, BG, NO_RETURN, PERIOD, BROADCAST
+from daffi.remote_call import FG, BG, NO_RETURN, PERIOD, BROADCAST, STREAM

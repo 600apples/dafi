@@ -8,7 +8,7 @@ description = "Daffi is fast, simple and lightweight library for inter process c
 readme = "README.md"
 requires-python = ">=3.7"
 license = "MIT"
-keywords = []
+keywords = ["rpc", "task", "queue", "job", "async", "python", "distributed", "stream", "grpc"]
 authors = [
   { name = "Volodymyr Boiko", email = "600apples@gmail.com" },
 ]

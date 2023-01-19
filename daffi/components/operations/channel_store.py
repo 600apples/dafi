@@ -3,6 +3,7 @@ import asyncio
 import traceback
 from typing import Optional, Union, Generator, NoReturn
 
+from anyio import sleep
 from grpc._cython.cygrpc import UsageError
 
 from daffi.components.proto.message import Message, RpcMessage, ServiceMessage
@@ -19,9 +20,9 @@ logger = logging.getLogger(__name__)
 class MessageIterator:
     """Iterator to recieve messages"""
 
-    def __init__(self, msg_queue: FreezableQueue):
+    # TODO make abstraction for methods of stream pair and message iterator
 
-        self.loop = asyncio.get_running_loop()
+    def __init__(self, msg_queue: FreezableQueue):
         self.msg_queue = msg_queue
 
     # create an instance of the iterator
@@ -31,7 +32,7 @@ class MessageIterator:
             if eta:
                 # Put to queue again after eta.
                 # It prevents other message to be pushed meanwhile.
-                self.loop.call_later(eta, self.send, message)
+                asyncio.create_task(self.send_with_eta(message=message, eta=eta))
             else:
                 try:
                     for chunk in message.dumps():
@@ -47,8 +48,12 @@ class MessageIterator:
     def send_threadsave(self, message: Message, eta: Optional[Union[int, float]] = None) -> NoReturn:
         self.msg_queue.send_threadsave((message, eta))
 
-    def send(self, message: Message, eta: Optional[Union[int, float]] = None) -> NoReturn:
-        self.msg_queue.send((message, eta))
+    async def send(self, message: Message, eta: Optional[Union[int, float]] = None) -> NoReturn:
+        await self.msg_queue.send((message, eta))
+
+    async def send_with_eta(self, message: Message, eta: Union[int, float]) -> NoReturn:
+        await asyncio.sleep(eta)
+        await self.send(message)
 
     async def stop(self, priority: Optional[ItemPriority] = ItemPriority.LAST) -> NoReturn:
         await self.msg_queue.stop(priority)
@@ -82,8 +87,8 @@ class ChannelPipe(ConditionObserver):
     def send_threadsave(self, message: Message, eta: Optional[Union[int, float]] = None):
         self.send_iterator.send_threadsave(message, eta)
 
-    def send(self, message: Message, eta: Optional[Union[int, float]] = None):
-        self.send_iterator.send(message, eta)
+    async def send(self, message: Message, eta: Optional[Union[int, float]] = None):
+        await self.send_iterator.send(message, eta)
 
     def freeze(self, timeout: Optional[int] = RECONNECTION_TIMEOUT) -> NoReturn:
         self.send_iterator.freeze(timeout=timeout)

@@ -22,7 +22,7 @@ But in some cases it is helpful to give nodes meaningful names.
 For example one process can wait another process by its name:
 
 ```python
-g.wait_process('process name here')
+g.wait_process('node name here')
 ```
 
 `init_controller=True` Means we want to start `Controller` in this process.
@@ -71,6 +71,38 @@ g.call.< remote callback name >(*args, **kwargs) & < execution modifier >
 - `remote callback name` is the name of function registered as remote callback on different `Node`
 - `execution modifier` is modifier class name that determines how to execute remote callback and what to do with result. More details about execution modifiers [here](execution-modifiers.md)
 
+#### waiting for nodes or methods to be available
+
+Sometimes nodes start at different times and because of this, some remote callbacks may not be available immediately.
+
+[Global](code-reference/global.md) has several methods to control waiting for callbacks availability:
+
+
+The 2 examples above illustrate waiting for a remote node to be available:
+
+```python
+g.wait_process('name of remote node')
+```
+or
+
+```python
+await g.wait_process_async('name of remote node')
+```
+
+
+[Global](code-reference/global.md)  can also wait a specific callback to be available by its name:
+
+
+```python
+g.wait_function('name of remote callback')
+```
+or
+
+```python
+await g.wait_function_async('name of remote callback')
+```
+
+Waiting by callback name criteria can be useful when many nodes contain a callback with the same name and we need to wait for the presence of one of them
 
 
 ## callback decorator
@@ -106,7 +138,7 @@ result2 = g.call.subtract_two_numbers(22, 13) & FG
 `FG` in this example is execution modifier. You can read about execution modifiers [here](execution-modifiers.md)
  
 !!! warning
-    Do not use the same callback names in different processes unless you want to use `BROADCAST` execution modifier.
+    Do not use the same callback names in different processes unless you want to use `BROADCAST` or `STREAM` execution modifiers.
     
     For singular execution, for instance if you have `sum_two_numbers` callback registered in process `A` and in process `B` then
     only one of them will be triggered. Daffi use random strategy to execute callback by name. You cannot control which one

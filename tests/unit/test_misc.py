@@ -62,6 +62,5 @@ class TestMiscSuite:
 
         assert res is True
 
-
     async def test_async_library(self):
         assert async_library() == "asyncio"

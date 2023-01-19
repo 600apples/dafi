@@ -29,12 +29,14 @@ nav:
     - full-example.md
     - another-examples.md
   - Execution modifiers: execution-modifiers.md
+  - G object injection: g-object-injection.md
   - Asynchronous applications: async-apps.md
   - Advanced:
     - Callback classes: callback-classes.md
     - Broadcasting: broadcasting.md
     - Pipeline and g object injection: pipeline.md
     - Scheduling tasks: scheduling-tasks.md
+    - Streams: stream.md
   - Code reference:
      - Global: code-reference/global.md
      - callback: code-reference/callback.md
