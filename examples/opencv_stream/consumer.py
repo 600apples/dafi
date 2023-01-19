@@ -18,7 +18,7 @@ def frame_iterator():
 async def main():
     with Global() as g:
 
-        for proc in ('process1', 'process2'):
+        for proc in ("process1", "process2"):
             g.wait_process(proc)
 
         print("Wait for publisher process to be started...")

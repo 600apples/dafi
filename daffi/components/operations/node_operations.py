@@ -11,7 +11,7 @@ from anyio.abc import TaskStatus, CancelScope
 from daffi.async_result import AsyncResult
 from daffi.utils.custom_types import GlobalCallback, K
 from daffi.components.proto.message import RpcMessage, ServiceMessage, MessageFlag, RemoteError, messager_pb2, Message
-from daffi.utils.debug import with_debug_trace
+
 from daffi.components.scheduler import Scheduler
 from daffi.utils.misc import iterable
 from daffi.utils.misc import run_in_threadpool, run_from_working_thread
@@ -47,7 +47,6 @@ class NodeOperations:
         self._channel = channel
         self._channel.proceed()
 
-    @with_debug_trace
     async def on_handshake(self, msg: ServiceMessage, task_status: TaskStatus, process_name: str, info: str):
         msg.loads()
         self.node_callback_mapping = msg.data
@@ -61,7 +60,6 @@ class NodeOperations:
                 f"Node has been started successfully. Process identificator: {process_name!r}. Connection info: {info}"
             )
 
-    @with_debug_trace
     async def on_request(
         self,
         msg: RpcMessage,
@@ -101,7 +99,6 @@ class NodeOperations:
                     process_name,
                 )
 
-    @with_debug_trace
     async def on_success(self, msg: RpcMessage, scheduler: Scheduler):
         msg.loads()
         error = msg.error
@@ -124,7 +121,6 @@ class NodeOperations:
                 else:
                     error.show_in_log(logger=self.logger)
 
-    @with_debug_trace
     async def on_scheduler_accept(self, msg: RpcMessage, process_name: str):
         transmitter = msg.transmitter
         if AsyncResult._awaited_results.get(msg.uuid):
@@ -134,7 +130,6 @@ class NodeOperations:
                 f"Unable to find message uuid to accept {msg.func_name!r} scheduler task in process {process_name!r}"
             )
 
-    @with_debug_trace
     async def on_unable_to_find(self, msg: RpcMessage):
         msg.loads()
         if msg.return_result:
@@ -161,7 +156,6 @@ class NodeOperations:
         await self.channel.send(message_to_return)
         raise StopComponentError()
 
-    @with_debug_trace
     async def on_stream_init(self, msg: RpcMessage, stub, sg, process_name):
         msg.loads()
         remote_callback = LOCAL_CALLBACK_MAPPING.get(msg.func_name)
@@ -182,7 +176,6 @@ class NodeOperations:
                     stub,
                 )
 
-    @with_debug_trace
     async def on_stream_error(self, msg: RpcMessage):
         msg.loads()
         error = msg.error
@@ -200,7 +193,6 @@ class NodeOperations:
             stream_pair.closed = True
             await stream_pair.stop(ItemPriority.FIRST)
 
-    @with_debug_trace
     async def _remote_func_stream_executor(
         self,
         remote_callback: "RemoteCallback",
@@ -270,7 +262,6 @@ class NodeOperations:
             )
         await self.channel.send(message_to_return)
 
-    @with_debug_trace
     async def _remote_func_executor(
         self,
         remote_callback: "RemoteCallback",
