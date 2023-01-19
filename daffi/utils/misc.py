@@ -78,7 +78,6 @@ class ReconnectFreq:
         self._limited = False
 
 
-
 class ConditionObserver:
     def __init__(self, condition_timeout: int):
         self.condition = Condition()

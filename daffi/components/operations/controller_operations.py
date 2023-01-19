@@ -5,7 +5,7 @@ from typing import Dict, Tuple, Any
 
 from anyio import sleep
 from anyio.abc import TaskGroup
-from daffi.utils.debug import with_debug_trace
+
 from daffi.utils.settings import WELL_KNOWN_CALLBACKS
 from daffi.utils.custom_types import K, GlobalCallback
 from daffi.utils.misc import search_remote_callback_in_mapping
@@ -33,7 +33,6 @@ class ControllerOperations:
         while self.awaited_procs or self.awaited_broadcast_procs or self.awaited_stream_procs:
             await sleep(0.1)
 
-    @with_debug_trace
     async def on_channel_close(self, channel: ChannelPipe, process_identificator: str):
         if channel.locked:
             return
@@ -134,7 +133,6 @@ class ControllerOperations:
                         )
                         self.awaited_broadcast_procs.pop(msg_uuid, None)
 
-    @with_debug_trace
     async def on_handshake(self, msg: ServiceMessage, channel: ChannelPipe):
         msg.loads()
         self.controller_callback_mapping[msg.transmitter] = msg.data
@@ -146,7 +144,6 @@ class ControllerOperations:
                 # Send updated self.controller_callback_mapping to all processes except transmitter process.
                 await chan.send(msg.copy(transmitter=msg.transmitter, receiver=proc))
 
-    @with_debug_trace
     async def on_request(self, msg: RpcMessage):
 
         receiver = msg.receiver
@@ -184,7 +181,6 @@ class ControllerOperations:
                 await trans_chan.send(msg)
             self.logger.error(info)
 
-    @with_debug_trace
     async def on_success(self, msg: RpcMessage):
         transmitter = None
 
@@ -243,7 +239,6 @@ class ControllerOperations:
             else:
                 await chan.send(msg)
 
-    @with_debug_trace
     async def on_scheduler_error(self, msg: RpcMessage):
         # Dont care about RpcMessage uuid. Scheduler tasks are long running processes. Sheduler can report about error
         # multiple times.
@@ -255,7 +250,6 @@ class ControllerOperations:
             msg.flag = MessageFlag.SUCCESS
             await chan.send(msg)
 
-    @with_debug_trace
     async def on_broadcast(self, msg: RpcMessage, process_name: str):
 
         transmitter = msg.transmitter

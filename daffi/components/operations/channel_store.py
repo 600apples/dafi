@@ -3,11 +3,9 @@ import asyncio
 import traceback
 from typing import Optional, Union, Generator, NoReturn
 
-from anyio import sleep
 from grpc._cython.cygrpc import UsageError
 
 from daffi.components.proto.message import Message, RpcMessage, ServiceMessage
-from daffi.utils.debug import with_debug_trace
 from daffi.utils.misc import ConditionObserver
 from daffi.utils.settings import RECONNECTION_TIMEOUT
 from daffi.components.operations.freezable_queue import FreezableQueue, ItemPriority
@@ -105,7 +103,6 @@ class ChannelPipe(ConditionObserver):
 
 
 class ChannelStore(dict):
-    @with_debug_trace
     async def add_channel(self, channel: ChannelPipe, process_name: str) -> bool:
         was_locked = False
         prev_chan = self.get(process_name)
@@ -115,18 +112,15 @@ class ChannelStore(dict):
         self[process_name] = channel
         return was_locked
 
-    @with_debug_trace
     async def find_process_name_by_channel(self, channel: ChannelPipe) -> str:
         try:
             return next(proc for proc, chan in list(self.items()) if chan == channel)
         except StopIteration:
             ...
 
-    @with_debug_trace
     async def delete_channel(self, process_name: str):
         self.pop(process_name, None)
 
-    @with_debug_trace
     async def iterate(self):
         for proc_name in list(self):
             chan = await self.get_chan(proc_name)

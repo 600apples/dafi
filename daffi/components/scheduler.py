@@ -15,7 +15,7 @@ from daffi.components.operations.channel_store import ChannelPipe
 from daffi.components.proto.message import RpcMessage, RemoteError, MessageFlag
 from daffi.utils.logger import patch_logger
 from daffi.utils.misc import run_in_threadpool, run_from_working_thread
-from daffi.utils.debug import with_debug_trace
+
 from daffi.utils.settings import LOCAL_CALLBACK_MAPPING
 
 
@@ -45,11 +45,9 @@ class Scheduler:
             ...
         FINISHED_TASKS.clear()
 
-    @with_debug_trace
     async def on_error(self, msg: RpcMessage):
         msg.error.show_in_log(logger=logger)
 
-    @with_debug_trace
     async def register(self, msg: RpcMessage, channel: ChannelPipe):
 
         task_ident = TaskIdent(msg.transmitter, msg.func_name, msg.uuid)
@@ -64,7 +62,6 @@ class Scheduler:
                 for ind, ts in enumerate(msg.period.at_time)
             ]
 
-    @with_debug_trace
     async def on_interval(self, interval: int, channel: ChannelPipe, msg: RpcMessage, task_ident: TaskIdent):
         while True:
             await sleep(interval)
@@ -77,7 +74,6 @@ class Scheduler:
                 FINISHED_TASKS.append(task_ident.msg_uuid)
                 break
 
-    @with_debug_trace
     async def on_at_time(self, ts: int, channel: ChannelPipe, msg: RpcMessage, task_ident: TaskIdent, task_index: int):
         now = datetime.utcnow().timestamp()
         delta = ts - now
@@ -116,7 +112,6 @@ class Scheduler:
                 # Remove at time tasks list only when last task is completed
                 SCHEDULER_AT_TIME_TASKS.pop(task_ident, None)
 
-    @with_debug_trace
     async def _remote_func_executor(self, channel: ChannelPipe, msg: RpcMessage, condition: str) -> bool:
         error = None
         success = True
