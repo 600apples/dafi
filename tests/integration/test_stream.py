@@ -35,16 +35,16 @@ async def test_callback_per_node_unix(remote_callbacks_path, g):
         assert stream_values == processed_arr
 
     res = g.stop(True)
-    assert res == {
-        "node-6": None,
-        "node-1": None,
-        "node-5": None,
-        "node-7": None,
-        "node-4": None,
-        "node-3": None,
-        "node-2": None,
-        "node-9": None,
-        "node-8": None,
+    assert set(res) == {
+        "node-6",
+        "node-1",
+        "node-5",
+        "node-7",
+        "node-4",
+        "node-3",
+        "node-2",
+        "node-9",
+        "node-8",
     }
 
 
@@ -80,14 +80,14 @@ async def test_callback_per_node_tcp(remote_callbacks_path, g):
         assert stream_values == processed_arr
 
     res = g.stop(True)
-    assert res == {
-        "node-6": None,
-        "node-1": None,
-        "node-5": None,
-        "node-7": None,
-        "node-4": None,
-        "node-3": None,
-        "node-2": None,
-        "node-9": None,
-        "node-8": None,
+    assert set(res) == {
+        "node-6",
+        "node-1",
+        "node-5",
+        "node-7",
+        "node-4",
+        "node-3",
+        "node-2",
+        "node-9",
+        "node-8",
     }

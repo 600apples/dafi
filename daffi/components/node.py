@@ -11,7 +11,7 @@ from daffi.utils.logger import patch_logger
 from daffi.async_result import AsyncResult
 from daffi.components import ComponentsBase
 from daffi.components.proto.message import RpcMessage, ServiceMessage, MessageFlag
-from daffi.utils.debug import with_debug_trace
+
 from daffi.components.scheduler import Scheduler
 from daffi.components.proto import messager_pb2_grpc as grpc_messager
 from daffi.exceptions import UnableToFindCandidate, RemoteStoppedUnexpectedly, InitializationError, RemoteError
@@ -42,7 +42,6 @@ class Node(ComponentsBase):
         self.logger = patch_logger(logging.getLogger(__name__), colors.green)
         self.operations = NodeOperations(logger=self.logger, async_backend=self.async_backend)
 
-    @with_debug_trace
     async def on_stop(self) -> NoReturn:
         if self.channel:
             await self.channel.clear_queue()
@@ -146,7 +145,6 @@ class Node(ComponentsBase):
         if not self.global_terminate_event.is_set():
             await self.operations.on_reconnection()
 
-    @with_debug_trace
     def send_threadsave(self, msg: RpcMessage, eta: Union[int, float]):
         """Send message outside of node executor scope."""
         self.channel.send_threadsave(msg, eta)
