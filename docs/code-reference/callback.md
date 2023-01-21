@@ -1,2 +1,2 @@
-::: daffi.globals.callback
+::: daffi.decorators.callback
     

@@ -9,7 +9,7 @@ from daffi.exceptions import RemoteError
 from daffi.utils.misc import uuid, Period
 from daffi.utils.settings import BYTES_CHUNK, BYTES_LIMIT
 from daffi.components.proto import messager_pb2
-from daffi.exceptions import InitializationError
+from daffi.exceptions import InitializationError, GlobalContextError
 
 
 logger = logging.getLogger(__name__)

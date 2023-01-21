@@ -61,6 +61,7 @@ class ReconnectFreq:
     def __init__(self, reconnect_freq: int):
         self.reconnect_freq = reconnect_freq
         self._limited = False
+        self._locked = False
 
     def __bool__(self):
         return self.reconnect_freq is not None
@@ -70,6 +71,24 @@ class ReconnectFreq:
         if self._limited:
             return self.LIMIT
         return self.reconnect_freq
+
+    @property
+    def locked(self):
+        return self._locked
+
+    @contextmanager
+    def locker(self):
+        try:
+            self.lock()
+            yield
+        finally:
+            self.unlock()
+
+    def lock(self):
+        self._locked = True
+
+    def unlock(self):
+        self._locked = False
 
     def limit_freq(self):
         self._limited = True

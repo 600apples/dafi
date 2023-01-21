@@ -81,6 +81,20 @@ class RemoteCallback(NamedTuple):
     __call__ = __call__
     validate_g_position_type = validate_g_position_type
 
+    def simplified(self) -> "RemoteCallback":
+        """
+        Remove or convert unnecessary attributes for serialization.
+        ! This method makes copy of original callback
+          by removing those attributes which can cause serialization errors on remote side
+        """
+
+        return self.__class__(
+            **{
+                **self._asdict(),
+                "callback": True,
+            }
+        )
+
     def validate_provided_arguments(self, *args: P.args, **kwargs: P.kwargs):
         validate_g_presence_in_arguments(*args, **kwargs)
         if validate_g_position(args=args, kwargs=kwargs, signature=self.signature):
@@ -102,6 +116,19 @@ class RemoteClassCallback(NamedTuple):
 
     __call__ = __call__
     validate_g_position_type = validate_g_position_type
+
+    def simplified(self) -> "RemoteClassCallback":
+        """
+        Remove or convert unnecessary attributes for serialization.
+        ! This method makes copy of original callback
+          by removing those attributes which can cause serialization errors on remote side
+        """
+        return self.__class__(
+            **{
+                **self._asdict(),
+                "klass": bool(self.klass),
+            }
+        )
 
     @property
     def callback(self) -> GlobalCallback:

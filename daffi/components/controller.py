@@ -10,6 +10,7 @@ from daffi.utils import colors
 from daffi.utils.logger import patch_logger
 from daffi.components import ComponentsBase
 from daffi.exceptions import GlobalContextError
+from daffi.utils.debug import with_debug_trace
 from daffi.components.proto.message import MessageFlag, messager_pb2
 from daffi.components.operations.controller_operations import ControllerOperations
 from daffi.components.operations.channel_store import ChannelPipe, MessageIterator, FreezableQueue
@@ -42,6 +43,12 @@ class Controller(ComponentsBase):
         self.operations = ControllerOperations(logger=self.logger)
 
     async def on_stop(self) -> NoReturn:
+        await super().on_stop()
+        self.logger.debug("On stop event triggered")
+        self.logger.debug("Wait all channels to be unlocked")
+
+        await self.operations.wait_all_channels_unlocked()
+        self.logger.debug("All channels unlocked.")
 
         async with create_task_group() as sg:
             with move_on_after(2):
@@ -50,9 +57,11 @@ class Controller(ComponentsBase):
             with move_on_after(2):
                 if self.listener:
                     sg.start_soon(self.listener.stop, 2)
-        await super().on_stop()
+        self.logger.info(f"{self.__class__.__name__} stopped.")
+        self._stopped = True
 
     async def before_connect(self) -> NoReturn:
+        self.logger.debug("Before connect event triggered.")
         self.listener = None
 
     # ------------------------------------------------------------------------------------------------------------------
@@ -61,7 +70,6 @@ class Controller(ComponentsBase):
 
     async def handle_operations(self, task_status: TaskStatus) -> NoReturn:
         self.listener = await self.create_listener()
-
         if task_status._future._state == "PENDING":
             task_status.started("STARTED")
         self.logger.info(
@@ -123,8 +131,10 @@ class Controller(ComponentsBase):
         receiver = next(v for k, v in context.invocation_metadata() if k == "receiver")
         msg_uuid = next(v for k, v in context.invocation_metadata() if k == "uuid")
 
-        async with self.stream_store.request_paired_connection(receiver, msg_uuid, request_iterator) as wait:
-            await wait()
+        with self.stream_store.get_or_create_stream_pair_cm(receiver, msg_uuid) as stream_pair:
+            async for msg in request_iterator:
+                await stream_pair.stream_queue.send(msg)
+            await stream_pair.stream_queue.stop()
         return messager_pb2.Empty()
 
     async def stream_from_controller(self, request, context):
@@ -133,6 +143,6 @@ class Controller(ComponentsBase):
         receiver = next(v for k, v in context.invocation_metadata() if k == "receiver")
         msg_uuid = next(v for k, v in context.invocation_metadata() if k == "uuid")
 
-        async with self.stream_store.accept_paired_connection(receiver, msg_uuid) as iterator:
-            async for message in iterator:
+        with self.stream_store.get_or_create_stream_pair_cm(receiver, msg_uuid) as stream_pair:
+            async for message in stream_pair.stream_queue.iterate():
                 yield message

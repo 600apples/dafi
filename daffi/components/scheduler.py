@@ -30,11 +30,10 @@ FINISHED_TASKS: Deque[int] = deque(maxlen=1000)
 
 @dataclass
 class Scheduler:
-    sg: TaskGroup
     process_name: str
     async_backend: str
 
-    async def on_scheduler_stop(cls):
+    async def on_scheduler_stop(self):
         try:
             for task_group in SCHEDULER_AT_TIME_TASKS.values():
                 for task in filter(None, task_group):
@@ -44,6 +43,8 @@ class Scheduler:
         except RuntimeError:
             ...
         FINISHED_TASKS.clear()
+        SCHEDULER_PERIODICAL_TASKS.clear()
+        SCHEDULER_AT_TIME_TASKS.clear()
 
     async def on_error(self, msg: RpcMessage):
         msg.error.show_in_log(logger=logger)

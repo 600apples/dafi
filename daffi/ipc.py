@@ -23,7 +23,7 @@ from daffi.utils.misc import (
     iterable,
 )
 from daffi.utils.func_validation import pretty_callbacks
-from daffi.utils.settings import LOCAL_CALLBACK_MAPPING, LOCAL_CLASS_CALLBACKS
+from daffi.utils.settings import LOCAL_CALLBACK_MAPPING, LOCAL_CLASS_CALLBACKS, WELL_KNOWN_CALLBACKS
 
 
 class Ipc(Thread):
@@ -97,7 +97,7 @@ class Ipc(Thread):
                     mapping=self.node.node_callback_mapping, exclude_proc=self.process_name, format="string"
                 )
                 GlobalContextError(
-                    f"function {func_name} not found on remote.\n"
+                    f"function {func_name!r} not found on remote.\n"
                     + f"Available registered callbacks:\n {available_callbacks}"
                     if available_callbacks
                     else ""
@@ -150,11 +150,15 @@ class Ipc(Thread):
         with resilent(RuntimeError):
             with start_blocking_portal(backend="asyncio", backend_options=backend_options) as portal:
                 if self.init_controller:
-                    self.controller = Controller(self.process_name, self.host, self.port)
+                    self.controller = Controller(
+                        process_name=self.process_name,
+                        host=self.host,
+                        port=self.port,
+                        global_terminate_event=self.global_terminate_event,
+                    )
 
                     c_future, _ = portal.start_task(
                         self.controller.handle,
-                        self.global_terminate_event,
                         name=Controller.__class__.__name__,
                     )
                     self.port = getattr(self.controller, "port", None)
@@ -162,26 +166,27 @@ class Ipc(Thread):
 
                 if self.init_node:
                     self.node = Node(
-                        self.process_name,
-                        self.host,
-                        self.port,
+                        process_name=self.process_name,
+                        host=self.host,
+                        port=self.port,
                         reconnect_freq=self.reconnect_freq,
                         async_backend=self.async_backend,
+                        global_terminate_event=self.global_terminate_event,
                     )
 
                     n_future, _ = portal.start_task(
                         self.node.handle,
-                        self.global_terminate_event,
                         name=Node.__class__.__name__,
                     )
                 self.global_condition_event.mark_success()
                 self.global_terminate_event.wait()
 
                 # Wait controller and node to finish 'on_stop' lifecycle callbacks.
-                if self.controller:
-                    self.controller.wait()
                 if self.node:
-                    self.node.wait()
+                    self.node.stop(wait=True)
+                if self.controller:
+                    self.controller.stop(wait=True)
+
                 # Wait pending futures to complete their tasks
                 for future in filter(None, (c_future, n_future)):
                     if not future.done():
@@ -200,7 +205,7 @@ class Ipc(Thread):
             if len(args) != 1:
                 InitializationError(
                     "Pass exactly 1 positional argument to initialize stream."
-                    " It can be list, tuple generator etc. In general it should be iterable object"
+                    f" It can be list, tuple generator or any iterable. Provided args: {args}. Provided args len: {len(args)}"
                 ).fire()
             stream_items = args[0]
             if not iterable(stream_items):
@@ -226,8 +231,9 @@ class Ipc(Thread):
             )
             # Register result in order to obtain all available receivers
             result = self.node.send_and_register_result(func_name=func_name, msg=msg)
-            receivers = result.get()
 
+            self.logger.debug("Wait available stream receivers")
+            receivers = result.get()
             if not receivers:
                 InitializationError("Unable to find receivers for stream.").fire()
 
@@ -242,15 +248,20 @@ class Ipc(Thread):
                     for msg in ServiceMessage.build_stream_message(data=stream_item):
                         stream_pair_group.send_threadsave(msg)
             # Wait all receivers to finish stream processing.
+            self.logger.debug("Stream closed. Wait for confirmation from receivers...")
             result.get()
+            self.logger.debug("Confirmed.")
 
-    def update_callbacks(self, func_info: Dict[str, "RemoteCallback"]) -> NoReturn:
+    def update_callbacks(self) -> NoReturn:
         if self.node:
+            local_mapping_without_well_known_callbacks = {
+                k: v.simplified() for k, v in LOCAL_CALLBACK_MAPPING.items() if k not in WELL_KNOWN_CALLBACKS
+            }
             self.node.send_threadsave(
                 ServiceMessage(
                     flag=MessageFlag.UPDATE_CALLBACKS,
                     transmitter=self.process_name,
-                    data=func_info,
+                    data=local_mapping_without_well_known_callbacks,
                 ),
                 0,
             )

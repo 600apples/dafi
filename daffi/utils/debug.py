@@ -1,19 +1,28 @@
+import os
 import logging
 import traceback
 from pathlib import Path
 
 
 from anyio import EndOfStream
+from grpc.aio._call import AioRpcError
 from tenacity import retry, stop_after_attempt, retry_if_not_exception_type
 
 from daffi.utils import colors
 from daffi.utils.logger import patch_logger
+from daffi.exceptions import StopComponentError, ReckAcceptError
 
 logger = patch_logger(logging.getLogger(__name__), colors.red)
 
 
+debug = os.getenv("DAFFI_DEBUG")
+
+
 def write_exception_trace(retry_state):
     """Write exeption to file. For debug only purposes"""
+
+    if not debug:
+        return
 
     fn_name = retry_state.fn.__name__
     try:
@@ -30,5 +39,7 @@ with_debug_trace = retry(
     stop=stop_after_attempt(1),
     reraise=True,
     retry_error_callback=write_exception_trace,
-    retry=retry_if_not_exception_type((EndOfStream, StopIteration, StopAsyncIteration)),
+    retry=retry_if_not_exception_type(
+        (EndOfStream, StopIteration, StopAsyncIteration, StopComponentError, AioRpcError, ReckAcceptError)
+    ),
 )

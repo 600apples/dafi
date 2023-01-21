@@ -33,6 +33,10 @@ class ControllerOperations:
         while self.awaited_procs or self.awaited_broadcast_procs or self.awaited_stream_procs:
             await sleep(0.1)
 
+    async def wait_all_channels_unlocked(self):
+        while any(c.locked for c in self.channel_store.values()):
+            await sleep(0.1)
+
     async def on_channel_close(self, channel: ChannelPipe, process_identificator: str):
         if channel.locked:
             return
@@ -307,13 +311,15 @@ class ControllerOperations:
         if chan:
             # Give channel some time to reconnect (15 sec by default). If channel is not connected during timeout
             # option then delete channel from store.
-            chan.register_fail_callback(self.on_channel_close, chan)
+            chan.register_fail_callback(self.on_channel_close, chan, transmitter)
             sg.start_soon(chan.fire)
             await chan.send(ServiceMessage(flag=MessageFlag.RECK_ACCEPT))
 
     async def on_stream_init(self, msg: RpcMessage):
         transmitter = msg.transmitter
         trans_chan = await self.channel_store.get_chan(transmitter)
+
+        self.logger.debug(f"Received stream request from transmitter: {transmitter}")
 
         aggregated = dict()
         self.awaited_stream_procs[msg.uuid] = (transmitter, aggregated)
@@ -328,6 +334,7 @@ class ControllerOperations:
                     await chan.send(msg.copy(receiver=receiver))
                     aggregated[receiver] = RESULT_EMPTY
             await trans_chan.send(msg.copy(flag=MessageFlag.SUCCESS, func_args=(list(aggregated),), data=None))
+            self.logger.debug(f"Found next stream receiver candidates: {list(aggregated)}")
         else:
             info = f"Unable to find remote process candidate to execute {msg.func_name!r}"
             self.awaited_stream_procs.pop(msg.uuid, None)

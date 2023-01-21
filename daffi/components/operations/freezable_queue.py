@@ -145,6 +145,9 @@ class FreezableQueue(AbstractQueue):
             except RuntimeError:
                 ...
 
+    def send_no_wait(self, data: Any, priority: Optional[ItemPriority] = ItemPriority.NORMAL):
+        self._queue.put_nowait(PriorityEntry(priority=priority, data=data))
+
     async def send(self, data: Any, priority: Optional[ItemPriority] = ItemPriority.NORMAL):
         """
         Threadsave option to send item to queue.

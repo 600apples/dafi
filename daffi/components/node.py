@@ -1,6 +1,5 @@
 import logging
-from typing import Union, NoReturn, List
-from contextlib import contextmanager
+from typing import Union, NoReturn
 from anyio import create_task_group, sleep
 from anyio._backends._asyncio import TaskGroup
 from anyio.abc import TaskStatus
@@ -13,6 +12,7 @@ from daffi.components import ComponentsBase
 from daffi.components.proto.message import RpcMessage, ServiceMessage, MessageFlag
 
 from daffi.components.scheduler import Scheduler
+from daffi.utils.debug import with_debug_trace
 from daffi.components.proto import messager_pb2_grpc as grpc_messager
 from daffi.exceptions import UnableToFindCandidate, RemoteStoppedUnexpectedly, InitializationError, RemoteError
 from daffi.utils.settings import LOCAL_CALLBACK_MAPPING, WELL_KNOWN_CALLBACKS
@@ -40,9 +40,16 @@ class Node(ComponentsBase):
 
     async def on_init(self) -> NoReturn:
         self.logger = patch_logger(logging.getLogger(__name__), colors.green)
-        self.operations = NodeOperations(logger=self.logger, async_backend=self.async_backend)
+        self.operations = NodeOperations(
+            logger=self.logger, async_backend=self.async_backend, reconnect_freq=self.reconnect_freq
+        )
+        self.scheduler = Scheduler(process_name=self.process_name, async_backend=self.async_backend)
 
     async def on_stop(self) -> NoReturn:
+        await super().on_stop()
+        self.logger.debug("On stop event triggered")
+
+        await self.scheduler.on_scheduler_stop()
         for msg_uuid, ares in AsyncResult._awaited_results.items():
             if isinstance(ares, AsyncResult):
                 AsyncResult._awaited_results[msg_uuid] = RemoteError(
@@ -54,9 +61,11 @@ class Node(ComponentsBase):
             await self.channel.clear_queue()
             await self.channel.stop()
         FreezableQueue.factory_remove(self.ident)
-        await super().on_stop()
+        self.logger.info(f"{self.__class__.__name__} stopped.")
+        self._stopped = True
 
     async def before_connect(self) -> NoReturn:
+        self.logger.debug("Before connect event triggered.")
         self.channel = None
 
     # ------------------------------------------------------------------------------------------------------------------
@@ -75,7 +84,6 @@ class Node(ComponentsBase):
             self.operations.channel = self.channel
 
             async with create_task_group() as sg:
-                self.scheduler = Scheduler(process_name=self.process_name, sg=sg, async_backend=self.async_backend)
                 sg.start_soon(self.read_commands, task_status, sg, stub)
                 sg.start_soon(self.reconnect_request)
                 sg.start_soon(self.read_streams, sg, stub)
@@ -84,17 +92,19 @@ class Node(ComponentsBase):
         if self.reconnect_freq:
             while True:
                 await sleep(self.reconnect_freq.value)
-                self.reconnect_freq.limit_freq()
-                await self.channel.send(
-                    ServiceMessage(
-                        flag=MessageFlag.RECK_REQUEST,
-                        transmitter=self.process_name,
+                if not self.reconnect_freq.locked:
+                    self.reconnect_freq.limit_freq()
+                    await self.channel.send(
+                        ServiceMessage(
+                            flag=MessageFlag.RECK_REQUEST,
+                            transmitter=self.process_name,
+                        )
                     )
-                )
 
     async def read_commands(self, task_status: TaskStatus, sg: TaskGroup, stub):
+        self.reconnect_freq.lock()
         local_mapping_without_well_known_callbacks = {
-            k: v for k, v in LOCAL_CALLBACK_MAPPING.items() if k not in WELL_KNOWN_CALLBACKS
+            k: v.simplified() for k, v in LOCAL_CALLBACK_MAPPING.items() if k not in WELL_KNOWN_CALLBACKS
         }
         await self.channel.send(
             ServiceMessage(

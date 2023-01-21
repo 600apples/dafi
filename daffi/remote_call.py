@@ -1,11 +1,11 @@
 import re
 import sys
 import time
-from inspect import getframeinfo
 from anyio import to_thread, sleep
 from dataclasses import dataclass, field
 from datetime import timedelta, datetime
 from threading import Event
+from inspect import getframeinfo
 from typing import Optional, Union, NoReturn, Callable, List, Any
 
 from daffi.async_result import AsyncResult, SchedulerTask
@@ -13,42 +13,9 @@ from daffi.exceptions import GlobalContextError, InitializationError
 from daffi.utils.timeparse import timeparse
 from daffi.utils.custom_types import P, RemoteResult, TimeUnits
 from daffi.utils.misc import Period, search_remote_callback_in_mapping
+from daffi.execution_modifiers import FG, BG, NO_RETURN, PERIOD, BROADCAST, STREAM, RetryPolicy
 
-__all__ = ["RemoteResult", "FG", "BG", "PERIOD", "BROADCAST", "NO_RETURN"]
-
-
-@dataclass
-class FG:
-    timeout: Optional[TimeUnits] = None
-
-
-@dataclass
-class BG:
-    timeout: Optional[TimeUnits] = None
-    eta: Optional[TimeUnits] = None
-
-
-@dataclass
-class NO_RETURN:
-    eta: Optional[TimeUnits] = None
-
-
-@dataclass
-class PERIOD:
-    at_time: Optional[Union[List[TimeUnits], TimeUnits]] = None
-    interval: Optional[TimeUnits] = None
-
-
-@dataclass
-class BROADCAST:
-    eta: Optional[TimeUnits] = None
-    timeout: Optional[TimeUnits] = None  # Works only with return_result=True
-    return_result: Optional[bool] = False
-
-
-@dataclass
-class STREAM:
-    ...
+__all__ = ["RemoteCall"]
 
 
 _empty_result = object()
@@ -75,8 +42,11 @@ class RemoteCall:
     def obtain_result_in_thread(self, next_operand: Union[FG, BG, BROADCAST, NO_RETURN, PERIOD, STREAM]):
         self._result = self & next_operand
 
-    async def __self_await__(self, next_operand: Union[FG, BG, BROADCAST, NO_RETURN, PERIOD, STREAM]):
+    async def __process_await__(self, next_operand: Union[FG, BG, BROADCAST, NO_RETURN, PERIOD, STREAM]):
         await to_thread.run_sync(self.obtain_result_in_thread, next_operand)
+        return self
+
+    async def __self_await__(self):
         return self
 
     def __await__(self):
@@ -88,14 +58,14 @@ class RemoteCall:
         try:
             next_operand, next_operand_args = re.findall(_available_operands_search_pattern, "".join(code_context))[0]
         except (ValueError, IndexError):
-            InitializationError(
-                f"Object of {self.__class__.__name__} doesn't support await expressions. "
-                f"Use await g.call.<callback_name> & {_available_operands}[(*args, **kwargs)].\n"
-                f"Do not use pre-initialization of operands either.\n"
-                f"For instance this is wrong:\nop=BG(eta=15)\nawait g.call.<callback_name> & op\n"
-            ).fire()
-        next_operand = eval(f"{next_operand}{next_operand_args}", frame_globals, frame_locals)
-        return self.__self_await__(next_operand).__await__()
+            return self.__self_await__().__await__()
+
+        try:
+            next_operand = eval(f"{next_operand}{next_operand_args}", frame_globals, frame_locals)
+            return self.__process_await__(next_operand).__await__()
+        except Exception:
+            self._result = None
+            return self.__self_await__().__await__()
 
     def __and__(self, other) -> RemoteResult:
         if self._result != _empty_result:
@@ -105,7 +75,7 @@ class RemoteCall:
             other = other()
 
         if isinstance(other, (FG, type(FG))):
-            return self.fg(timeout=other.timeout)
+            return self.fg(timeout=other.timeout, retry_policy=other.retry_policy)
 
         elif isinstance(other, (BG, type(BG))):
             return self.bg(timeout=other.timeout, eta=other.eta)
@@ -117,7 +87,9 @@ class RemoteCall:
             return self.period(at_time=other.at_time, interval=other.interval)
 
         elif isinstance(other, (BROADCAST, type(BROADCAST))):
-            return self.broadcast(eta=other.eta, return_result=other.return_result, timeout=other.timeout)
+            return self.broadcast(
+                eta=other.eta, return_result=other.return_result, timeout=other.timeout, retry_policy=other.retry_policy
+            )
 
         elif isinstance(other, (STREAM, type(STREAM))):
             return self.stream()
@@ -136,9 +108,10 @@ class RemoteCall:
     def exists(self) -> bool:
         return bool(self.info)
 
-    def fg(self, timeout: Optional[TimeUnits] = None) -> RemoteResult:
+    def fg(self, timeout: Optional[TimeUnits] = None, retry_policy: Optional[RetryPolicy] = None) -> RemoteResult:
+        executable = retry_policy.build(self._ipc.call) if isinstance(retry_policy, RetryPolicy) else self._ipc.call
         timeout = self._get_duration(timeout, "timeout")
-        return self._ipc.call(
+        return executable(
             self.func_name,
             args=self.args,
             kwargs=self.kwargs,
@@ -179,10 +152,12 @@ class RemoteCall:
         eta: Optional[TimeUnits] = None,
         return_result: Optional[bool] = False,
         timeout: Optional[TimeUnits] = None,
+        retry_policy: Optional[RetryPolicy] = None,
     ) -> Optional[AsyncResult]:
         timeout = self._get_duration(timeout, "timeout")
         eta = self._get_duration(eta, "eta", 0)
-        return self._ipc.call(
+        executable = retry_policy.build(self._ipc.call) if isinstance(retry_policy, RetryPolicy) else self._ipc.call
+        return executable(
             self.func_name,
             args=self.args,
             kwargs=self.kwargs,

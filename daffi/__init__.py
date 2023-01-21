@@ -9,5 +9,6 @@ from daffi.exceptions import (
     TimeoutError,
     RemoteStoppedUnexpectedly,
 )
-from daffi.globals import Global, callback
-from daffi.remote_call import FG, BG, NO_RETURN, PERIOD, BROADCAST, STREAM
+from daffi.globals import Global
+from daffi.decorators import callback, fetcher, __signature_unknown__, callback_and_fetcher
+from daffi.remote_call import FG, BG, NO_RETURN, PERIOD, BROADCAST, STREAM, RetryPolicy

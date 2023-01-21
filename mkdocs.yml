@@ -43,6 +43,7 @@ nav:
   - Code reference:
      - Global: code-reference/global.md
      - callback: code-reference/callback.md
+     - fetcher: code-reference/fetcher.md
 
 plugins:
   - search

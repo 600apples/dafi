@@ -1,8 +1,8 @@
 import asyncio
 from dataclasses import dataclass, field
-from contextlib import contextmanager, asynccontextmanager
-from typing import Any, NoReturn, Optional, List, Union, Iterator, Tuple
-
+from contextlib import contextmanager
+from typing import Any, NoReturn, Optional, List, Union, Tuple
+from grpc.aio._call import AioRpcError
 from daffi.components.operations.freezable_queue import FreezableQueue, ItemPriority, STOP_MARKER
 
 
@@ -14,8 +14,12 @@ class StreamPair:
 
     # create an instance of the iterator
     async def __aiter__(self):
-        async for msg in self.stream_queue.iterate():
-            yield msg
+        try:
+            async for msg in self.stream_queue.iterate():
+                yield msg
+        except AioRpcError as err:
+            if err.details != "Cancelling all calls":
+                raise
 
     @property
     def closed(self) -> bool:
@@ -27,6 +31,9 @@ class StreamPair:
 
     def send_threadsave(self, item: Any, priority: Optional[ItemPriority] = ItemPriority.NORMAL) -> NoReturn:
         self.stream_queue.send_threadsave(item, priority)
+
+    def send_no_wait(self, item):
+        self.stream_queue.send_no_wait(item)
 
     async def send(self, item: Any) -> NoReturn:
         await self.stream_queue.send(item)
@@ -68,6 +75,14 @@ class StreamPairStore(dict):
         return stream_pair
 
     @contextmanager
+    def get_or_create_stream_pair_cm(self, *strings) -> StreamPair:
+        stream_pair = self.get_or_create_stream_pair(*strings)
+        try:
+            yield stream_pair
+        finally:
+            self.delete_stream_pair(*strings)
+
+    @contextmanager
     def request_multi_connection(self, receivers: Union[str, List[str]], msg_uuid: str) -> NoReturn:
         # Create stream pair group (contains one or more stream pair)
         if isinstance(receivers, str):
@@ -89,25 +104,6 @@ class StreamPairStore(dict):
 
     async def accept_multi_connection(self) -> Tuple["StreamPairGroup", str]:
         return await self.stream_pairs_queue.get()
-
-    @asynccontextmanager
-    async def request_paired_connection(self, receiver: str, msg_uuid: str, message_iterator: Iterator):
-        stream_pair = self.get_or_create_stream_pair(receiver, msg_uuid)
-        await stream_pair.send(message_iterator)
-        try:
-            yield stream_pair.stream_queue.wait
-        finally:
-            await stream_pair.stop()
-            self.delete_stream_pair(receiver, msg_uuid)
-
-    @asynccontextmanager
-    async def accept_paired_connection(self, receiver: str, msg_uuid: str):
-        stream_pair = self.get_or_create_stream_pair(receiver, msg_uuid)
-        data = await stream_pair.stream_queue.get()
-        try:
-            yield data.data
-        finally:
-            stream_pair.stream_queue.reset()
 
 
 class StreamPairGroup(List[StreamPair]):

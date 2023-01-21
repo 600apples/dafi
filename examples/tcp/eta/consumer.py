@@ -4,7 +4,7 @@ Consumer is the process that consumes available remote functions.
 
 import time
 import asyncio
-from daffi import Global, GlobalContextError, BG, UnableToFindCandidate
+from daffi import Global, BG
 
 
 async def main():
