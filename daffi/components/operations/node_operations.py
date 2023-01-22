@@ -4,7 +4,7 @@ import logging
 from typing import NoReturn, Dict
 from queue import Queue as thQueue
 
-from anyio import run, create_task_group, sleep
+from anyio import run, create_task_group
 from anyio._backends._asyncio import TaskGroup
 from anyio.abc import TaskStatus, CancelScope
 
@@ -15,7 +15,6 @@ from daffi.components.proto.message import RpcMessage, ServiceMessage, MessageFl
 from daffi.components.scheduler import Scheduler
 from daffi.utils.misc import run_in_threadpool, run_from_working_thread
 
-from anyio import Lock
 from daffi.utils.settings import (
     LOCAL_CALLBACK_MAPPING,
 )
@@ -252,7 +251,7 @@ class NodeOperations:
                 self.logger.debug(f"Stop streaming process for function: {message.func_name}. Process = {process_name}")
             except Exception as e:
                 info = (
-                    f"Exception while streaming function {message.func_name!r} on remote executor {process_name!r}. {e}"
+                    f"Exception while streaming to function {message.func_name!r} on remote executor {process_name!r}. {e}"
                 )
                 error = RemoteError(info=info, traceback=pickle.dumps(sys.exc_info()))
 

@@ -2,12 +2,13 @@ import asyncio
 import warnings
 from enum import IntEnum
 from asyncio import PriorityQueue
+from contextlib import asynccontextmanager
 from typing import Any, Optional, ClassVar, Dict, NoReturn
 
 from daffi.interface import AbstractQueue
 
 
-__all__ = ["ItemPriority", "FreezableQueue"]
+__all__ = ["ItemPriority", "FreezableQueue", "QueueMixin"]
 
 
 class ItemPriority(IntEnum):
@@ -68,7 +69,6 @@ class FreezableQueue(AbstractQueue):
         Args:
             timeout: Period of time in seconds for which 'iterate' generator will be suspended.
         """
-
         self._is_frozen = True
         try:
             self.t.cancel()
@@ -90,12 +90,12 @@ class FreezableQueue(AbstractQueue):
 
     def reset(self) -> None:
         """Reset internal tasks counter in order to enforce pending processes to continue working"""
-
         while True:
             if not self.task_done():
                 break
 
     async def clear(self):
+        """Clear queue."""
         while True:
             try:
                 self._queue.get_nowait()
@@ -104,6 +104,7 @@ class FreezableQueue(AbstractQueue):
         self.reset()
 
     async def get(self):
+        """Get one item from queue in current thread."""
         return await self._queue.get()
 
     async def iterate(self):
@@ -158,7 +159,6 @@ class FreezableQueue(AbstractQueue):
 
     async def wait(self) -> None:
         """Wait until queue is empty and all tasks finished."""
-
         await self._queue.join()
 
     async def stop(self, priority: ItemPriority = ItemPriority.LAST):
@@ -169,6 +169,10 @@ class FreezableQueue(AbstractQueue):
 
     @classmethod
     def factory(cls, ident: str) -> "FreezableQueue":
+        """
+        Create new FreezableQueue by given 'ident' key
+        or return existing queue if such key already exist in 'queues' dictionary
+        """
         _queue = cls.queues.get(ident)
         if not _queue or _queue._closed:
             _queue = FreezableQueue()
@@ -177,10 +181,12 @@ class FreezableQueue(AbstractQueue):
 
     @classmethod
     def factory_remove(cls, ident: str) -> NoReturn:
+        """Remove queue from 'queues' dict by givent 'ident' key"""
         cls.queues.pop(ident, None)
 
     @classmethod
     async def clear_all(cls) -> NoReturn:
+        """Clear all queues in 'queues' dictionary."""
         for q in cls.queues.values():
             await q.clear()
             await q.stop()
@@ -188,5 +194,77 @@ class FreezableQueue(AbstractQueue):
 
     @classmethod
     async def wait_all(cls) -> NoReturn:
+        """Wait all queues in queues dict to process all items. Items should be processed via 'iterate' method."""
         for q in cls.queues.values():
             await q.wait()
+
+
+class QueueMixin:
+    """
+    Enrich parent class with method related to working with FreezableQueue.
+    Assumed that parent class has attribute 'q' which is FreezableQueue.
+    """
+    async def get(self) -> Any:
+        """Get one item from queue"""
+        return await self.q.get()
+
+    async def wait(self) -> NoReturn:
+        """Wait all queue jobs marked as done"""
+        await self.q.wait()
+
+    def task_done(self) -> bool:
+        """Mark job as done"""
+        return self.q.task_done()
+
+    def send_threadsave(self, item: Any, priority: Optional[ItemPriority] = ItemPriority.NORMAL) -> NoReturn:
+        """Send item with given priority from different thread"""
+        self.q.send_threadsave(item, priority)
+
+    def send_no_wait(self, item):
+        """Send item from current thread but not wait it to be taken"""
+        self.q.send_no_wait(item)
+
+    async def send(self, item: Any) -> NoReturn:
+        """Send item from current thread and wait it to be taken"""
+        await self.q.send(item)
+
+    def stop_threadsave(self, priority: Optional[ItemPriority] = ItemPriority.LAST) -> NoReturn:
+        """Send stop marker to queue from different thread"""
+        self.send_threadsave(STOP_MARKER, priority)
+
+    async def stop(self, priority: Optional[ItemPriority] = ItemPriority.LAST) -> NoReturn:
+        """Send stop marker to queue from current thread"""
+        await self.q.stop(priority)
+
+    def freeze(self, timeout: int) -> NoReturn:
+        """Freeze queue during given timeout."""
+        self.q.freeze(timeout=timeout)
+
+    def proceed(self) -> NoReturn:
+        """Unfreeze queue"""
+        self.q.proceed()
+
+    async def transmit_item(self, item: Any):
+        """
+        This method works in pair with 'accept_item'
+            1. method1 send any item via queue
+            2. method1 waits until method2 take item from queue
+            3. method2 marks job done. method1 starts waiting stop marker received via the same queue
+        """
+        await self.send(item=item)
+        await self.wait()
+        await self.get()
+
+    @asynccontextmanager
+    async def accept_item(self):
+        """
+        This method works in pair with 'transmit_item'
+            1. method2 accept item from queue and mark task as done
+            2. after any necessary actions with transmitted object method2 sends stop marker to queue.
+        """
+        data = await self.get()
+        self.task_done()
+        try:
+            yield data.data
+        finally:
+            await self.send(item=STOP_MARKER)

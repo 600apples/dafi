@@ -4,11 +4,10 @@ import logging
 import asyncio
 from datetime import datetime
 from dataclasses import dataclass
-from typing import Dict, List, Deque, Optional
+from typing import Dict, List, Deque
 from collections import namedtuple, deque
 
 from anyio import sleep
-from anyio._backends._asyncio import TaskGroup
 
 from daffi.utils import colors
 from daffi.components.operations.channel_store import ChannelPipe

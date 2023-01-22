@@ -1,21 +1,27 @@
 import asyncio
 from dataclasses import dataclass, field
 from contextlib import contextmanager
-from typing import Any, NoReturn, Optional, List, Union, Tuple
+from typing import Any, NoReturn, List, Union, Tuple
 from grpc.aio._call import AioRpcError
-from daffi.components.operations.freezable_queue import FreezableQueue, ItemPriority, STOP_MARKER
+from daffi.components.operations.freezable_queue import FreezableQueue, QueueMixin
 
 
 @dataclass
-class StreamPair:
-    # TODO make abstraction for methods of stream pair and message iterator
-    stream_queue: FreezableQueue
+class StreamPair(QueueMixin):
+    """
+    StreamPair represents message iterator to remote process.
+    'Pair' because it should be unique instance for transmitter/receiver pair.
+    """
+    q: FreezableQueue
     _closed: bool = field(repr=False, default=False)
+
+    def __post_init__(self):
+        super().__init__()
 
     # create an instance of the iterator
     async def __aiter__(self):
         try:
-            async for msg in self.stream_queue.iterate():
+            async for msg in self.q.iterate():
                 yield msg
         except AioRpcError as err:
             if err.details != "Cancelling all calls":
@@ -23,42 +29,24 @@ class StreamPair:
 
     @property
     def closed(self) -> bool:
+        """Return True if current StreamPair is closed."""
         return self._closed
 
     @closed.setter
-    def closed(self, new_val):
+    def closed(self, new_val) -> NoReturn:
+        """Mark current StreamPair as closed."""
         self._closed = new_val
-
-    def send_threadsave(self, item: Any, priority: Optional[ItemPriority] = ItemPriority.NORMAL) -> NoReturn:
-        self.stream_queue.send_threadsave(item, priority)
-
-    def send_no_wait(self, item):
-        self.stream_queue.send_no_wait(item)
-
-    async def send(self, item: Any) -> NoReturn:
-        await self.stream_queue.send(item)
-
-    def stop_threadsave(self, priority: Optional[ItemPriority] = ItemPriority.LAST) -> NoReturn:
-        self.send_threadsave(STOP_MARKER, priority)
-
-    async def stop(self, priority: Optional[ItemPriority] = ItemPriority.LAST) -> NoReturn:
-        await self.stream_queue.stop(priority)
-
-    def freeze(self, timeout: int) -> NoReturn:
-        self.stream_queue.freeze(timeout=timeout)
-
-    def proceed(self) -> NoReturn:
-        self.stream_queue.proceed()
 
 
 class StreamPairStore(dict):
     def __init__(self):
+        super().__init__()
         self.loop = asyncio.get_running_loop()
         self.stream_pairs_queue = asyncio.Queue()
 
     def create_stream_pair(self, *strings) -> StreamPair:
         key = "-".join(strings)
-        stream_pair = StreamPair(stream_queue=FreezableQueue(self.loop))
+        stream_pair = StreamPair(q=FreezableQueue(self.loop))
         self[key] = stream_pair
         return stream_pair
 

@@ -10,7 +10,6 @@ from daffi.utils import colors
 from daffi.utils.logger import patch_logger
 from daffi.components import ComponentsBase
 from daffi.exceptions import GlobalContextError
-from daffi.utils.debug import with_debug_trace
 from daffi.components.proto.message import MessageFlag, messager_pb2
 from daffi.components.operations.controller_operations import ControllerOperations
 from daffi.components.operations.channel_store import ChannelPipe, MessageIterator, FreezableQueue
@@ -133,8 +132,8 @@ class Controller(ComponentsBase):
 
         with self.stream_store.get_or_create_stream_pair_cm(receiver, msg_uuid) as stream_pair:
             async for msg in request_iterator:
-                await stream_pair.stream_queue.send(msg)
-            await stream_pair.stream_queue.stop()
+                await stream_pair.q.send(msg)
+            await stream_pair.q.stop()
         return messager_pb2.Empty()
 
     async def stream_from_controller(self, request, context):
@@ -144,5 +143,5 @@ class Controller(ComponentsBase):
         msg_uuid = next(v for k, v in context.invocation_metadata() if k == "uuid")
 
         with self.stream_store.get_or_create_stream_pair_cm(receiver, msg_uuid) as stream_pair:
-            async for message in stream_pair.stream_queue.iterate():
+            async for message in stream_pair.q.iterate():
                 yield message

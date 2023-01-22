@@ -8,24 +8,22 @@ from grpc._cython.cygrpc import UsageError
 from daffi.components.proto.message import Message, RpcMessage, ServiceMessage
 from daffi.utils.misc import ConditionObserver
 from daffi.utils.settings import RECONNECTION_TIMEOUT
-from daffi.components.operations.freezable_queue import FreezableQueue, ItemPriority
+from daffi.components.operations.freezable_queue import FreezableQueue, QueueMixin
 from daffi.async_result import AsyncResult, RemoteError
 
 
 logger = logging.getLogger(__name__)
 
 
-class MessageIterator:
+class MessageIterator(QueueMixin):
     """Iterator to recieve messages"""
 
-    # TODO make abstraction for methods of stream pair and message iterator
-
     def __init__(self, msg_queue: FreezableQueue):
-        self.msg_queue = msg_queue
+        self.q = msg_queue
 
     # create an instance of the iterator
     async def __aiter__(self):
-        async for message, eta in self.msg_queue.iterate():
+        async for message, eta in self.q.iterate():
 
             if eta:
                 # Put to queue again after eta.
@@ -44,23 +42,14 @@ class MessageIterator:
                         traceback.print_exc()
 
     def send_threadsave(self, message: Message, eta: Optional[Union[int, float]] = None) -> NoReturn:
-        self.msg_queue.send_threadsave((message, eta))
+        self.q.send_threadsave((message, eta))
 
     async def send(self, message: Message, eta: Optional[Union[int, float]] = None) -> NoReturn:
-        await self.msg_queue.send((message, eta))
+        await self.q.send((message, eta))
 
     async def send_with_eta(self, message: Message, eta: Union[int, float]) -> NoReturn:
         await asyncio.sleep(eta)
         await self.send(message)
-
-    async def stop(self, priority: Optional[ItemPriority] = ItemPriority.LAST) -> NoReturn:
-        await self.msg_queue.stop(priority)
-
-    def freeze(self, timeout: int) -> NoReturn:
-        self.msg_queue.freeze(timeout=timeout)
-
-    def proceed(self) -> NoReturn:
-        self.msg_queue.proceed()
 
 
 class ChannelPipe(ConditionObserver):
@@ -95,8 +84,8 @@ class ChannelPipe(ConditionObserver):
         self.send_iterator.proceed()
 
     async def clear_queue(self):
-        await self.send_iterator.msg_queue.clear()
-        await self.send_iterator.msg_queue.wait()
+        await self.send_iterator.q.clear()
+        await self.send_iterator.q.wait()
 
     async def stop(self):
         await self.send_iterator.stop()

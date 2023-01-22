@@ -12,7 +12,6 @@ from daffi.components import ComponentsBase
 from daffi.components.proto.message import RpcMessage, ServiceMessage, MessageFlag
 
 from daffi.components.scheduler import Scheduler
-from daffi.utils.debug import with_debug_trace
 from daffi.components.proto import messager_pb2_grpc as grpc_messager
 from daffi.exceptions import UnableToFindCandidate, RemoteStoppedUnexpectedly, InitializationError, RemoteError
 from daffi.utils.settings import LOCAL_CALLBACK_MAPPING, WELL_KNOWN_CALLBACKS
