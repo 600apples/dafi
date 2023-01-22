@@ -83,6 +83,7 @@ class Global(metaclass=Singleton):
                 "Windows platform doesn't support unix sockets. Provide host and port to use TCP"
             ).fire()
 
+        logger.info("components initialization...")
         self._global_terminate_event = Event()
         self.ipc = Ipc(
             process_name=self.process_name,

@@ -1,8 +1,11 @@
 """
 Publisher is the process that declares available remote functions
 """
-import time
+import logging
 from daffi import Global, callback
+
+
+logging.basicConfig(level=logging.INFO)
 
 
 @callback

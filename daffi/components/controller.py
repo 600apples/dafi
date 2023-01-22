@@ -60,7 +60,6 @@ class Controller(ComponentsBase):
         self._stopped = True
 
     async def before_connect(self) -> NoReturn:
-        self.logger.debug("Before connect event triggered.")
         self.listener = None
 
     # ------------------------------------------------------------------------------------------------------------------

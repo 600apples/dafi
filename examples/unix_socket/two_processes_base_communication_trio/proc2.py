@@ -1,5 +1,8 @@
+import logging
 from trio import sleep, run
 from daffi import Global, callback, RemoteStoppedUnexpectedly
+
+logging.basicConfig(level=logging.INFO)
 
 PROC_NAME = "Trio Brown Fox"
 

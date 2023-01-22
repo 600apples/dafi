@@ -12,6 +12,7 @@ class StreamPair(QueueMixin):
     StreamPair represents message iterator to remote process.
     'Pair' because it should be unique instance for transmitter/receiver pair.
     """
+
     q: FreezableQueue
     _closed: bool = field(repr=False, default=False)
 

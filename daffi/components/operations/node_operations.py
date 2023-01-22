@@ -18,9 +18,10 @@ from daffi.utils.misc import run_in_threadpool, run_from_working_thread
 from daffi.utils.settings import (
     LOCAL_CALLBACK_MAPPING,
 )
+from daffi.components.operations.freezable_queue import ItemPriority
 from daffi.components.operations.channel_store import ChannelPipe
 from daffi.exceptions import ReckAcceptError, StopComponentError
-from daffi.components.operations.streams_store import StreamPairStore, ItemPriority
+from daffi.components.operations.streams_store import StreamPairStore
 from daffi.utils.misc import ReconnectFreq
 
 import tblib.pickling_support
@@ -250,9 +251,7 @@ class NodeOperations:
                         items_queue.put_nowait(_stop_marker)
                 self.logger.debug(f"Stop streaming process for function: {message.func_name}. Process = {process_name}")
             except Exception as e:
-                info = (
-                    f"Exception while streaming to function {message.func_name!r} on remote executor {process_name!r}. {e}"
-                )
+                info = f"Exception while streaming to function {message.func_name!r} on remote executor {process_name!r}. {e}"
                 error = RemoteError(info=info, traceback=pickle.dumps(sys.exc_info()))
 
             try:

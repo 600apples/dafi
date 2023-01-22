@@ -112,7 +112,10 @@ class FreezableQueue(AbstractQueue):
 
         while True:
             if not self._is_frozen:
-                queue_entry = await self._queue.get()
+                try:
+                    queue_entry = await self._queue.get()
+                except asyncio.exceptions.CancelledError:
+                    break
                 data = queue_entry.data
 
                 if data == STOP_MARKER:
@@ -204,6 +207,7 @@ class QueueMixin:
     Enrich parent class with method related to working with FreezableQueue.
     Assumed that parent class has attribute 'q' which is FreezableQueue.
     """
+
     async def get(self) -> Any:
         """Get one item from queue"""
         return await self.q.get()

@@ -1,9 +1,11 @@
 """
 Consumer is the process that consumes available remote functions.
 """
-
+import logging
 import asyncio
 from daffi import Global
+
+logging.basicConfig(level=logging.INFO)
 
 
 async def main():

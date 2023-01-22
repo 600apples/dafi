@@ -3,6 +3,8 @@ import logging
 from typing import Callable
 from daffi.utils import colors
 
+logging.getLogger("grpc._cython.cygrpc").setLevel(logging.ERROR)
+
 
 class ColoredFormatter(logging.Formatter):
     """A logging.Formatter which prints colored WARNING and ERROR messages"""

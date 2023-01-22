@@ -2,9 +2,10 @@
 Publisher is the process that declares available remote functions
 Make sure you started this process first.
 """
-import time
+import logging
 from daffi import Global
 
+logging.basicConfig(level=logging.INFO)
 
 PROC_NAME = "White Rabbit"
 

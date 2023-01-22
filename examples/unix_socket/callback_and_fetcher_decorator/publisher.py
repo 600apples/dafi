@@ -1,16 +1,19 @@
 """
 Publisher is the process that declares available remote functions
 """
-from daffi import Global, FG, callback_and_remote
+import logging
+from daffi import Global, FG, callback_and_fetcher
+
+logging.basicConfig(level=logging.INFO)
 
 
-@callback_and_remote
+@callback_and_fetcher
 class RemoteGroup:
     def do_something(self, a: int):
         return a + 10
 
 
-@callback_and_remote
+@callback_and_fetcher
 def my_func(a: int):
     return a + 10
 
