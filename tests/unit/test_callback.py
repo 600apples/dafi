@@ -2,7 +2,7 @@ import pytest
 import asyncio
 from daffi import callback, Global
 from daffi.utils.settings import LOCAL_CALLBACK_MAPPING
-from daffi.globals import RemoteCallback
+from daffi.decorators import RemoteCallback
 from daffi.exceptions import InitializationError, GlobalContextError
 
 

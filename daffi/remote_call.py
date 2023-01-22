@@ -109,7 +109,7 @@ class RemoteCall:
         return bool(self.info)
 
     def fg(self, timeout: Optional[TimeUnits] = None, retry_policy: Optional[RetryPolicy] = None) -> RemoteResult:
-        executable = retry_policy.build(self._ipc.call) if isinstance(retry_policy, RetryPolicy) else self._ipc.call
+        executable = retry_policy.wrap(self._ipc.call) if isinstance(retry_policy, RetryPolicy) else self._ipc.call
         timeout = self._get_duration(timeout, "timeout")
         return executable(
             self.func_name,
@@ -156,7 +156,7 @@ class RemoteCall:
     ) -> Optional[AsyncResult]:
         timeout = self._get_duration(timeout, "timeout")
         eta = self._get_duration(eta, "eta", 0)
-        executable = retry_policy.build(self._ipc.call) if isinstance(retry_policy, RetryPolicy) else self._ipc.call
+        executable = retry_policy.wrap(self._ipc.call) if isinstance(retry_policy, RetryPolicy) else self._ipc.call
         return executable(
             self.func_name,
             args=self.args,

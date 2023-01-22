@@ -1,8 +1,8 @@
 import logging
 from dataclasses import dataclass
 from typing import Optional, Union, Tuple, List, Type, Callable, Any
-
-from tenacity import retry, retry_if_exception_type, stop_after_attempt, stop_after_delay, after_log, wait_fixed
+from functools import wraps
+from tenacity import retry, retry_if_exception, stop_after_attempt, stop_after_delay, after_log, wait_fixed, stop_any
 
 from daffi.utils import colors
 from daffi.utils.logger import patch_logger
@@ -24,23 +24,38 @@ class RetryPolicy:
     wait: Optional[int] = 5
     str_expression: Optional[str] = None
 
-    def build(self, fn: Callable[..., Any]) -> Callable[..., Any]:
+    def wrap(self, fn: Callable[..., Any]) -> Callable[..., Any]:
         if not self.acceptable_errors:
             raise InitializationError("retry_if_exception_type argument is required")
         if not iterable(self.acceptable_errors):
             self.acceptable_errors = (self.acceptable_errors,)
 
-        options = dict(
+        _stop = stop_any()
+        if self.stop_after_attempt:
+            _stop = stop_after_attempt(self.stop_after_attempt)
+        elif self.stop_after_delay:
+            _stop = stop_after_delay(self.stop_after_delay)
+
+        @retry(
             reraise=True,
-            retry=retry_if_exception_type(self.acceptable_errors),
+            retry=retry_if_exception(self.on_exception),
             after=after_log(logger, logging.WARNING),
             wait=wait_fixed(self.wait),
+            stop=_stop,
         )
-        if self.stop_after_delay:
-            options["stop"] = stop_after_delay(self.stop_after_delay)
-        elif self.stop_after_attempt:
-            options["stop"] = stop_after_attempt(self.stop_after_attempt)
-        return retry(**options)(fn)
+        @wraps(fn)
+        def _dec(*args, **kwargs):
+            return fn(*args, **kwargs)
+
+        return _dec
+
+    def on_exception(self, exc: Type[BaseException]) -> bool:
+        if type(exc) in self.acceptable_errors:
+            if self.str_expression:
+                return self.str_expression in str(exc)
+            else:
+                return True
+        return False
 
 
 @dataclass
