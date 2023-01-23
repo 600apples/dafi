@@ -70,7 +70,7 @@ dependencies = [
     "types-protobuf==4.21.0.2",
 ]
 [tool.hatch.envs.default.scripts]
-cov = "pytest --cov-report=term-missing --cov-config=pyproject.toml --cov=daffi --cov-report=html --cov=tests -s -vv {args}"
+cov = "export DAFFI_DEBUG=True && pytest --cov-report=term-missing --cov-config=pyproject.toml --cov=daffi --cov-report=html --cov=tests -s -vv {args}"
 cov_git = "pytest --cov=daffi --cov-report={env:COVERAGE_REPORT:term-missing} --cov-config=pyproject.toml"
 no_cov = "pytest -vv {args}"
 compile = "python -m grpc_tools.protoc -I daffi/components/proto --python_out=daffi/components/proto --grpc_python_out=daffi/components/proto messager.proto"

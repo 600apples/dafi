@@ -1,4 +1,4 @@
-Stream is Daffy's special ability to pass iterables to remote callbacks.
+Stream is Daffi's special ability to pass iterables to remote callbacks.
 It is very optimized for huge bandwidth.
 
 A stream can be considered as a union of `BROADCAST` and `NO_RETURN` execution modifiers.

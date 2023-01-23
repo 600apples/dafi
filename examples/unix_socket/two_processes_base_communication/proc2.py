@@ -1,5 +1,8 @@
 import time
+import logging
 from daffi import Global, callback, RemoteStoppedUnexpectedly, GlobalContextError
+
+logging.basicConfig(level=logging.INFO)
 
 PROC_NAME = "Brown Fox"
 

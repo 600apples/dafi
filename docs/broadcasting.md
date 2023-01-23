@@ -27,18 +27,22 @@ g.join()
 After that we can trigger broadcast remote call from node-4:
 
 ```python
-from daffi import Global, BROADCAST
+from daffi import Global, BROADCAST, fetcher, __signature_unknown__
 
 proc_name = "node-4"
 
+@fetcher
+def my_callback(some_string: str) -> str:
+    __signature_unknown__(some_string)
 
+    
 g = Global(init_controller=True)
 
 # Wait all processes to start
 for proc in ("node-1", "node-2", "node-3"):
     g.wait_process(proc)
 
-result = g.call.my_callback(some_string="abc") & BROADCAST(return_result=True)
+result = my_callback(some_string="abc") & BROADCAST(return_result=True)
 
 print(result)
 ```
@@ -57,8 +61,14 @@ Where keys of dictionary are referred to node names where result was calculated 
 results respectively.  
 
 
-One can also use method instead of execution modifier class. For instance following statement has the same effect:
+One can also use g style callback execution instead of `fetcher`. For instance following statements have the same effect:
 
 ```python
 result = g.call.my_callback(some_string="abc").broadcast(return_result=True)
+```
+
+or 
+
+```python
+result = g.call.my_callback(some_string="abc") & BROADCAST(return_result=True)
 ```

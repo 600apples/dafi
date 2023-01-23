@@ -2,8 +2,12 @@
 Consumer is the process that consumes available remote functions.
 """
 import asyncio
+import logging
 import cv2
 from daffi import Global, STREAM
+
+logging.basicConfig(level=logging.INFO)
+
 
 cap = cv2.VideoCapture(0)
 
@@ -18,7 +22,7 @@ def frame_iterator():
 async def main():
     with Global() as g:
 
-        for proc in ("process1", "process2"):
+        for proc in ("pub1", "pub2", "pub3"):
             g.wait_process(proc)
 
         print("Wait for publisher process to be started...")

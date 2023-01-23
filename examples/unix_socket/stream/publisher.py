@@ -1,14 +1,16 @@
 """
 Publisher is the process that declares available remote functions
 """
+import logging
 from daffi import Global, callback
+
+logging.basicConfig(level=logging.INFO)
 
 
 @callback
 async def on_stream(item: int) -> None:
     """Used by 'consumer.py' process."""
     print(f"Processing item: {item}")
-    return item
 
 
 def main():

@@ -3,9 +3,12 @@ import time
 import sys
 import logging
 import asyncio
+import traceback
 from pathlib import Path
 from abc import abstractmethod
+from itertools import count
 from cached_property import cached_property
+from threading import Event as thEvent
 from typing import Optional, NoReturn, Callable, ClassVar, List
 from contextlib import asynccontextmanager
 from tempfile import gettempdir
@@ -13,7 +16,7 @@ from tempfile import gettempdir
 from grpc import aio, ChannelConnectivity
 from anyio.abc import TaskStatus
 from grpc.aio._call import AioRpcError
-from anyio import Event, to_thread, TASK_STATUS_IGNORED
+from anyio import Event, TASK_STATUS_IGNORED
 from tenacity import AsyncRetrying, wait_fixed, retry_if_exception_type, RetryCallState, wait_none
 
 from daffi.exceptions import InitializationError, ReckAcceptError, StopComponentError
@@ -104,11 +107,12 @@ class TcpBase(ComponentI, grpc_messager.MessagerServiceServicer):
 class ComponentsBase(UnixBase, TcpBase):
     RETRY_TIMEOUT = 2  # 2 sec
     IMMEDIATE_ACTION_ERRORS = (ReckAcceptError,)
-    NON_IMMEDIATE_ACTION_ERRORS = (AioRpcError, StopComponentError)
+    NON_IMMEDIATE_ACTION_ERRORS = (AioRpcError, RuntimeError)
+    STOP_ACTION_ERRORS = (StopComponentError,)
 
     logger: logging.Logger = None
     global_terminate_event: ClassVar[Event] = None
-    stop_callbacks: ClassVar[List[Callable]] = []
+    components: ClassVar[List[Callable]] = []
 
     def __init__(
         self,
@@ -118,13 +122,23 @@ class ComponentsBase(UnixBase, TcpBase):
         unix_sock_path: Optional[os.PathLike] = None,
         reconnect_freq: Optional[int] = None,
         async_backend: Optional[str] = None,
+        global_terminate_event: Optional[thEvent] = None,
     ):
+        cls = self.__class__
+        if not cls.global_terminate_event or cls.global_terminate_event.is_set():
+            cls.global_terminate_event = global_terminate_event
+        self._set_keyboard_interrupt_handler()
+
         self.process_name = process_name
         self.reconnect_freq = ReconnectFreq(reconnect_freq)
         self.async_backend = async_backend or "asyncio"
         self.operations = None
         self.ident = string_uuid()
         self._stopped = self._connected = False
+        self.stop_event: asyncio.Event = None  # No eventloop here. Will be initialized in on_stop task
+        self.stop_callbacks: List[Callable] = []
+
+        self.components.append(self)
 
         if host:  # Check only host. Full host/port validation already took place before.
             if self.reconnect_freq and self.reconnect_freq.value < 15:
@@ -153,11 +167,25 @@ class ComponentsBase(UnixBase, TcpBase):
         raise NotImplementedError
 
     async def on_stop(self) -> NoReturn:
-        self._stopped = True
+        self.stop_event = asyncio.Event()
+        while not self.stop_event.is_set():
+            await asyncio.sleep(0.1)
 
     @cached_property
     def info(self) -> str:
         return self._base.info(self)
+
+    def stop(self, wait: Optional[bool] = False):
+        if not self.stop_event.is_set():
+            self.stop_event.set()
+        if wait:
+            for ind in count(1):
+
+                if self._stopped:
+                    break
+                if not ind % 100:
+                    self.logger.error("Too many iterations of stop event waiting!!!")
+                time.sleep(0.5)
 
     @asynccontextmanager
     async def connect_listener(self):
@@ -168,7 +196,6 @@ class ComponentsBase(UnixBase, TcpBase):
     async def create_listener(self):
         if await self.check_endpoint_is_busy():
             self.logger.error(f"{self.info} is already allocated")
-            self._stopped = True
             raise StopComponentError()
         listener = await self._base.create_listener(self)
         self._connected = True
@@ -185,10 +212,14 @@ class ComponentsBase(UnixBase, TcpBase):
             retry_object.begin()
             retry_object.wait = wait_none()
 
-        elif type(exception) == StopComponentError:
-            ComponentsBase.global_terminate_event.set()
+        elif type(exception) in self.STOP_ACTION_ERRORS:
+            self.stop()
 
         elif type(exception) in self.NON_IMMEDIATE_ACTION_ERRORS:
+            if type(exception) == AioRpcError and "Cancelling all calls" in str(exception):
+                self.stop()
+                return
+
             retry_object.wait = wait_fixed(self.RETRY_TIMEOUT)
             if attempt == 3 or not attempt % 5:
                 self.logger.error(
@@ -197,23 +228,21 @@ class ComponentsBase(UnixBase, TcpBase):
                 )
         else:
             retry_object.wait = wait_fixed(self.RETRY_TIMEOUT)
-            self.logger.error(f"Unpredictable error during {self.__class__.__name__} execution: {exception}")
+            err_msg = "".join(traceback.format_exception(exception))
+            self.logger.error(f"Unpredictable error during {self.__class__.__name__} execution: \n{err_msg}")
+            self.stop()
 
-    async def handle(self, global_terminate_event: Event, task_status: TaskStatus = TASK_STATUS_IGNORED) -> NoReturn:
+            if all(c.stop_event.is_set() for c in self.components):
+                ComponentsBase.global_terminate_event.set()
 
-        if not ComponentsBase.global_terminate_event or ComponentsBase.global_terminate_event.is_set():
-            ComponentsBase.global_terminate_event = global_terminate_event
-            asyncio.create_task(self.on_global_terminate_event(global_terminate_event))
-            self._set_keyboard_interrupt_handler()
-
+    async def handle(self, task_status: TaskStatus = TASK_STATUS_IGNORED) -> NoReturn:
+        # Register on_stop actions
+        stop_task = asyncio.create_task(self.on_stop())
         await self.on_init()
-        ComponentsBase.stop_callbacks.append(self.on_stop)
 
         async for attempt in AsyncRetrying(
             reraise=True,
-            retry=retry_if_exception_type(
-                self.IMMEDIATE_ACTION_ERRORS + self.NON_IMMEDIATE_ACTION_ERRORS + (Exception,)
-            ),
+            retry=retry_if_exception_type((Exception,)),
             after=self.after_exception,
         ):
             with attempt:
@@ -223,17 +252,7 @@ class ComponentsBase(UnixBase, TcpBase):
                 await self.before_connect()
                 await self.handle_operations(task_status)
 
-    async def on_global_terminate_event(self, global_terminate_event) -> NoReturn:
-        await to_thread.run_sync(global_terminate_event.wait)
-        for callback in reversed(ComponentsBase.stop_callbacks):
-            res = callback()
-            if asyncio.iscoroutine(res):
-                await res
-        ComponentsBase.stop_callbacks.clear()
-
-    def wait(self) -> NoReturn:
-        while not self._stopped:
-            time.sleep(0.5)
+        await stop_task
 
     def _set_keyboard_interrupt_handler(self) -> NoReturn:
         # Creating a handler
@@ -244,6 +263,11 @@ class ComponentsBase(UnixBase, TcpBase):
                 return
                 # Create a critical level log message with info from the except hook.
             self.logger.error("Unhandled exception:", exc_info=(exc_type, exc_value, exc_traceback))
+            for component in self.components:
+                component.stop()
+
+            if all(c.stop_event.is_set() for c in self.components):
+                ComponentsBase.global_terminate_event.set()
 
         # Assign the excepthook to the handler
         sys.excepthook = handle_unhandled_exception

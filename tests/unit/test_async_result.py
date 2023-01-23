@@ -7,7 +7,7 @@ from daffi.exceptions import TimeoutError, RemoteError, GlobalContextError, Remo
 
 async def set_result(wait: int, uuid, result):
     await asyncio.sleep(wait)
-    await AsyncResult._set_and_trigger(uuid, result)
+    AsyncResult._set_and_trigger(uuid, result)
 
 
 class TestAsyncResultSuite:

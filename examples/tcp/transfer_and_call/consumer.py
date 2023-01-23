@@ -2,10 +2,11 @@
 Consumer is the process that consumes available remote functions.
 Make sure you started publisher.py first in order to transfer and execute function on this process.
 """
-
+import logging
 import os
 from daffi import Global
 
+logging.basicConfig(level=logging.INFO)
 
 PROC_NAME = "Brown Fox"
 

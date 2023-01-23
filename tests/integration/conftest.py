@@ -46,7 +46,8 @@ def g():
     try:
         yield dec
     finally:
-        gl.stop()
+        if gl:
+            gl.stop()
 
 
 @pytest.fixture

@@ -3,13 +3,7 @@ import logging
 from typing import Callable
 from daffi.utils import colors
 
-
-ch = logging.StreamHandler(sys.stdout)
-
-
-class Formatter(logging.Formatter):
-    def format(self, record):
-        return super(Formatter, self).format(record)
+logging.getLogger("grpc._cython.cygrpc").setLevel(logging.ERROR)
 
 
 class ColoredFormatter(logging.Formatter):
@@ -30,13 +24,25 @@ class ColoredFormatter(logging.Formatter):
 
 
 def patch_logger(logger: logging.Logger, color: Callable):
+    root_level = logging.getLogger().getEffectiveLevel()
+
+    cho = logging.StreamHandler(sys.stdout)
+    che = logging.StreamHandler(sys.stderr)
+
     logger.propagate = False
+    if logger.hasHandlers():
+        logger.handlers.clear()
+
+    cho.addFilter(lambda record: record.levelno <= logging.INFO)
     logger = logging.LoggerAdapter(logger, {"app": color(f"[[ {logger.name} ]]")})
 
-    logger.setLevel(logging.DEBUG)
-
-    ch.setLevel(logging.DEBUG)
+    logger.setLevel(root_level)
+    cho.setLevel(root_level)
+    che.setLevel(logging.WARNING)
     formatter = ColoredFormatter("%(app)s: %(message)s")
-    ch.setFormatter(formatter)
-    logger.logger.addHandler(ch)
+    cho.setFormatter(formatter)
+    che.setFormatter(formatter)
+
+    logger.logger.addHandler(cho)
+    logger.logger.addHandler(che)
     return logger

@@ -48,4 +48,5 @@ async def test_callback_per_node_unix(remote_callbacks_path, g):
     registered_tasks = g.get_scheduled_tasks(remote_process="test-node")
     assert registered_tasks == []
 
+    g.stop(True)
     [p.terminate() for p in remotes]

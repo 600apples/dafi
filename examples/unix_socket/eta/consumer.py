@@ -1,10 +1,17 @@
 """
 Consumer is the process that consumes available remote functions.
 """
-
+import logging
 import time
 import asyncio
-from daffi import Global, BG
+from daffi import Global, BG, fetcher, __signature_unknown__
+
+logging.basicConfig(level=logging.INFO)
+
+
+@fetcher
+def add(a: int, b: int):
+    __signature_unknown__(a, b)
 
 
 async def main():
@@ -20,7 +27,7 @@ async def main():
             start = time.time()
 
             # bg returns instance of AsyncResult.
-            ares = g.call.add(5, 15) & BG(eta=5)
+            ares = add(5, 15) & BG(eta=5)
 
             # Simulate long running job
             time.sleep(2)

@@ -3,8 +3,11 @@ Consumer is the process that consumes available remote functions.
 """
 
 import time
+import logging
 from datetime import datetime, timedelta
 from daffi import Global, PERIOD
+
+logging.basicConfig(level=logging.INFO)
 
 
 def main():

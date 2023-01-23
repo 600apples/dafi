@@ -1,5 +1,4 @@
 import pickle
-import logging
 import traceback
 from logging import Logger
 from dataclasses import dataclass, field
@@ -14,7 +13,6 @@ class BaseException(Exception):
         super().__init__(message)
 
     def fire(self):
-        logging.error(self.message)
         raise self
 
 

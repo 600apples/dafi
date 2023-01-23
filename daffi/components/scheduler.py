@@ -4,11 +4,10 @@ import logging
 import asyncio
 from datetime import datetime
 from dataclasses import dataclass
-from typing import Dict, List, Deque, Optional
+from typing import Dict, List, Deque
 from collections import namedtuple, deque
 
 from anyio import sleep
-from anyio._backends._asyncio import TaskGroup
 
 from daffi.utils import colors
 from daffi.components.operations.channel_store import ChannelPipe
@@ -30,11 +29,10 @@ FINISHED_TASKS: Deque[int] = deque(maxlen=1000)
 
 @dataclass
 class Scheduler:
-    sg: TaskGroup
     process_name: str
     async_backend: str
 
-    async def on_scheduler_stop(cls):
+    async def on_scheduler_stop(self):
         try:
             for task_group in SCHEDULER_AT_TIME_TASKS.values():
                 for task in filter(None, task_group):
@@ -44,6 +42,8 @@ class Scheduler:
         except RuntimeError:
             ...
         FINISHED_TASKS.clear()
+        SCHEDULER_PERIODICAL_TASKS.clear()
+        SCHEDULER_AT_TIME_TASKS.clear()
 
     async def on_error(self, msg: RpcMessage):
         msg.error.show_in_log(logger=logger)

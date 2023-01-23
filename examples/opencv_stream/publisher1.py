@@ -2,7 +2,10 @@
 Publisher is the process that declares available remote functions
 """
 import cv2
+import logging
 from daffi import Global, callback
+
+logging.basicConfig(level=logging.INFO)
 
 
 @callback
@@ -15,7 +18,8 @@ async def show_stream(frame: int) -> None:
 
 def main():
     # Process name is not required argument and will be generated automatically if not provided.
-    g = Global(init_controller=True)
+
+    g = Global(init_controller=True, process_name="pub1")
     g.join()
 
 

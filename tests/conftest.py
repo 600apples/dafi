@@ -1,6 +1,7 @@
 import re
 import sys
 import asyncio
+import logging
 from pathlib import Path
 
 import pytest
@@ -11,6 +12,8 @@ sys.path += [str(Path(__file__).resolve().parents[1])]
 
 # anyio has contextvars support, In order to mock anio backend we need to set backend explicitly
 current_async_library_cvar.set("asyncio")
+
+logging.basicConfig(level=logging.INFO)
 
 
 def pytest_collection_modifyitems(items):

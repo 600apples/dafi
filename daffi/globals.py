@@ -3,16 +3,13 @@ import sys
 import logging
 from dataclasses import dataclass, field
 from cached_property import cached_property
-from inspect import iscoroutinefunction, signature
 from threading import Event
 from typing import (
     Callable,
     Any,
     Optional,
-    Generic,
     List,
     Dict,
-    ClassVar,
     Union,
     NoReturn,
     Coroutine,
@@ -22,27 +19,16 @@ from tenacity import retry, retry_if_exception_type, wait_fixed, stop_after_atte
 
 from daffi.utils import colors
 from daffi.utils.logger import patch_logger
+from daffi.decorators import callback, __signature_unknown__
 from daffi.exceptions import InitializationError, GlobalContextError
 from daffi.ipc import Ipc
 from daffi.remote_call import LazyRemoteCall
-from daffi.utils.misc import Singleton, is_lambda_function, string_uuid
-from daffi.utils.custom_types import GlobalCallback, P
-from daffi.callback_types import RemoteClassCallback, RemoteCallback
-from daffi.utils.func_validation import (
-    get_class_methods,
-    func_info,
-    pretty_callbacks,
-    is_class_or_static_method,
-)
-from daffi.utils.settings import (
-    LOCAL_CALLBACK_MAPPING,
-    LOCAL_CLASS_CALLBACKS,
-    WELL_KNOWN_CALLBACKS,
-)
+from daffi.utils.misc import Singleton, string_uuid
+from daffi.utils.func_validation import pretty_callbacks
 
 logger = patch_logger(logging.getLogger(__name__), colors.grey)
 
-__all__ = ["Global", "callback"]
+__all__ = ["Global"]
 
 
 @dataclass
@@ -97,6 +83,7 @@ class Global(metaclass=Singleton):
                 "Windows platform doesn't support unix sockets. Provide host and port to use TCP"
             ).fire()
 
+        logger.info("components initialization...")
         self._global_terminate_event = Event()
         self.ipc = Ipc(
             process_name=self.process_name,
@@ -113,6 +100,7 @@ class Global(metaclass=Singleton):
         callback._ipc = self.ipc
         self.ipc.start()
         if not self.ipc.wait():
+            self.stop()
             GlobalContextError("Unable to start daffi components.").fire()
         self.port = self.ipc.port
 
@@ -169,7 +157,6 @@ class Global(metaclass=Singleton):
             else:
                 res = self.kill_all()
         self.ipc.stop()
-        logger.warning("global stopped.")
         return res
 
     def kill_all(self):
@@ -212,7 +199,10 @@ class Global(metaclass=Singleton):
         Args:
             func_name: Name of remote callback to wait.
         """
-        return LazyRemoteCall(_ipc=self.ipc, _global_terminate_event=None, _func_name=func_name)._wait_function()
+        logger.info(f"Waiting remote callback: {func_name!r}")
+        result = LazyRemoteCall(_ipc=self.ipc, _global_terminate_event=None, _func_name=func_name)._wait_function()
+        logger.info(f"Function found: {func_name!r}")
+        return result
 
     async def wait_function_async(self, func_name: str) -> NoReturn:
         """
@@ -222,9 +212,12 @@ class Global(metaclass=Singleton):
         Args:
             func_name: Name of remote callback to wait.
         """
-        return await LazyRemoteCall(_ipc=self.ipc, _global_terminate_event=None, _func_name=func_name)._wait_function(
+        logger.info(f"Waiting remote callback: {func_name!r}")
+        result = await LazyRemoteCall(_ipc=self.ipc, _global_terminate_event=None, _func_name=func_name)._wait_function(
             _async=True
         )
+        logger.info(f"Function found: {func_name!r}")
+        return result
 
     def wait_process(self, process_name: str) -> NoReturn:
         """
@@ -232,7 +225,10 @@ class Global(metaclass=Singleton):
         Args:
             process_name: Name of `Node`
         """
-        return LazyRemoteCall(_ipc=self.ipc, _global_terminate_event=None)._wait_process(process_name)
+        logger.info(f"Waiting node: {process_name!r}")
+        result = LazyRemoteCall(_ipc=self.ipc, _global_terminate_event=None)._wait_process(process_name)
+        logger.info(f"Node found: {process_name!r}")
+        return result
 
     async def wait_process_async(self, process_name: str) -> NoReturn:
         """
@@ -240,9 +236,12 @@ class Global(metaclass=Singleton):
         Args:
             process_name: Name of `Node`
         """
-        return await LazyRemoteCall(_ipc=self.ipc, _global_terminate_event=None)._wait_process(
+        logger.info(f"Waiting node: {process_name!r}")
+        result = await LazyRemoteCall(_ipc=self.ipc, _global_terminate_event=None)._wait_process(
             process_name, _async=True
         )
+        logger.info(f"Node found: {process_name!r}")
+        return result
 
     def get_scheduled_tasks(self, remote_process: str):
         """
@@ -258,116 +257,6 @@ class Global(metaclass=Singleton):
         Find out task uuid you can using `get_scheduled_tasks` method.
         """
         return self.ipc.cancel_scheduler(remote_process=remote_process, msg_uuid=uuid)
-
-
-class callback(Generic[GlobalCallback]):
-    """
-    callback is uniform decorator for registering remote callbacks from functions or from classes
-    Example:
-        >>> from daffi import callback
-        >>>
-        >>> @callback
-        >>> def my_func(*args, **kwargs):
-                ...
-
-    callback works with classes but some limitations are present:
-
-        1. Only `static` methods and `class` methods
-            can be triggered without class initialization.
-            For all other methods to be instance of class should be instantiated.
-        2. Only one instance of class can be instantiated.
-        3. Only publicly available methods become callback (means methods which name doensn't start with underscore)
-    """
-
-    _ipc: ClassVar[Ipc] = None
-
-    def __init__(self, fn: Callable[P, Any]):
-
-        self._klass = self._fn = None
-        if isinstance(fn, type):
-            # Class wrapped
-            self._klass = fn
-            for method in get_class_methods(fn):
-                _, name = func_info(method)
-
-                if name.startswith("_"):
-                    continue
-
-                fn_type = is_class_or_static_method(fn, name)
-                klass = fn if fn_type else None
-                cb = RemoteClassCallback(
-                    klass=klass,
-                    klass_name=fn.__name__,
-                    origin_name=name,
-                    signature=signature(method),
-                    is_async=iscoroutinefunction(method),
-                    is_static=str(fn_type) == "static",
-                )
-                cb.validate_g_position_type()
-                LOCAL_CALLBACK_MAPPING[name] = cb
-                logger.info(f"{name!r} registered" + ("" if klass else f" (required {fn.__name__} initialization)"))
-
-                if self._ipc and self._ipc.is_running:
-                    # Update remote callbacks if ips is running. It means callback was not registered during handshake
-                    # or callback was added dynamically.
-                    self._ipc.update_callbacks(LOCAL_CALLBACK_MAPPING)
-
-        elif callable(fn):
-            if is_lambda_function(fn):
-                InitializationError("Lambdas is not supported.").fire()
-
-            _, name = func_info(fn)
-            self._fn = RemoteCallback(
-                callback=fn,
-                origin_name=name,
-                signature=signature(fn),
-                is_async=iscoroutinefunction(fn),
-            )
-            self._fn.validate_g_position_type()
-            LOCAL_CALLBACK_MAPPING[name] = self._fn
-            if name not in WELL_KNOWN_CALLBACKS:
-                logger.info(f"{name!r} registered")
-            if self._ipc and self._ipc.is_running:
-                # Update remote callbacks if ips is running. It means callback was not registered during handshake
-                # or callback was added dynamically.
-                self._ipc.update_callbacks(LOCAL_CALLBACK_MAPPING)
-
-        else:
-            InitializationError(f"Invalid type. Provide class or function.").fire()
-
-    def __call__(self, *args, **kwargs) -> object:
-        if self._klass:
-            return self._build_class_callback_instance(*args, **kwargs)
-        return self._fn(*args, **kwargs)
-
-    def __getattr__(self, item):
-        if self._fn:
-            return getattr(self._fn, item)
-        else:
-            try:
-                return LOCAL_CALLBACK_MAPPING[item]
-            except KeyError:
-                return getattr(self._klass, item)
-
-    def _build_class_callback_instance(self, *args, **kwargs):
-        if isinstance(self._klass, type):
-            class_name = self._klass.__name__
-        else:
-            class_name = self._klass.__class__.__name__
-        if class_name in LOCAL_CLASS_CALLBACKS:
-            InitializationError(f"Only one callback instance of {class_name!r} should be created.").fire()
-
-        LOCAL_CLASS_CALLBACKS.add(self._klass.__name__)
-        self._klass = self._klass(*args, **kwargs)
-        for method in get_class_methods(self._klass):
-            module, name = func_info(method)
-            if name.startswith("_"):
-                continue
-
-            info = LOCAL_CALLBACK_MAPPING.get(name)
-            if info:
-                LOCAL_CALLBACK_MAPPING[name] = info._replace(klass=self._klass)
-        return self
 
 
 # ----------------------------------------------------------------------------------------------------------------------
@@ -493,4 +382,4 @@ async def __get_all_period_tasks(process_name: str) -> List[Dict]:
 
 @callback
 async def __kill_all() -> NoReturn:
-    pass
+    __signature_unknown__()

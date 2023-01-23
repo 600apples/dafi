@@ -15,7 +15,7 @@
 [![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/ambv/black)
 [![Linux](https://svgshare.com/i/Zhy.svg)](https://svgshare.com/i/Zhy.svg)
 [![macOS](https://svgshare.com/i/ZjP.svg)](https://svgshare.com/i/ZjP.svg)
-[![Downloads](https://static.pepy.tech/personalized-badge/daffi?period=month&units=international_system&left_color=black&right_color=orange&left_text=Downloads)](https://pepy.tech/project/daffi)
+[![Downloads](https://static.pepy.tech/badge/daffi/month)](https://pepy.tech/project/daffi)
 
 Daffi's goal is to move away from the traditional server-client communication approach where processes are unequal. This concept has been replaced by the controller-node principle. Each process can contain either a controller or a node, or both.
 Each daffi node gets the ability to create remote callbacks and execute callbacks created on other nodes. 

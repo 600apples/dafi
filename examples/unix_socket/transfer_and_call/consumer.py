@@ -4,8 +4,11 @@ Make sure you started publisher.py first in order to transfer and execute functi
 """
 
 import os
+import logging
 from daffi import Global
 
+
+logging.basicConfig(level=logging.INFO)
 
 PROC_NAME = "Brown Fox"
 
