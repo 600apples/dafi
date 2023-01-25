@@ -1,12 +1,14 @@
 import sys
 import pickle
 import logging
+import asyncio
 from typing import NoReturn, Dict
 from queue import Queue as thQueue
 
 from anyio import run, create_task_group
 from anyio._backends._asyncio import TaskGroup
 from anyio.abc import TaskStatus, CancelScope
+from grpc.aio._call import AioRpcError
 
 from daffi.async_result import AsyncResult
 from daffi.utils.custom_types import GlobalCallback, K
@@ -212,70 +214,53 @@ class NodeOperations:
                 messager_pb2.Empty(), metadata=[("receiver", message.receiver), ("uuid", str(message.uuid))]
             )
         )
-        error = result = None
+        error = None
         items_queue = thQueue()
         _stop_marker = object()
 
-        def _stream_executor(callback: GlobalCallback, queue: thQueue, backend: str):
-            nonlocal result
-
-            async def _run_async():
-                nonlocal result
+        def _stream_executor():
+            async def _process_stream():
                 while True:
-                    args = queue.get()
-                    if args is _stop_marker:
-                        return
-                    result = await callback(args)
+                    item = items_queue.get()
+                    if item == _stop_marker:
+                        break
 
-            if callback.is_async:
-                run(_run_async, backend=backend)
-            else:
-                while True:
-                    args = queue.get()
-                    if args is _stop_marker:
-                        return
-                    result = callback(args)
+                    res = remote_callback(item)
+                    if remote_callback.is_async:
+                        await res
+
+            run(_process_stream, backend=self.async_backend)
+
+        async def _stream_poller():
+            try:
+                async for msg in message_iterator:
+                    msg.loads()
+                    items_queue.put_nowait(msg.data)
+            except AioRpcError:
+                with items_queue.mutex:
+                    items_queue.queue.clear()
+                items_queue.put_nowait(_stop_marker)
 
         with self.reconnect_freq.locker():
+            stream_poller = asyncio.create_task(_stream_poller())
             try:
-                async with create_task_group() as sg:
-                    sg.start_soon(run_in_threadpool, _stream_executor, remote_callback, items_queue, self.async_backend)
-
-                    with CancelScope(shield=True):
-                        async for msg in message_iterator:
-                            if sg.cancel_scope.cancel_called:
-                                break
-                            msg.loads()
-                            items_queue.put_nowait(msg.data)
-
-                        items_queue.put_nowait(_stop_marker)
+                await run_in_threadpool(_stream_executor)
                 self.logger.debug(f"Stop streaming process for function: {message.func_name}. Process = {process_name}")
             except Exception as e:
                 info = f"Exception while streaming to function {message.func_name!r} on remote executor {process_name!r}. {e}"
                 error = RemoteError(info=info, traceback=pickle.dumps(sys.exc_info()))
+            finally:
+                stream_poller.cancel()
 
-            try:
-                message_to_return = RpcMessage(
-                    flag=MessageFlag.SUCCESS,
-                    transmitter=process_name,
-                    receiver=message.transmitter,
-                    uuid=message.uuid,
-                    func_name=message.func_name,
-                    func_args=(result,),
-                    error=error,
-                )
-            except TypeError as e:
-                info = f"Unsupported return type {type(result)}."
-                self.logger.error(info + f" {e}")
-                error = RemoteError(info=info, traceback=pickle.dumps(sys.exc_info()))
-                message_to_return = RpcMessage(
-                    flag=MessageFlag.SUCCESS,
-                    transmitter=process_name,
-                    receiver=message.transmitter,
-                    uuid=message.uuid,
-                    func_name=message.func_name,
-                    error=error,
-                )
+            message_to_return = RpcMessage(
+                flag=MessageFlag.SUCCESS,
+                transmitter=process_name,
+                receiver=message.transmitter,
+                uuid=message.uuid,
+                func_name=message.func_name,
+                func_args=(None,),
+                error=error,
+            )
             await self.channel.send(message_to_return)
 
     async def _remote_func_executor(

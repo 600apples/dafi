@@ -24,12 +24,18 @@ def process_sequence(a: int) -> None:
 
 process 2
 ```python
-from daffi import Global, NO_RETURN
+from daffi import Global, NO_RETURN, fetcher, __signature_unknown__
+
+
+@fetcher
+def process_sequence(a: int) -> None:
+    __signature_unknown__(a)
+
 
 g = Global(host='localhost', port=8888)
 
 for i in range(1, 101):
-    g.call.process_sequence(i) & NO_RETURN
+    process_sequence(i) & NO_RETURN
 ```
 
 Or let's even say we have `process_sequence` callback registered on many nodes and we need to pass
@@ -37,25 +43,37 @@ range to all of them:
 
 process 2
 ```python
-from daffi import Global, BROADCAST
+from daffi import Global, BROADCAST, fetcher, __signature_unknown__
+
+
+@fetcher
+def process_sequence(a: int) -> None:
+    __signature_unknown__(a)
+
 
 g = Global(host='localhost', port=8888)
 
 for i in range(1, 101):
-    g.call.process_sequence(i) & BROADCAST
+    process_sequence(i) & BROADCAST
 ```
 
 The 2 examples above work as they should, but there is a more concise syntax:
 
 process 2
 ```python
-from daffi import Global, STREAM
+from daffi import Global, STREAM, fetcher, __signature_unknown__
+
+
+@fetcher
+def process_sequence(a: int) -> None:
+    __signature_unknown__(a)
+
 
 g = Global(host='localhost', port=8888)
 
 integers_range = range(1, 101)
 
-g.call.process_sequence(integers_range) & STREAM
+process_sequence(integers_range) & STREAM
 ```
 
 Callbacks registered for streams have only one limitation. The should take exactly 1 argument
@@ -112,26 +130,45 @@ Process 1 is stream generator
 process 1
 ```python
 import asyncio
+import logging
 import cv2
-from daffi import Global, STREAM
+from daffi import Global, STREAM, fetcher, __signature_unknown__
+
+logging.basicConfig(level=logging.INFO)
 
 cap = cv2.VideoCapture(0)
 
 
+@fetcher
+async def show_stream(frame: int) -> None:
+    """Display the resulting image frame"""
+    __signature_unknown__(frame)
+
+
 def frame_iterator():
+    """Read frame from camera and send it to all receivers"""
+    
+    # Percent of original size
+    # Images with high resolution might cause stream throttling
+    # It depends on your camera. Adjust this value if needed.
+    scale_percent = 30
     ret, frame = cap.read()
     while ret:
         ret, frame = cap.read()
-        yield frame
+        width = int(frame.shape[1] * scale_percent / 100)
+        height = int(frame.shape[0] * scale_percent / 100)
+        dim = (width, height)
+        resized = cv2.resize(frame, dim, interpolation=cv2.INTER_AREA)
+        yield resized
 
 
 async def main():
-    with Global(init_controller=True) as g:
+    with Global(init_controller=True, host="localhost", port=8888) as g:
         
         for proc in ('process2', 'process3'):
             g.wait_process(proc)
 
-        g.call.show_stream(frame_iterator()) & STREAM
+        show_stream(frame_iterator()) & STREAM
 
     cap.release()
     cv2.destroyAllWindows()
@@ -148,7 +185,10 @@ Process 2 and Process 3 are stream consumers
 process 2
 ```python
 import cv2
+import logging
 from daffi import Global, callback
+
+logging.basicConfig(level=logging.INFO)
 
 
 @callback
@@ -159,7 +199,7 @@ async def show_stream(frame: int) -> None:
 
 
 def main():
-    g = Global(process_name='process2')
+    g = Global(process_name='process2', host="localhost", port=8888)
     g.join()
 
 
@@ -172,7 +212,10 @@ if __name__ == "__main__":
 process 3
 ```python
 import cv2
+import logging
 from daffi import Global, callback
+
+logging.basicConfig(level=logging.INFO)
 
 
 @callback
@@ -183,7 +226,7 @@ async def show_stream(frame: int) -> None:
 
 
 def main():
-    g = Global(process_name='process3')
+    g = Global(process_name='process3', host="localhost", port=8888)
     g.join()
 
 

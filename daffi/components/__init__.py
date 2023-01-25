@@ -111,7 +111,6 @@ class ComponentsBase(UnixBase, TcpBase):
     STOP_ACTION_ERRORS = (StopComponentError,)
 
     logger: logging.Logger = None
-    global_terminate_event: ClassVar[Event] = None
     components: ClassVar[List[Callable]] = []
 
     def __init__(
@@ -124,9 +123,6 @@ class ComponentsBase(UnixBase, TcpBase):
         async_backend: Optional[str] = None,
         global_terminate_event: Optional[thEvent] = None,
     ):
-        cls = self.__class__
-        if not cls.global_terminate_event or cls.global_terminate_event.is_set():
-            cls.global_terminate_event = global_terminate_event
         self._set_keyboard_interrupt_handler()
 
         self.process_name = process_name
@@ -134,6 +130,7 @@ class ComponentsBase(UnixBase, TcpBase):
         self.async_backend = async_backend or "asyncio"
         self.operations = None
         self.ident = string_uuid()
+        self.global_terminate_event = global_terminate_event
         self._stopped = self._connected = False
         self.stop_event: asyncio.Event = None  # No eventloop here. Will be initialized in on_stop task
         self.stop_callbacks: List[Callable] = []
@@ -232,8 +229,9 @@ class ComponentsBase(UnixBase, TcpBase):
             self.logger.error(f"Unpredictable error during {self.__class__.__name__} execution: \n{err_msg}")
             self.stop()
 
-            if all(c.stop_event.is_set() for c in self.components):
-                ComponentsBase.global_terminate_event.set()
+            if all(c.stop_event.is_set() for c in self.components) and self.global_terminate_event:
+                self.global_terminate_event.set()
+                self.components.clear()
 
     async def handle(self, task_status: TaskStatus = TASK_STATUS_IGNORED) -> NoReturn:
         # Register on_stop actions
@@ -265,9 +263,10 @@ class ComponentsBase(UnixBase, TcpBase):
             self.logger.error("Unhandled exception:", exc_info=(exc_type, exc_value, exc_traceback))
             for component in self.components:
                 component.stop()
+            self.components.clear()
 
-            if all(c.stop_event.is_set() for c in self.components):
-                ComponentsBase.global_terminate_event.set()
+            if all(c.stop_event.is_set() for c in self.components) and self.global_terminate_event:
+                self.global_terminate_event.set()
 
         # Assign the excepthook to the handler
         sys.excepthook = handle_unhandled_exception
