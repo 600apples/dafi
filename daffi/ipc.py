@@ -4,7 +4,7 @@ from itertools import chain
 from logging import Logger
 from inspect import iscoroutinefunction
 from threading import Thread, Event
-from typing import NoReturn, Dict, Union, Optional, Callable, Any, Tuple
+from typing import NoReturn, Dict, Union, Optional, Callable, Any, Tuple, AsyncGenerator
 
 from anyio.from_thread import start_blocking_portal
 
@@ -209,7 +209,12 @@ class Ipc(Thread):
                 ).fire()
             stream_items = args[0]
             if not iterable(stream_items):
-                InitializationError("Stream support only iterable objects like lists, tuples, generators etc.").fire()
+                if isinstance(stream_items, AsyncGenerator):
+                    InitializationError(f"Async generators are not supported yet.").fire()
+                InitializationError(
+                    f"Stream support only iterable objects like lists, tuples, generators etc. "
+                    f"You provided {stream_items} as argument."
+                ).fire()
 
             stream_items = iter(stream_items)
             try:

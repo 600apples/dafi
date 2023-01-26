@@ -9,14 +9,14 @@ from daffi import Global, FG, callback_and_fetcher
 logging.basicConfig(level=logging.INFO)
 
 
-@callback_and_fetcher
+@callback_and_fetcher(FG)
 class RemoteGroup:
-    def do_something(self, a: int):
+    async def do_something(self, a: int):
         return f"Received number: {a}"
 
 
-@callback_and_fetcher
-def my_func(a: int):
+@callback_and_fetcher(FG)
+async def my_func(a: int):
     return f"Received number: {a}"
 
 
@@ -28,12 +28,13 @@ async def main():
     await g.wait_process_async("proc2")
 
     for _ in range(10):
-        result = rm.do_something(5) & FG
+        result = await rm.do_something(5)
         print(result)
 
-        result = my_func(10) & FG
+        result = await my_func(10)
         print(result)
 
+    await g.join_async()
 
 if __name__ == "__main__":
     asyncio.run(main())

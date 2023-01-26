@@ -4,7 +4,7 @@ Consumer is the process that consumes available remote functions.
 import asyncio
 import logging
 import cv2
-from daffi import Global, STREAM
+from daffi import Global, STREAM, fetcher
 
 logging.basicConfig(level=logging.INFO)
 
@@ -12,7 +12,8 @@ logging.basicConfig(level=logging.INFO)
 cap = cv2.VideoCapture(0)
 
 
-def frame_iterator():
+@fetcher(STREAM, args_from_body=True)
+def show_stream():
     ret, frame = cap.read()
     while ret:
         ret, frame = cap.read()
@@ -26,7 +27,7 @@ async def main():
             g.wait_process(proc)
 
         print("Wait for publisher process to be started...")
-        g.call.show_stream(frame_iterator()) & STREAM
+        show_stream()
 
     # After the loop release the cap object
     cap.release()

@@ -60,6 +60,7 @@ class Controller(ComponentsBase):
         self._stopped = True
 
     async def before_connect(self) -> NoReturn:
+        await FreezableQueue.clear_all()
         self.listener = None
 
     # ------------------------------------------------------------------------------------------------------------------

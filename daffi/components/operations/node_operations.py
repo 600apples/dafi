@@ -61,12 +61,13 @@ class NodeOperations:
         else:
             self.reconnect_freq.unlock()
             self.node_callback_mapping = msg.data
-            if msg.transmitter == process_name and task_status._future._state == "PENDING":
-                # Consider Node to be started only after handshake response is received.
-                task_status.started("STARTED")
+            if msg.transmitter == process_name and msg.flag == MessageFlag.HANDSHAKE:
                 self.logger.info(
                     f"Node has been started successfully. Process identificator: {process_name!r}. Connection info: {info}"
                 )
+                if task_status._future._state == "PENDING":
+                    # Consider Node to be started only after handshake response is received.
+                    task_status.started("STARTED")
 
     async def on_request(
         self,
@@ -239,6 +240,7 @@ class NodeOperations:
             except AioRpcError:
                 with items_queue.mutex:
                     items_queue.queue.clear()
+            finally:
                 items_queue.put_nowait(_stop_marker)
 
         with self.reconnect_freq.locker():
@@ -247,8 +249,9 @@ class NodeOperations:
                 await run_in_threadpool(_stream_executor)
                 self.logger.debug(f"Stop streaming process for function: {message.func_name}. Process = {process_name}")
             except Exception as e:
-                info = f"Exception while streaming to function {message.func_name!r} on remote executor {process_name!r}. {e}"
-                error = RemoteError(info=info, traceback=pickle.dumps(sys.exc_info()))
+                err_msg = f"Exception while streaming to function {message.func_name!r} on remote executor {process_name!r}. {e}"
+                error = RemoteError(info=err_msg, traceback=pickle.dumps(sys.exc_info()))
+                self.logger.error(err_msg)
             finally:
                 stream_poller.cancel()
 

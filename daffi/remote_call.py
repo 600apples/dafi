@@ -5,21 +5,32 @@ from anyio import to_thread, sleep
 from dataclasses import dataclass, field
 from datetime import timedelta, datetime
 from threading import Event
-from inspect import getframeinfo
-from typing import Optional, Union, NoReturn, Callable, List, Any
+from inspect import getframeinfo, iscoroutine
+from typing import Optional, Union, NoReturn, Callable, List, Any, Coroutine
 
 from daffi.async_result import AsyncResult, SchedulerTask
 from daffi.exceptions import GlobalContextError, InitializationError
 from daffi.utils.timeparse import timeparse
 from daffi.utils.custom_types import P, RemoteResult, TimeUnits
-from daffi.utils.misc import Period, search_remote_callback_in_mapping
-from daffi.execution_modifiers import FG, BG, NO_RETURN, PERIOD, BROADCAST, STREAM, RetryPolicy
+from daffi.utils.misc import Period, search_remote_callback_in_mapping, run_in_threadpool
+from daffi.execution_modifiers import (
+    FG,
+    BG,
+    NO_RETURN,
+    PERIOD,
+    BROADCAST,
+    STREAM,
+    RetryPolicy,
+    ALL_EXEC_MODIFIERS,
+    is_exec_modifier,
+    is_exec_modifier_type,
+)
 
 __all__ = ["RemoteCall"]
 
 
 _empty_result = object()
-_available_operands = "|".join([o.__name__ for o in (FG, BG, NO_RETURN, PERIOD, BROADCAST, STREAM)])
+_available_operands = "|".join([o.__name__ for o in ALL_EXEC_MODIFIERS])
 _available_operands_search_pattern = re.compile(f"\\s*&\\s*({_available_operands})\\s*(\\(.*?\\))?")
 
 
@@ -32,6 +43,9 @@ class RemoteCall:
     _inside_callback_context: Optional[bool] = field(repr=False, default=False)
     _result: Optional[Any] = field(repr=False, default=_empty_result)
 
+    # Modify args before requesting remote callback. This callable should return Tuple of arguments.
+    _args_pre_processor: Optional[Callable[..., Any]] = field(repr=False, default=None)
+
     def __str__(self):
         sep = ", "
         args = sep.join(map(str, self.args))
@@ -42,8 +56,22 @@ class RemoteCall:
     def obtain_result_in_thread(self, next_operand: Union[FG, BG, BROADCAST, NO_RETURN, PERIOD, STREAM]):
         self._result = self & next_operand
 
-    async def __process_await__(self, next_operand: Union[FG, BG, BROADCAST, NO_RETURN, PERIOD, STREAM]):
+    async def __process_await__(
+        self, next_operand: Union[FG, BG, BROADCAST, NO_RETURN, PERIOD, STREAM], return_result: Optional[bool] = False
+    ):
+        if self._args_pre_processor:
+            args = self._args_pre_processor(*self.args, **self.kwargs)
+            if iscoroutine(args):
+                args = await args
+            if not isinstance(args, tuple):
+                args = (args,)
+            self.args = args
+            self.kwargs = {}
+            self._args_pre_processor = None
+
         await to_thread.run_sync(self.obtain_result_in_thread, next_operand)
+        if return_result:
+            return self._result
         return self
 
     async def __self_await__(self):
@@ -71,31 +99,39 @@ class RemoteCall:
         if self._result != _empty_result:
             return self._result
 
+        if self._args_pre_processor:
+            args = self._args_pre_processor(*self.args, **self.kwargs)
+            if iscoroutine(args):
+                raise InitializationError("Use await to execute asynchronous fetcher!")
+            if not isinstance(args, tuple):
+                args = (args,)
+            self.args = args
+            self.kwargs = {}
+
         if type(other) == type:
             other = other()
 
-        if isinstance(other, (FG, type(FG))):
+        if is_exec_modifier_type(other, FG):
             return self.fg(timeout=other.timeout, retry_policy=other.retry_policy)
 
-        elif isinstance(other, (BG, type(BG))):
+        elif is_exec_modifier_type(other, BG):
             return self.bg(timeout=other.timeout, eta=other.eta)
 
-        elif isinstance(other, (NO_RETURN, type(NO_RETURN))):
+        elif is_exec_modifier_type(other, NO_RETURN):
             return self.no_return(eta=other.eta)
 
-        elif isinstance(other, (PERIOD, type(PERIOD))):
+        elif is_exec_modifier_type(other, PERIOD):
             return self.period(at_time=other.at_time, interval=other.interval)
 
-        elif isinstance(other, (BROADCAST, type(BROADCAST))):
+        elif is_exec_modifier_type(other, BROADCAST):
             return self.broadcast(
                 eta=other.eta, return_result=other.return_result, timeout=other.timeout, retry_policy=other.retry_policy
             )
 
-        elif isinstance(other, (STREAM, type(STREAM))):
+        elif is_exec_modifier_type(other, STREAM):
             return self.stream()
 
         else:
-            _available_operands = "|".join([o.__name__ for o in (FG, BG, NO_RETURN, PERIOD, BROADCAST)])
             GlobalContextError(f"Invalid operand {type(other)}. Use one of {_available_operands}").fire()
 
     @property
@@ -224,21 +260,31 @@ class LazyRemoteCall:
     _global_terminate_event: Event = field(repr=False)
     _func_name: Optional[str] = field(repr=False, default=None)
     _inside_callback_context: Optional[bool] = field(repr=False, default=False)
+    _exec_modifier: "ALL_EXEC_MODIFIERS" = field(repr=False, default=None)
+    _is_async: bool = field(repr=False, default=False)
+
+    # In case there is fetcher initialized with 'args_from_body=True'
+    _fetcher: Optional[Callable[..., Any]] = field(repr=False, default=None)
+    _args_from_body: Optional[bool] = field(repr=False, default=False)
 
     def __str__(self):
         return self.__class__.__name__ if not self._func_name else f"{self.__class__.__name__}({self._func_name})"
 
     def __and__(self, other):
-        if type(other) == type:
-            other = other()
-        other_name = other.__class__.__name__
-        InitializationError(
-            f"Invalid syntax. "
-            f"You forgot to use parentheses to trigger remote callback."
-            f"\nCorrect syntax is "
-            f"g.call.{self._func_name}(**args, **kwargs) & {other_name}"
-            f" or g.call.{self._func_name}(**args, **kwargs) & {other_name}(**<invocation kwargs>)"
-        ).fire()
+        if is_exec_modifier(other):
+            self._exec_modifier = other
+            return self
+        else:
+            if type(other) == type:
+                other = other()
+            other_name = other.__class__.__name__
+            InitializationError(
+                f"Invalid syntax. "
+                f"You forgot to use parentheses to trigger remote callback."
+                f"\nCorrect syntax is "
+                f"g.call.{self._func_name}(**args, **kwargs) & {other_name}"
+                f" or g.call.{self._func_name}(**args, **kwargs) & {other_name}(**<invocation kwargs>)"
+            ).fire()
 
     @property
     def _info(self):
@@ -277,18 +323,35 @@ class LazyRemoteCall:
             return self._wait_async(condition_executable, interval)
         return self._wait(condition_executable, interval)
 
-    def __call__(__self__, *args, **kwargs) -> RemoteCall:
+    def __call__(
+        __self__, *args, __exec_modifier__: Optional["ALL_EXEC_MODIFIERS"] = None, **kwargs
+    ) -> [RemoteCall, Coroutine]:
         if not __self__._func_name:
             GlobalContextError(
                 "Invalid syntax. Use `Global.call.func_name(*args, **kwargs)` to build RemoteCall instance."
             ).fire()
-        return RemoteCall(
+
+        # Exec modifier passed in arguments is more important then provided in decorator.
+        if __exec_modifier__:
+            if not is_exec_modifier(__exec_modifier__):
+                raise InitializationError(
+                    f"Invalid type for `__exec_modifier__` argument. Allowed classes are: {_available_operands}"
+                )
+            __self__._exec_modifier = __exec_modifier__
+
+        remote_call = RemoteCall(
             _ipc=__self__._ipc,
             func_name=__self__._func_name,
             args=args,
             kwargs=kwargs,
+            _args_pre_processor=__self__._fetcher if (__self__._fetcher and __self__._args_from_body) else None,
             _inside_callback_context=__self__._inside_callback_context,
         )
+        if __self__._exec_modifier:
+            if __self__._is_async:
+                return remote_call.__process_await__(next_operand=__self__._exec_modifier, return_result=True)
+            return remote_call & __self__._exec_modifier
+        return remote_call
 
     def __getattr__(self, item) -> RemoteCall:
         if self._global_terminate_event and self._global_terminate_event.is_set():
@@ -307,3 +370,8 @@ class LazyRemoteCall:
             if condition_executable():
                 break
             await sleep(interval)
+
+    def _set_fetcher_params(self, is_async: bool, fetcher: Optional[Callable[..., Any]], args_from_body: bool):
+        self._is_async = is_async
+        self._fetcher = fetcher
+        self._args_from_body = args_from_body

@@ -3,6 +3,8 @@ site_url: https://600apples.github.io/daffi/
 site_dir: mkdocs_files
 extra_css:
   - stylesheets/extra.css
+extra_javascript:
+  - js/extra.js
 theme:
   name: material
   logo: images/logo.png
@@ -27,10 +29,6 @@ nav:
   - Node and Controller: node-and-controller.md
   - Global object: global-object.md
   - callback decorator: callback-decorator.md
-#  - Daffi objects:
-#    - daffi-objects.md
-#    - full-example.md
-#    - another-examples.md
   - Execution modifiers: execution-modifiers.md
   - G object injection: g-object-injection.md
   - Asynchronous applications: async-apps.md
@@ -48,7 +46,11 @@ nav:
 plugins:
   - search
   - section-index
-  - glightbox
+  - with-pdf:
+      author: WHO
+      cover: true
+      back_cover: true
+      cover_subtitle: SUBTITLE TEXT
   - mkdocstrings:
       default_handler: python
       handlers:

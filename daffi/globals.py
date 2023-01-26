@@ -28,7 +28,7 @@ from daffi.utils.func_validation import pretty_callbacks
 
 logger = patch_logger(logging.getLogger(__name__), colors.grey)
 
-__all__ = ["Global"]
+__all__ = ["Global", "get_g"]
 
 
 @dataclass
@@ -257,6 +257,11 @@ class Global(metaclass=Singleton):
         Find out task uuid you can using `get_scheduled_tasks` method.
         """
         return self.ipc.cancel_scheduler(remote_process=remote_process, msg_uuid=uuid)
+
+
+def get_g() -> Global:
+    """Get `g` object from any place in code."""
+    return Singleton._get_self("Global")
 
 
 # ----------------------------------------------------------------------------------------------------------------------

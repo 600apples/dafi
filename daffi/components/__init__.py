@@ -16,7 +16,7 @@ from tempfile import gettempdir
 from grpc import aio, ChannelConnectivity
 from anyio.abc import TaskStatus
 from grpc.aio._call import AioRpcError
-from anyio import Event, TASK_STATUS_IGNORED
+from anyio import TASK_STATUS_IGNORED
 from tenacity import AsyncRetrying, wait_fixed, retry_if_exception_type, RetryCallState, wait_none
 
 from daffi.exceptions import InitializationError, ReckAcceptError, StopComponentError

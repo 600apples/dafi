@@ -64,6 +64,11 @@ class Node(ComponentsBase):
         self._stopped = True
 
     async def before_connect(self) -> NoReturn:
+        channel = getattr(self, "channel", None)
+        if channel:
+            await self.channel.clear_queue()
+            await self.channel.stop()
+        FreezableQueue.factory_remove(self.ident)
         self.channel = None
 
     # ------------------------------------------------------------------------------------------------------------------
