@@ -62,7 +62,21 @@ class Ipc(Thread):
 
     @property
     def is_running(self) -> bool:
+        """Return True if Node, Cotroller or Controller and Node were started successfully."""
         return self.global_condition_event.success
+
+    @property
+    def node_callback_mapping(self) -> Dict[str, Any]:
+        """Return callback mapping for Node"""
+        if self.node:
+            return self.node.node_callback_mapping
+        return dict()
+
+    def controller_callback_mapping(self) -> Dict[str, Any]:
+        """Return callback mapping for Controller."""
+        if self.controller:
+            return self.controller.controller_callback_mapping
+        return dict()
 
     def wait(self) -> bool:
         return self.global_condition_event.wait()
@@ -141,6 +155,7 @@ class Ipc(Thread):
         return result
 
     def run(self) -> NoReturn:
+        self.logger.info("Components initialization...")
         # TODO add windows support
         if sys.platform == "win32":
             backend_options = {}

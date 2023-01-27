@@ -223,7 +223,7 @@ class NodeOperations:
             async def _process_stream():
                 while True:
                     item = items_queue.get()
-                    if item == _stop_marker:
+                    if item is _stop_marker:
                         break
 
                     res = remote_callback(item)

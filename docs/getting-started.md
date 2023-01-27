@@ -104,14 +104,14 @@ Let's change the `consumer.py` file so that it calls `sum_of_two_numbers` functi
 ```python
 # consumer.py
 import logging
-from daffi import Global, FG, fetcher, __signature_unknown__
+from daffi import Global, FG, fetcher, __body_unknown__
 
 logging.basicConfig(level=logging.INFO)
 
 
 @fetcher # (1)!
 def sum_of_two_numbers(a: int, b: int) -> int:
-    __signature_unknown__(a, b)
+    __body_unknown__(a, b)
 
 
 if __name__ == '__main__':
@@ -126,11 +126,11 @@ if __name__ == '__main__':
 (This script is complete, it should run "as is")
 
 - on the line with marker `!(1)` we register `fetcher` as pointer to remote `sum_of_two_numbers` callback.
-<br>Decorated function name and signature must be the same as remote callback has. In function body we are using `__signature_unknown__` mock initialization.
-Feel free to use `pass` statement instead of `__signature_unknown__`. Function's body doesn't make any sense
+<br>Decorated function name and signature must be the same as remote callback has. In function body we are using `__body_unknown__` mock initialization.
+Feel free to use `pass` statement instead of `__body_unknown__`. Function's body doesn't make any sense
 because after decorating it with `fetcher` it cannot be used for a local call.
-<br>Although `__signature_unknown__` is more domain specific expression that emphasize purpose of this function. 
-In addition, `__signature_unknown__` can take arbitrary positional and keyword arguments, so that all declared arguments will be used, which favorably affects the display in IDE.
+<br>Although `__body_unknown__` is more domain specific expression that emphasize purpose of this function. 
+In addition, `__body_unknown__` can take arbitrary positional and keyword arguments, so that all declared arguments will be used, which favorably affects the display in IDE.
 - on the line with marker `!(2)` we call `sum_of_two_numbers` as if it were a local function with only one difference that after the call, the desired [execution modifier](execution-modifiers.md) must be specified.
 
 <hr>
@@ -155,7 +155,7 @@ For example lets keep `sum_of_two_numbers` callback in `publisher.py` but create
 # publisher.py
 import asyncio
 import logging
-from daffi import Global, callback, fetcher, __signature_unknown__, FG
+from daffi import Global, callback, fetcher, __body_unknown__, FG
 
 logging.basicConfig(level=logging.INFO)
 
@@ -167,7 +167,7 @@ def sum_of_two_numbers(a: int, b: int) -> int:
 
 @fetcher
 async def consumer_time() -> float:
-    __signature_unknown__()
+    __body_unknown__()
 
 
 async def runner(): # (2)!
@@ -204,7 +204,7 @@ if __name__ == '__main__':
 import asyncio
 import logging
 from datetime import datetime
-from daffi import Global, FG, fetcher, __signature_unknown__, callback
+from daffi import Global, FG, fetcher, __body_unknown__, callback
 
 logging.basicConfig(level=logging.INFO)
 
@@ -216,7 +216,7 @@ async def consumer_time() -> float:
 
 @fetcher  # (2)!
 async def sum_of_two_numbers(a: int, b: int) -> int:
-    __signature_unknown__(a, b)
+    __body_unknown__(a, b)
 
 
 async def runner():  # (3)!

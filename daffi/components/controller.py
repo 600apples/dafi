@@ -38,7 +38,7 @@ class Controller(ComponentsBase):
     # ------------------------------------------------------------------------------------------------------------------
 
     async def on_init(self) -> NoReturn:
-        self.logger = patch_logger(logging.getLogger(__name__), colors.blue)
+        self.logger = patch_logger(logging.getLogger(self.__class__.__name__.lower()), colors.yellow)
         self.operations = ControllerOperations(logger=self.logger)
 
     async def on_stop(self) -> NoReturn:

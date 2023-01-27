@@ -1,8 +1,7 @@
-import logging
 from functools import partial
 from abc import abstractmethod
 from cached_property import cached_property
-from inspect import iscoroutinefunction, signature
+from inspect import iscoroutinefunction, signature, isasyncgenfunction
 from typing import (
     Callable,
     Any,
@@ -12,8 +11,6 @@ from typing import (
     Optional,
 )
 
-from daffi.utils import colors
-from daffi.utils.logger import patch_logger
 from daffi.exceptions import InitializationError
 
 from daffi.ipc import Ipc
@@ -34,9 +31,7 @@ from daffi.utils.settings import (
 from daffi.execution_modifiers import is_exec_modifier
 
 
-logger = patch_logger(logging.getLogger(__name__), colors.grey)
-
-__all__ = ["callback", "fetcher", "callback_and_fetcher", "__signature_unknown__"]
+__all__ = ["callback", "fetcher", "callback_and_fetcher", "__body_unknown__"]
 
 
 class Decorator(Generic[GlobalCallback]):
@@ -77,6 +72,7 @@ class callback(Decorator):
             return super().__new__(cls)
 
     def __init__(self, fn: Callable[P, Any]):
+        from daffi.globals import logger
 
         self._klass = self._fn = None
         if isinstance(fn, type):
@@ -188,24 +184,24 @@ class fetcher(Decorator):
     Example:
 
         >>>
-        >>> from daffi import fetcher, __signature_unknown__, FG
+        >>> from daffi import fetcher, __body_unknown__, FG
         >>>
         >>> @fetcher
         >>> def my_awersome_function(a: int, b: int, c: str):
         >>>     # or use pass. Internal logic will be skipped in any case. only name and signature is important
-        >>>     __signature_unknown__(a, b, c)
+        >>>     __body_unknown__(a, b, c)
         >>>
         >>> # Then we can call `my_awersome_function` on remote
         >>> result = my_awersome_function(1, 2, "abc") & FG
 
         Or if you want to bind execution modifier to fetcher:
          >>>
-        >>> from daffi import fetcher, __signature_unknown__, FG
+        >>> from daffi import fetcher, __body_unknown__, FG
         >>>
         >>> @fetcher(FG)
         >>> def my_awersome_function(a: int, b: int, c: str):
         >>>     # or use pass. Internal logic will be skipped in any case. only name and signature is important
-        >>>     __signature_unknown__(a, b, c)
+        >>>     __body_unknown__(a, b, c)
         >>>
         >>> # Then we can call `my_awersome_function` on remote
         >>> # !!! Execution modifier is binded to fetcher. No need to use `& FG` after execution.
@@ -231,7 +227,10 @@ class fetcher(Decorator):
         self._is_async = None
         self._klass = self._fn = None
 
-        if isinstance(fn, callback):
+        if isasyncgenfunction(fn):
+            InitializationError(f"Async generators are not supported yet.").fire()
+
+        elif isinstance(fn, callback):
             if fn._fn:
                 self._fn = fn._fn.callback
                 self._is_async = fn._fn.is_async
@@ -289,7 +288,7 @@ class fetcher(Decorator):
             return remote_call
 
 
-class __signature_unknown__:
+class __body_unknown__:
     def __init__(self, *args, **kwargs):
         """Used to simulate function/method logic"""
         pass

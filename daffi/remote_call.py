@@ -136,7 +136,7 @@ class RemoteCall:
 
     @property
     def info(self) -> Optional["RemoteCallback"]:
-        data = search_remote_callback_in_mapping(self._ipc.node.node_callback_mapping, self.func_name)
+        data = search_remote_callback_in_mapping(self._ipc.node_callback_mapping, self.func_name)
         if data:
             return data[1]
 
@@ -317,7 +317,7 @@ class LazyRemoteCall:
         interval = 0.5
 
         def condition_executable():
-            return process_name in self._ipc.node.node_callback_mapping
+            return process_name in self._ipc.node_callback_mapping
 
         if _async:
             return self._wait_async(condition_executable, interval)

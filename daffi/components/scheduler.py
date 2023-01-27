@@ -18,7 +18,7 @@ from daffi.utils.misc import run_in_threadpool, run_from_working_thread
 from daffi.utils.settings import LOCAL_CALLBACK_MAPPING
 
 
-logger = patch_logger(logging.getLogger(__name__), colors.magenta)
+logger = patch_logger(logging.getLogger("scheduler"), colors.magenta)
 
 TaskIdent = namedtuple("TaskIdent", ("process_name", "func_name", "msg_uuid"))
 

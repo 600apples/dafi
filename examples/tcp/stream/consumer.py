@@ -3,13 +3,13 @@ Consumer is the process that consumes available remote functions.
 """
 import time
 import logging
-from daffi import Global, STREAM, fetcher, __signature_unknown__
+from daffi import Global, STREAM, fetcher, __body_unknown__
 
 logging.basicConfig(level=logging.INFO)
 
 @fetcher
 async def process_stream(item) -> None:
-    __signature_unknown__(item)
+    __body_unknown__(item)
 
 
 def iterator():

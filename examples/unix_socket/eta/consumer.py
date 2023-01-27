@@ -4,14 +4,14 @@ Consumer is the process that consumes available remote functions.
 import logging
 import time
 import asyncio
-from daffi import Global, BG, fetcher, __signature_unknown__
+from daffi import Global, BG, fetcher, __body_unknown__
 
 logging.basicConfig(level=logging.INFO)
 
 
 @fetcher
 def add(a: int, b: int):
-    __signature_unknown__(a, b)
+    __body_unknown__(a, b)
 
 
 async def main():

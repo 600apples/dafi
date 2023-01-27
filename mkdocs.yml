@@ -47,19 +47,25 @@ plugins:
   - search
   - section-index
   - with-pdf:
-      author: WHO
+      author: ""
       cover: true
-      back_cover: true
-      cover_subtitle: SUBTITLE TEXT
+      cover_title: ""
+      exclude_pages:
+        - code-reference/global.md
+        - code-reference/callback.md
+        - code-reference/fetcher.md
+      cover_logo: docs/images/logo-white-sm.png
+      output_path: pdf/daffi.pdf
+      back_cover: false
+      cover_subtitle: version 1.4.1
   - mkdocstrings:
       default_handler: python
       handlers:
         python:
-          selection:
+          options:
             filters:
               - "!^_" # exlude all members starting with _
               - "^__init__$" # but always include __init__ modules and methods
-          rendering:
             show_signature_annotations: true
             inherited_members: true
             show_source: false

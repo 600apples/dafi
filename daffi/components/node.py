@@ -38,7 +38,7 @@ class Node(ComponentsBase):
     # ------------------------------------------------------------------------------------------------------------------
 
     async def on_init(self) -> NoReturn:
-        self.logger = patch_logger(logging.getLogger(__name__), colors.green)
+        self.logger = patch_logger(logging.getLogger(self.__class__.__name__.lower()), colors.green)
         self.operations = NodeOperations(
             logger=self.logger, async_backend=self.async_backend, reconnect_freq=self.reconnect_freq
         )

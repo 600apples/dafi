@@ -24,12 +24,12 @@ def process_sequence(a: int) -> None:
 
 process 2
 ```python
-from daffi import Global, NO_RETURN, fetcher, __signature_unknown__
+from daffi import Global, NO_RETURN, fetcher, __body_unknown__
 
 
 @fetcher
 def process_sequence(a: int) -> None:
-    __signature_unknown__(a)
+    __body_unknown__(a)
 
 
 g = Global(host='localhost', port=8888)
@@ -43,12 +43,12 @@ range to all of them:
 
 process 2
 ```python
-from daffi import Global, BROADCAST, fetcher, __signature_unknown__
+from daffi import Global, BROADCAST, fetcher, __body_unknown__
 
 
 @fetcher
 def process_sequence(a: int) -> None:
-    __signature_unknown__(a)
+    __body_unknown__(a)
 
 
 g = Global(host='localhost', port=8888)
@@ -61,12 +61,12 @@ The 2 examples above work as they should, but there is a more concise syntax:
 
 process 2
 ```python
-from daffi import Global, STREAM, fetcher, __signature_unknown__
+from daffi import Global, STREAM, fetcher, __body_unknown__
 
 
 @fetcher
 def process_sequence(a: int) -> None:
-    __signature_unknown__(a)
+    __body_unknown__(a)
 
 
 g = Global(host='localhost', port=8888)
@@ -132,7 +132,7 @@ process 1
 import asyncio
 import logging
 import cv2
-from daffi import Global, STREAM, fetcher, __signature_unknown__
+from daffi import Global, STREAM, fetcher, __body_unknown__
 
 logging.basicConfig(level=logging.INFO)
 
@@ -142,7 +142,7 @@ cap = cv2.VideoCapture(0)
 @fetcher
 async def show_stream(frame: int) -> None:
     """Display the resulting image frame"""
-    __signature_unknown__(frame)
+    __body_unknown__(frame)
 
 
 def frame_iterator():

@@ -10,5 +10,5 @@ from daffi.exceptions import (
     RemoteStoppedUnexpectedly,
 )
 from daffi.globals import Global, get_g
-from daffi.decorators import callback, fetcher, callback_and_fetcher, __signature_unknown__
+from daffi.decorators import callback, fetcher, callback_and_fetcher, __body_unknown__
 from daffi.remote_call import FG, BG, NO_RETURN, PERIOD, BROADCAST, STREAM, RetryPolicy
