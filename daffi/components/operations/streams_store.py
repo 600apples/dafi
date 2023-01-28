@@ -1,3 +1,4 @@
+import time
 import asyncio
 from dataclasses import dataclass, field
 from contextlib import contextmanager
@@ -44,6 +45,7 @@ class StreamPairStore(dict):
         super().__init__()
         self.loop = asyncio.get_running_loop()
         self.stream_pairs_queue = asyncio.Queue()
+        self.stream_pair_group_store = dict()
 
     def create_stream_pair(self, *strings) -> StreamPair:
         key = "-".join(strings)
@@ -84,22 +86,30 @@ class StreamPairStore(dict):
             self.stream_pairs_queue.put((stream_pair_group, receivers, msg_uuid)), self.loop
         ).result()
         try:
+            self.stream_pair_group_store[msg_uuid] = stream_pair_group
             yield stream_pair_group
         finally:
             for stream_pair in stream_pair_group:
                 stream_pair.stop_threadsave()
             for receiver in receivers:
                 self.delete_stream_pair(receiver, msg_uuid)
+            self.stream_pair_group_store.pop(msg_uuid, None)
 
     async def accept_multi_connection(self) -> Tuple["StreamPairGroup", str]:
         return await self.stream_pairs_queue.get()
 
 
 class StreamPairGroup(List[StreamPair]):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.throttle_time = 0
+
     @property
     def closed(self) -> bool:
         return any(sp.closed for sp in self)
 
     def send_threadsave(self, item: Any) -> NoReturn:
+        if self.throttle_time:
+            time.sleep(self.throttle_time)
         for sp in self:
             sp.send_threadsave(item)

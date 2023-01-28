@@ -344,3 +344,8 @@ class ControllerOperations:
             if trans_chan:
                 await trans_chan.send(msg)
             self.logger.error(info)
+
+    async def on_stream_throttle(self, msg: ServiceMessage):
+        chan = await self.channel_store.get_chan(msg.receiver)
+        if chan:
+            await chan.send(msg)

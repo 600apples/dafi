@@ -1,4 +1,27 @@
-Let's create simple application.
+Daffi may seem daunting at first - but don’t worry - this tutorial will get you started in no time. 
+It’s deliberately kept simple, so as to not confuse you with advanced features. 
+After you have finished this tutorial, it’s a good idea to browse the rest of the documentation.
+
+At the top level daffi consists of [Global](code-reference/global.md) object and two decorators [callback](code-reference/callback.md) and [fetcher](code-reference/fetcher.md).
+
+- [Global](code-reference/global.md) object can be briefly described as daffi settings entrypoint. 
+This is the place where you can specify what to initialize in particular process (`Controller`,  `Node` or both), what kind of connection you want to have (Unix socket or TCP), specify host/port or UNIX socket path and so on. 
+[Global](code-reference/global.md) must be initialized at application startup.
+
+- [callback](code-reference/callback.md) decorator is used when you want to expose function or class ir order to make it visible for other processes (daffi nodes).
+In other words [callback](code-reference/callback.md) registers decorated function/class as remote callback so that you can trigger it from remote.
+
+- [fetcher](code-reference/fetcher.md) describes how to execute [callback](code-reference/callback.md). For example if you registered function `abc` in process `A` as [callback](code-reference/callback.md) 
+then in process `B` you need to register [fetcher](code-reference/fetcher.md) `abc` to execute `abc` from process `A` like it is local function. 
+<br/>[fetcher](code-reference/fetcher.md) works in pair with [execution modifiers](execution-modifiers.md) classes.
+<br/>[execution modifiers](execution-modifiers.md) are set of classes that describe 
+how to execute remote callback. Possible options you can consider is trigger callback in foreground (wait for result), background (allow process to wait result in background), use broadcast 
+(trigger several callbacks with the same name registered in different processes at once), use stream to remote callback/callbacks and more.
+
+
+#### Example
+
+To give you a flavour of how it works let's create simple application.
 
 This application will consist of two python files `publisher.py` and `consumer.py`.
 
@@ -6,63 +29,119 @@ This application will consist of two python files `publisher.py` and `consumer.p
 - `consumer.py` will call the function `sum_of_two_numbers` remotely passing it 2 numbers as arguments,  wait for the result and print it.
 
 ##### publisher.py
+
+In `publisher.py` we need to create function `sum_of_two_numbers` and make it visible for `consumer.py`. 
+For this reason [callback](code-reference/callback.md) decorator is used.
+
 ```python
-# publisher.py
 import logging
 from daffi import Global, callback
 
 logging.basicConfig(level=logging.INFO)
 
 
-@callback # (1)!
+@callback # (1)
 def sum_of_two_numbers(a: int, b: int) -> int:
     return a + b
 
 
 if __name__ == '__main__':
     
-    g = Global(host="localhost", port=8888, init_controller=True) # (2)!
-    g.join() # (3)!
+    g = Global(host="localhost", port=8888, init_controller=True) # (2)
+    g.join() # (3)
 ```
 (This script is complete, it should run "as is")
 
-- on the line with marker `!(1)` we use `callback` decorator which registers the function as a remote callback.
-Describing  `callback` in other words, it makes the function `sum_of_two_numbers` visible to all other processes where daffi is running.
+- on the line with marker `(1)` we use `callback` decorator which registers the function as a remote callback.
+It makes the function `sum_of_two_numbers` visible to all other processes where daffi is running.
 More details about using `callback` decorator you can find [here](callback-decorator.md).
   
-- on the line with marker `!(2)` we initialize `Global` object. 
-`Global` can be briefly described as the main object for all daffi operations. This is entrypoint where you can specify what to initialize in this process (`Controller`,  `Node` or both), what kind of connection you want to have (Unix socket or TCP) and so on. 
-  To know more about `Global` follow [this](global-object.md) link.
-- on the line with marker `!(3)` we wait forever.
+- on the line with marker `(2)` we initialize `Global` object. 
+  To know more about `Global` follow [this](global-object.md) link. It is worth to mention that we use `init_controller=True` here. Among several daffi processes you need to have one 
+  where `Controller` is initialized. More details about nodes and controllers [here](node-and-controller.md)
+- on the line with marker `(3)` we join [Global](code-reference/global.md) instance to main thread. By default [Global](code-reference/global.md) runs daffi components in separate thread.
 
 <hr>
 
 ##### consumer.py
+In `consumer.py` we need to describe how to execute `sum_of_two_numbers` registered in `publisher.py`. For this reason [fetcher](code-reference/fetcher.md) is used.
+<br/>You can initialize and execute [fetcher](code-reference/fetcher.md) in different ways. Les't go trough some of them:
+
 ```python
-# consumer.py
 import logging
-from daffi import Global, FG
+from daffi import Global, FG, fetcher, __body_unknown__
 
 logging.basicConfig(level=logging.INFO)
 
 
+@fetcher(exec_modifier=FG) # (1)
+def sum_of_two_numbers(a: int, b: int) -> int:
+    __body_unknown__(a, b)
+
+
 if __name__ == '__main__':
 
-    g = Global(host="localhost", port=8888) # (1)!
+    g = Global(host="localhost", port=8888) # (2)
 
-    result = g.call.sum_of_two_numbers(5, 15) & FG # (2)!
+    result = sum_of_two_numbers(5, 15) # (3)
     print(f"Result = {result}")
 
-    g.stop() # (3)!
+    g.join()
 ```
 (This script is complete, it should run "as is")
 
-- on the line with marker `!(1)` we initialize `Global` object to connect controller that was initialized
-in `publisher.py` script. More details about nodes and controllers [here](node-and-controller.md)
-- on the line with marker `!(2)` we call `sum_of_two_numbers` remote callback (remote call to `publisher.py`) with arguments `5` and `15`.
-Then we use `FG` execution modifier that means we want to wait for result. More details about 
-  available execution modifiers [here](execution-modifiers.md)
-- after printing result, on the line with marker `!(3)` we stop `Global` object.
+- on the line with marker `(1)` we register `fetcher` as pointer to remote `sum_of_two_numbers` callback.
+<br/>Argument `exec_modifier=FG` means we want to wait for result. More details about available execution modifiers [here](execution-modifiers.md) 
+<br>In this particular example decorated function name and signature must be the same as remote callback has.
+<br/>In function body we are using `__body_unknown__` mock initialization. [fetcher](code-reference/fetcher.md)
+doesn't use function body by default. Only function name and function signature (arguments) are used to trigger remote.
+Feel free to use `pass` statement instead of `__body_unknown__`.
+- on the line with marker `(2)` we initialize  [Global](code-reference/global.md). Port and host must correspond to port and host of `Controller` that we initialized in `publisher.py`.
+- on the line with marker `(3)` we trigger `sum_of_two_numbers`  [fetcher](code-reference/fetcher.md). Arguments passed to this fetcher will be transferred to `publisher.py` process
+where [callback](code-reference/callback.md) `sum_of_two_numbers` will be triggered.
+
+
+There is also another argument `args_from_body` you can pass to [fetcher](code-reference/fetcher.md).
+In this case result returned by [fetcher](code-reference/fetcher.md) is using as arguments to pass to remote callback.
+
+Let's modify `consumer.py`:
+
+```python
+import logging
+from typing import Tuple
+from daffi import Global, FG, fetcher
+
+logging.basicConfig(level=logging.INFO)
+
+
+@fetcher(exec_modifier=FG, args_from_body=True) # (1)
+def sum_of_two_numbers(multiplier: int) -> Tuple[int, int]:
+    arg1 = 5 * multiplier
+    arg2 = 10 * multiplier
+    return arg1, arg2
+
+
+if __name__ == '__main__':
+
+    g = Global(host="localhost", port=8888)
+
+    result = sum_of_two_numbers(multiplier=2)
+    print(f"Result = {result}")
+
+    g.join()
+```
+(This script is complete, it should run "as is")
+
+
+- on the line with marker `(1)` we register [fetcher](code-reference/fetcher.md) with `args_from_body=True` argument. 
+<br/>It means values that are returned from [fetcher](code-reference/fetcher.md)  execution will be passed to remote callback `sum_of_two_numbers`. 
+<br/>In this example only [fetcher](code-reference/fetcher.md) name should be the same as name of remote callback.
+Feel free to specify any arguments you want. But return statement of fetcher must return single value or tuple of values that corresponds to arguments specified in [callback](code-reference/callback.md)  `sum_of_two_numbers` signature.
+<br/>So if `sum_of_two_numbers` [callback](code-reference/callback.md) expects two arguments `a` and `b` to be provided you should also return tuple of two items as result statement of `sum_of_two_numbers` [fetcher](code-reference/fetcher.md).
+
+!!! note
+    In case remote callback expects only 1 argument you can return single value from [fetcher](code-reference/fetcher.md).
+    
 
 <hr>
 To check how it works start `publisher.py` and `consumer.py` in two separate terminals
@@ -79,9 +158,49 @@ python3 consumer.py
 
 
 <hr>
-Another important topic to cover is [fetcher](code-reference/fetcher.md) decorator.
 
-You have already noticed that daffi makes remote calls through the `g` object using syntax:
+##### Another fetcher syntax examples
+
+[fetcher](code-reference/fetcher.md) is quite flexible. 
+
+You can specify `exec_modifier` argument in decorator or skip it completely.
+
+In this case you should provide [execution modifier](execution-modifiers.md) during `fetcher` execution.
+
+This way is appropriate when you need to trigger remote callback with different execution modifiers depends on situation.
+
+```python
+import logging
+from daffi import Global, fetcher, __body_unknown__, FG, BROADCAST, STREAM
+
+logging.basicConfig(level=logging.INFO)
+
+stream_values = [("a", "b"), ("c", "d"), ("f", "g"), ("y", "z")]
+
+
+@fetcher
+def my_awersome_func(a: str, b: str) -> str:
+    __body_unknown__(a, b)
+    
+
+if __name__ == '__main__':
+
+    g = Global(host="localhost", port=8888)
+
+    result = my_awersome_func(a="foo", b="bar") & FG
+    print(f"Result = {result}")
+
+    # Trigger all `my_awersome_func` callbacks registered on remote nodes (broadcast)
+    my_awersome_func(a="foo", b="bar") & BROADCAST
+
+    # Stream to all `my_awersome_func` callbacks registered on remote nodes (broadcast)
+    my_awersome_func(stream_values) & STREAM
+    g.join()
+```
+
+You can also trigger execute remote callback through [Global](global-object.md) object without [fetcher](code-reference/fetcher.md) registration.
+General syntax can be described as the following:
+
 ```python
 g.call.<remote callback name>(*args, **kwargs) & <execution modifier>
 ```
@@ -89,57 +208,34 @@ g.call.<remote callback name>(*args, **kwargs) & <execution modifier>
 where `<remote callback name>` is the name of function registered in different process, `*args` and `**kwargs` is any arguments you want to pass to this function
 and `<execution modifier>` is specific class that describes how to execute remote (single call, stream, broadcast, scheduled trigger etc) and how to wait for result (foregraund, background etc)
 
-2 problems here:
+Example:
 
-- If your application is large, then you need to have the `g` object available in all places where remote callbacks are called.
-- This syntax is not IDE friendly. IDE can't autocomplete or suggest you available callbacks on remote processes.
-
-This is where `fetcher` comes in handy.
-
-This decorator turns a local function into a pointer to a remote function by its name.
-
-Let's change the `consumer.py` file so that it calls `sum_of_two_numbers` function not through the `g` object but through the `fetcher`
-
-##### consumer.py
 ```python
-# consumer.py
 import logging
-from daffi import Global, FG, fetcher, __body_unknown__
+from daffi import Global, FG
 
 logging.basicConfig(level=logging.INFO)
-
-
-@fetcher # (1)!
-def sum_of_two_numbers(a: int, b: int) -> int:
-    __body_unknown__(a, b)
-
 
 if __name__ == '__main__':
 
     g = Global(host="localhost", port=8888)
 
-    result = sum_of_two_numbers(5, 15) & FG # (2)!
+    result = g.call.my_awersome_func(a="foo", b="bar") & FG
     print(f"Result = {result}")
 
-    g.stop() # (3)!
+    g.join()
 ```
-(This script is complete, it should run "as is")
 
-- on the line with marker `!(1)` we register `fetcher` as pointer to remote `sum_of_two_numbers` callback.
-<br>Decorated function name and signature must be the same as remote callback has. In function body we are using `__body_unknown__` mock initialization.
-Feel free to use `pass` statement instead of `__body_unknown__`. Function's body doesn't make any sense
-because after decorating it with `fetcher` it cannot be used for a local call.
-<br>Although `__body_unknown__` is more domain specific expression that emphasize purpose of this function. 
-In addition, `__body_unknown__` can take arbitrary positional and keyword arguments, so that all declared arguments will be used, which favorably affects the display in IDE.
-- on the line with marker `!(2)` we call `sum_of_two_numbers` as if it were a local function with only one difference that after the call, the desired [execution modifier](execution-modifiers.md) must be specified.
+This syntax has 2 problems:
+
+- If your application is large, then you need to have the `g` object available in all places where remote callbacks are called.
+- This syntax is not IDE friendly. IDE can't autocomplete or suggest you available callbacks on remote processes.
+
+But it still can be considered for tiny microservices architecture.
 
 <hr>
-So far so good! Now you can check how it works by executing  `publisher.py` and `consumer.py` in two separate terminals
-```bash
-python3 publisher.py
-python3 consumer.py
-```
-<hr>
+
+#### Bidirectional communication
 
 At this moment we considered only `consumer` to `publisher` communication. In other words only `consumer` triggered remote callbacks. 
 
@@ -160,41 +256,41 @@ from daffi import Global, callback, fetcher, __body_unknown__, FG
 logging.basicConfig(level=logging.INFO)
 
 
-@callback  # (1)!
+@callback  # (1)
 def sum_of_two_numbers(a: int, b: int) -> int:
     return a + b
 
 
-@fetcher
+@fetcher(FG)
 async def consumer_time() -> float:
     __body_unknown__()
 
 
-async def runner(): # (2)!
+async def runner(): # (2)
     for _ in range(10):
-        current_consumer_time = consumer_time() & FG
+        current_consumer_time = consumer_time()
         print(f"Current consumer time: {current_consumer_time}")
 
         await asyncio.sleep(3)
 
 
 if __name__ == '__main__':
-    g = Global(host="localhost", port=8888, init_controller=True, process_name="publisher")  # (3)!
+    g = Global(host="localhost", port=8888, init_controller=True, process_name="publisher")  # (3)
 
-    g.wait_process("consumer") # (4)!
+    g.wait_process("consumer") # (4)
 
-    asyncio.run(runner()) # (5)!
+    asyncio.run(runner()) # (5)
 
     g.stop()
 ```
 (This script is complete, it should run "as is")
 
 
-- (1)! Here we registered `sum_of_two_numbers` function as remote callback. Syntax is the same as in previous examples. 
-- (2)! `runner` is async function that will be running in asyncio event loop. This function triggers `consumer_time` remote callback that is registered in `consumer.py` process. Execution happen to be 10 times in the cycle.
-- (3)! Here we initialize `Global` object. In additional to provided host and port we also assign specific process name. This way we can wait process each other by name.
-- (4)! Here we wait for `consumer` process to be started. 
-- (5)! Start main `runner` function here
+- (1) Here we registered `sum_of_two_numbers` function as remote callback. Syntax is the same as in previous examples. 
+- (2) `runner` is async function that will be running in asyncio event loop. This function triggers `consumer_time` remote callback that is registered in `consumer.py` process. Execution happen to be 10 times in the cycle.
+- (3) Here we initialize `Global` object. In additional to provided host and port we also assign specific process name. This way we can wait process each other by name.
+- (4) Here we wait for `consumer` process to be started. 
+- (5) Start main `runner` function here
 
 
 ##### consumer.py
@@ -209,19 +305,19 @@ from daffi import Global, FG, fetcher, __body_unknown__, callback
 logging.basicConfig(level=logging.INFO)
 
 
-@callback # (1)!
+@callback # (1)
 async def consumer_time() -> float:
     return datetime.utcnow().timestamp()
 
 
-@fetcher  # (2)!
+@fetcher(FG)  # (2)
 async def sum_of_two_numbers(a: int, b: int) -> int:
     __body_unknown__(a, b)
 
 
-async def runner():  # (3)!
+async def runner():  # (3)
     for _ in range(10):
-        result = sum_of_two_numbers(5, 15) & FG
+        result = sum_of_two_numbers(5, 15)
         print(f"Result = {result}")
 
         await asyncio.sleep(3)
@@ -229,23 +325,23 @@ async def runner():  # (3)!
 
 if __name__ == "__main__":
 
-    g = Global(host="localhost", port=8888, process_name="consumer")  # (4)!
+    g = Global(host="localhost", port=8888, process_name="consumer")  # (4)
 
-    g.wait_process("publisher")  # (5)!
+    g.wait_process("publisher")  # (5)
 
-    asyncio.run(runner())  # (6)!
+    asyncio.run(runner())  # (6)
 
     g.stop()
 ```
 (This script is complete, it should run "as is")
 
 
-- (1)! Here we registered `consumer_time` function as remote callback. 
-- (2)! Here we created fetcher for `sum_of_two_numbers` function that is registered as callback in `publisher.py` process. 
-- (3)! `runner` is async function that will be running in asyncio event loop. This function triggers `sum_of_two_numbers` remote callback that is registered in `publisher.py` process. Execution happen to be 10 times in the cycle.
-- (4)! Here we initialize `Global` object. In additional to provided host and port we also assign specific process name. This way we can wait process each other by name.
-- (5)! Here we wait for `publisher` process to be started. 
-- (6)! Start main `runner` function here
+- (1) Here we registered `consumer_time` function as remote callback. 
+- (2) Here we created fetcher for `sum_of_two_numbers` function that is registered as callback in `publisher.py` process. 
+- (3) `runner` is async function that will be running in asyncio event loop. This function triggers `sum_of_two_numbers` remote callback that is registered in `publisher.py` process. Execution happen to be 10 times in the cycle.
+- (4) Here we initialize `Global` object. In additional to provided host and port we also assign specific process name. This way we can wait process each other by name.
+- (5) Here we wait for `publisher` process to be started. 
+- (6) Start main `runner` function here
 
 !!! note
     Daffi works fine with both synchronous and asynchronous functions but some methods blocks event loop so daffi has async method options for such situations.
@@ -263,7 +359,6 @@ Example:
 
 ```python
 import logging
-from datetime import datetime
 from daffi import fetcher, callback
 
 logging.basicConfig(level=logging.INFO)
@@ -294,12 +389,12 @@ logging.basicConfig(level=logging.INFO)
 PROCESS_NAME = "publisher"
 
 
-@callback_and_fetcher  # (1)!
+@callback_and_fetcher  # (1)
 async def get_process_name() -> str:
     return PROCESS_NAME
 
 
-async def runner():  # (2)!
+async def runner():  # (2)
     for _ in range(10):
         remote_process_name = get_process_name() & FG
         print(f"{PROCESS_NAME} called {remote_process_name!r}")
@@ -317,9 +412,9 @@ if __name__ == "__main__":
     g.stop()
 ```
 
-- (1)! We registered `get_process_name` function as `fetcher` and `callback`. It means this function is visible to other processes
+- (1) We registered `get_process_name` function as `fetcher` and `callback`. It means this function is visible to other processes
  by name due to it is `callback` but if we trigger it locally it works as `fetcher` (trigger remote callback with name `get_process_name` on remote)
-- (2)! We declared runner function which triggers `get_process_name` 10 times in cycle.
+- (2) We declared runner function which triggers `get_process_name` 10 times in cycle.
 
 
 ##### consumer.py

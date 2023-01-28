@@ -34,7 +34,7 @@ def patch_logger(logger: logging.Logger, color: Callable):
         logger.handlers.clear()
 
     cho.addFilter(lambda record: record.levelno <= logging.INFO)
-    delim = color('|')
+    delim = color("|")
     logger = logging.LoggerAdapter(logger, {"app": f"{delim} {logger.name:10} {delim}"})
 
     logger.setLevel(root_level)

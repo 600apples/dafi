@@ -130,6 +130,11 @@ class NodeOperations:
                     await scheduler.on_error(msg)
                 else:
                     error.show_in_log(logger=self.logger)
+        # Close stream if not closed
+        stream_pair = self.stream_store.get(f"{msg.transmitter}-{msg.uuid}")
+        if stream_pair:
+            stream_pair.closed = True
+            await stream_pair.stop(ItemPriority.FIRST)
 
     async def on_scheduler_accept(self, msg: RpcMessage, process_name: str):
         transmitter = msg.transmitter
@@ -203,6 +208,12 @@ class NodeOperations:
             stream_pair.closed = True
             await stream_pair.stop(ItemPriority.FIRST)
 
+    async def on_stream_throttle(self, msg: ServiceMessage):
+        msg.loads()
+        stream_pair_group = self.stream_store.stream_pair_group_store.get(str(msg.uuid))
+        if stream_pair_group:
+            stream_pair_group.throttle_time = msg.data
+
     async def _remote_func_stream_executor(
         self,
         remote_callback: "RemoteCallback",
@@ -233,10 +244,40 @@ class NodeOperations:
             run(_process_stream, backend=self.async_backend)
 
         async def _stream_poller():
+            throttle_threshold_step = 3
+            throttle_time = prev_throttle_time = 0
+
             try:
                 async for msg in message_iterator:
                     msg.loads()
                     items_queue.put_nowait(msg.data)
+
+                    q_size = items_queue.qsize()
+                    if throttle_time and q_size < throttle_threshold_step:
+                        throttle_time = 0
+                        msg = ServiceMessage(
+                            flag=MessageFlag.STREAM_THROTTLE,
+                            transmitter=process_name,
+                            receiver=message.transmitter,
+                            uuid=message.uuid,
+                            data=throttle_time,
+                        )
+                        await self.channel.send(msg)
+
+                    else:
+                        throttle_time, zerro_marker = divmod(q_size, throttle_threshold_step)
+                        throttle_time /= 5
+                        if zerro_marker == 0 and prev_throttle_time != throttle_time:
+                            prev_throttle_time = throttle_time
+                            msg = ServiceMessage(
+                                flag=MessageFlag.STREAM_THROTTLE,
+                                transmitter=process_name,
+                                receiver=message.transmitter,
+                                uuid=message.uuid,
+                                data=throttle_time,
+                            )
+                            await self.channel.send(msg)
+
             except AioRpcError:
                 with items_queue.mutex:
                     items_queue.queue.clear()

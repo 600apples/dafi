@@ -155,6 +155,9 @@ class Node(ComponentsBase):
             elif msg.flag == MessageFlag.STREAM_ERROR:
                 await self.operations.on_stream_error(msg)
 
+            elif msg.flag == MessageFlag.STREAM_THROTTLE:
+                await self.operations.on_stream_throttle(msg)
+
         if not self.global_terminate_event.is_set():
             await self.operations.on_reconnection()
 

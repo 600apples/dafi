@@ -259,17 +259,25 @@ class Ipc(Thread):
 
             # Register the same result second time to track stream errors (If happened)
             result = result._clone_and_register()
+            stream_pair_was_closed = False
             with self.node.stream_store.request_multi_connection(
                 receivers=receivers, msg_uuid=str(msg.uuid)
             ) as stream_pair_group:
                 for stream_item in stream_items:
                     if stream_pair_group.closed:
+                        stream_pair_was_closed = True
                         break
                     for msg in ServiceMessage.build_stream_message(data=stream_item):
                         stream_pair_group.send_threadsave(msg)
             # Wait all receivers to finish stream processing.
             self.logger.debug("Stream closed. Wait for confirmation from receivers...")
+
             result.get()
+            if stream_pair_was_closed:
+                raise GlobalContextError(
+                    "Stream was closed unexpectedly. Seems payload is too big."
+                    " Please adjust payload size or consider using unary exec modifiers FG, BG etc."
+                )
             self.logger.debug("Confirmed.")
 
     def update_callbacks(self) -> NoReturn:
