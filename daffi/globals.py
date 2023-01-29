@@ -13,22 +13,23 @@ from typing import (
     Union,
     NoReturn,
     Coroutine,
+    Tuple,
 )
 from anyio import sleep
 from tenacity import retry, retry_if_exception_type, wait_fixed, stop_after_attempt
 
 from daffi.utils import colors
 from daffi.utils.logger import patch_logger
-from daffi.decorators import callback, __signature_unknown__
+from daffi.decorators import callback, __body_unknown__
 from daffi.exceptions import InitializationError, GlobalContextError
 from daffi.ipc import Ipc
 from daffi.remote_call import LazyRemoteCall
 from daffi.utils.misc import Singleton, string_uuid
 from daffi.utils.func_validation import pretty_callbacks
 
-logger = patch_logger(logging.getLogger(__name__), colors.grey)
+logger = patch_logger(logging.getLogger("global"), colors.blue)
 
-__all__ = ["Global"]
+__all__ = ["Global", "get_g"]
 
 
 @dataclass
@@ -83,7 +84,6 @@ class Global(metaclass=Singleton):
                 "Windows platform doesn't support unix sockets. Provide host and port to use TCP"
             ).fire()
 
-        logger.info("components initialization...")
         self._global_terminate_event = Event()
         self.ipc = Ipc(
             process_name=self.process_name,
@@ -112,7 +112,7 @@ class Global(metaclass=Singleton):
         if exc_type is not None:
             return False
 
-    @cached_property
+    @property
     def call(self) -> LazyRemoteCall:
         """Returns instance of `LazyRemoteCall` that is used to trigger remote callback."""
         return LazyRemoteCall(
@@ -165,7 +165,7 @@ class Global(metaclass=Singleton):
         return res
 
     def transfer_and_call(
-        self, remote_process: str, func: Callable[..., Any], *args, **kwargs
+        self, remote_process: str, func: Callable[..., Any], *args: Tuple[Any], **kwargs: Dict[Any, Any]
     ) -> Union[Coroutine, Any]:
         """
         Send function along with arguments to execute on remote process.
@@ -247,7 +247,7 @@ class Global(metaclass=Singleton):
         """
         Get all scheduled tasks that are running at this moment on remote process
         Args:
-            process_name: Name of `Node`
+            remote_process: Name of `Node`
         """
         return self.ipc.get_all_scheduled_tasks(remote_process=remote_process)
 
@@ -257,6 +257,11 @@ class Global(metaclass=Singleton):
         Find out task uuid you can using `get_scheduled_tasks` method.
         """
         return self.ipc.cancel_scheduler(remote_process=remote_process, msg_uuid=uuid)
+
+
+def get_g() -> Global:
+    """Get `g` object from any place in code."""
+    return Singleton._get_self("Global")
 
 
 # ----------------------------------------------------------------------------------------------------------------------
@@ -382,4 +387,4 @@ async def __get_all_period_tasks(process_name: str) -> List[Dict]:
 
 @callback
 async def __kill_all() -> NoReturn:
-    __signature_unknown__()
+    __body_unknown__()

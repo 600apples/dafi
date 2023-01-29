@@ -7,13 +7,13 @@ from daffi import Global, FG, callback_and_fetcher
 logging.basicConfig(level=logging.INFO)
 
 
-@callback_and_fetcher
+@callback_and_fetcher(FG)
 class RemoteGroup:
     def do_something(self, a: int):
         return a + 10
 
 
-@callback_and_fetcher
+@callback_and_fetcher(FG)
 def my_func(a: int):
     return a + 10
 
@@ -26,10 +26,10 @@ def main():
     g.wait_process("proc1")
 
     for _ in range(10):
-        result = rm.do_something(5) & FG
+        result = rm.do_something(5)
         print(result)
 
-        result = my_func(10) & FG
+        result = my_func(10)
         print(result)
 
 

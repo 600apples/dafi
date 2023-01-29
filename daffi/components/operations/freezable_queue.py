@@ -1,3 +1,4 @@
+import time
 import asyncio
 import warnings
 from enum import IntEnum
@@ -160,6 +161,10 @@ class FreezableQueue(AbstractQueue):
         """
         await self._queue.put(PriorityEntry(priority=priority, data=data))
 
+    async def send_with_time_priority(self, data: Any):
+        """Send item to queue with priority based on current timestamp"""
+        await self._queue.put(PriorityEntry(priority=time.time(), data=data))
+
     async def wait(self) -> None:
         """Wait until queue is empty and all tasks finished."""
         await self._queue.join()
@@ -228,9 +233,12 @@ class QueueMixin:
         """Send item from current thread but not wait it to be taken"""
         self.q.send_no_wait(item)
 
-    async def send(self, item: Any) -> NoReturn:
+    async def send(self, item: Any, priority: Optional[ItemPriority] = ItemPriority.NORMAL) -> NoReturn:
         """Send item from current thread and wait it to be taken"""
-        await self.q.send(item)
+        await self.q.send(item, priority=priority)
+
+    async def send_with_time_priority(self, item: Any):
+        await self.q.send_with_time_priority(item)
 
     def stop_threadsave(self, priority: Optional[ItemPriority] = ItemPriority.LAST) -> NoReturn:
         """Send stop marker to queue from different thread"""

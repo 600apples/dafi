@@ -27,13 +27,13 @@ g.join()
 After that we can trigger broadcast remote call from node-4:
 
 ```python
-from daffi import Global, BROADCAST, fetcher, __signature_unknown__
+from daffi import Global, BROADCAST, fetcher, __body_unknown__
 
 proc_name = "node-4"
 
 @fetcher
 def my_callback(some_string: str) -> str:
-    __signature_unknown__(some_string)
+    __body_unknown__(some_string)
 
     
 g = Global(init_controller=True)

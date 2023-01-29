@@ -38,7 +38,7 @@ class Node(ComponentsBase):
     # ------------------------------------------------------------------------------------------------------------------
 
     async def on_init(self) -> NoReturn:
-        self.logger = patch_logger(logging.getLogger(__name__), colors.green)
+        self.logger = patch_logger(logging.getLogger(self.__class__.__name__.lower()), colors.green)
         self.operations = NodeOperations(
             logger=self.logger, async_backend=self.async_backend, reconnect_freq=self.reconnect_freq
         )
@@ -64,6 +64,11 @@ class Node(ComponentsBase):
         self._stopped = True
 
     async def before_connect(self) -> NoReturn:
+        channel = getattr(self, "channel", None)
+        if channel:
+            await self.channel.clear_queue()
+            await self.channel.stop()
+        FreezableQueue.factory_remove(self.ident)
         self.channel = None
 
     # ------------------------------------------------------------------------------------------------------------------
@@ -149,6 +154,9 @@ class Node(ComponentsBase):
 
             elif msg.flag == MessageFlag.STREAM_ERROR:
                 await self.operations.on_stream_error(msg)
+
+            elif msg.flag == MessageFlag.STREAM_THROTTLE:
+                await self.operations.on_stream_throttle(msg)
 
         if not self.global_terminate_event.is_set():
             await self.operations.on_reconnection()

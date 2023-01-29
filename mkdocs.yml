@@ -3,6 +3,8 @@ site_url: https://600apples.github.io/daffi/
 site_dir: mkdocs_files
 extra_css:
   - stylesheets/extra.css
+extra_javascript:
+  - js/extra.js
 theme:
   name: material
   logo: images/logo.png
@@ -27,10 +29,6 @@ nav:
   - Node and Controller: node-and-controller.md
   - Global object: global-object.md
   - callback decorator: callback-decorator.md
-#  - Daffi objects:
-#    - daffi-objects.md
-#    - full-example.md
-#    - another-examples.md
   - Execution modifiers: execution-modifiers.md
   - G object injection: g-object-injection.md
   - Asynchronous applications: async-apps.md
@@ -48,16 +46,26 @@ nav:
 plugins:
   - search
   - section-index
-  - glightbox
+  - with-pdf:
+      author: ""
+      cover: true
+      cover_title: ""
+      exclude_pages:
+        - code-reference/global.md
+        - code-reference/callback.md
+        - code-reference/fetcher.md
+      cover_logo: docs/images/logo-white-sm.png
+      output_path: pdf/daffi.pdf
+      back_cover: false
+      cover_subtitle: version 1.4.1
   - mkdocstrings:
       default_handler: python
       handlers:
         python:
-          selection:
+          options:
             filters:
               - "!^_" # exlude all members starting with _
               - "^__init__$" # but always include __init__ modules and methods
-          rendering:
             show_signature_annotations: true
             inherited_members: true
             show_source: false

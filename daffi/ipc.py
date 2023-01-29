@@ -4,7 +4,7 @@ from itertools import chain
 from logging import Logger
 from inspect import iscoroutinefunction
 from threading import Thread, Event
-from typing import NoReturn, Dict, Union, Optional, Callable, Any, Tuple
+from typing import NoReturn, Dict, Union, Optional, Callable, Any, Tuple, AsyncGenerator
 
 from anyio.from_thread import start_blocking_portal
 
@@ -62,7 +62,21 @@ class Ipc(Thread):
 
     @property
     def is_running(self) -> bool:
+        """Return True if Node, Cotroller or Controller and Node were started successfully."""
         return self.global_condition_event.success
+
+    @property
+    def node_callback_mapping(self) -> Dict[str, Any]:
+        """Return callback mapping for Node"""
+        if self.node:
+            return self.node.node_callback_mapping
+        return dict()
+
+    def controller_callback_mapping(self) -> Dict[str, Any]:
+        """Return callback mapping for Controller."""
+        if self.controller:
+            return self.controller.controller_callback_mapping
+        return dict()
 
     def wait(self) -> bool:
         return self.global_condition_event.wait()
@@ -141,6 +155,7 @@ class Ipc(Thread):
         return result
 
     def run(self) -> NoReturn:
+        self.logger.info("Components initialization...")
         # TODO add windows support
         if sys.platform == "win32":
             backend_options = {}
@@ -209,7 +224,12 @@ class Ipc(Thread):
                 ).fire()
             stream_items = args[0]
             if not iterable(stream_items):
-                InitializationError("Stream support only iterable objects like lists, tuples, generators etc.").fire()
+                if isinstance(stream_items, AsyncGenerator):
+                    InitializationError(f"Async generators are not supported yet.").fire()
+                InitializationError(
+                    f"Stream support only iterable objects like lists, tuples, generators etc. "
+                    f"You provided {stream_items} as argument."
+                ).fire()
 
             stream_items = iter(stream_items)
             try:
@@ -239,17 +259,25 @@ class Ipc(Thread):
 
             # Register the same result second time to track stream errors (If happened)
             result = result._clone_and_register()
+            stream_pair_was_closed = False
             with self.node.stream_store.request_multi_connection(
                 receivers=receivers, msg_uuid=str(msg.uuid)
             ) as stream_pair_group:
                 for stream_item in stream_items:
                     if stream_pair_group.closed:
+                        stream_pair_was_closed = True
                         break
                     for msg in ServiceMessage.build_stream_message(data=stream_item):
                         stream_pair_group.send_threadsave(msg)
             # Wait all receivers to finish stream processing.
             self.logger.debug("Stream closed. Wait for confirmation from receivers...")
+
             result.get()
+            if stream_pair_was_closed:
+                raise GlobalContextError(
+                    "Stream was closed unexpectedly. Seems payload is too big."
+                    " Please adjust payload size or consider using unary exec modifiers FG, BG etc."
+                )
             self.logger.debug("Confirmed.")
 
     def update_callbacks(self) -> NoReturn:

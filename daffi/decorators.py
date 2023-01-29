@@ -1,17 +1,16 @@
-import logging
+from functools import partial
 from abc import abstractmethod
 from cached_property import cached_property
-from inspect import iscoroutinefunction, signature
+from inspect import iscoroutinefunction, signature, isasyncgenfunction
 from typing import (
     Callable,
     Any,
     Union,
     Generic,
     ClassVar,
+    Optional,
 )
 
-from daffi.utils import colors
-from daffi.utils.logger import patch_logger
 from daffi.exceptions import InitializationError
 
 from daffi.ipc import Ipc
@@ -29,10 +28,10 @@ from daffi.utils.settings import (
     LOCAL_CLASS_CALLBACKS,
     WELL_KNOWN_CALLBACKS,
 )
+from daffi.execution_modifiers import is_exec_modifier
 
-logger = patch_logger(logging.getLogger(__name__), colors.grey)
 
-__all__ = ["callback", "fetcher", "callback_and_fetcher"]
+__all__ = ["callback", "fetcher", "callback_and_fetcher", "__body_unknown__"]
 
 
 class Decorator(Generic[GlobalCallback]):
@@ -73,6 +72,7 @@ class callback(Decorator):
             return super().__new__(cls)
 
     def __init__(self, fn: Callable[P, Any]):
+        from daffi.globals import logger
 
         self._klass = self._fn = None
         if isinstance(fn, type):
@@ -184,23 +184,56 @@ class fetcher(Decorator):
     Example:
 
         >>>
-        >>> from daffi import fetcher, __signature_unknown__, FG
+        >>> from daffi import fetcher, __body_unknown__, FG
         >>>
         >>> @fetcher
         >>> def my_awersome_function(a: int, b: int, c: str):
         >>>     # or use pass. Internal logic will be skipped in any case. only name and signature is important
-        >>>     __signature_unknown__(a, b, c)
+        >>>     __body_unknown__(a, b, c)
         >>>
         >>> # Then we can call `my_awersome_function` on remote
         >>> result = my_awersome_function(1, 2, "abc") & FG
+
+        Or if you want to bind execution modifier to fetcher:
+         >>>
+        >>> from daffi import fetcher, __body_unknown__, FG
+        >>>
+        >>> @fetcher(FG)
+        >>> def my_awersome_function(a: int, b: int, c: str):
+        >>>     # or use pass. Internal logic will be skipped in any case. only name and signature is important
+        >>>     __body_unknown__(a, b, c)
+        >>>
+        >>> # Then we can call `my_awersome_function` on remote
+        >>> # !!! Execution modifier is binded to fetcher. No need to use `& FG` after execution.
+        >>> result = my_awersome_function(1, 2, "abc")
     """
 
-    def __init__(self, fn: Callable[P, Any]):
+    def __new__(
+        cls,
+        exec_modifier: Union[Callable[P, Any], "ALL_EXEC_MODIFIERS"] = None,
+        args_from_body: Optional[bool] = False,
+        **kwargs,
+    ):
+        if is_exec_modifier(exec_modifier) or args_from_body is True:
+            return partial(cls, __options=(exec_modifier, args_from_body))
+        return super().__new__(cls)
+
+    def __init__(
+        self, exec_modifier: Optional[Union["ALL_EXEC_MODIFIERS"]], args_from_body: Optional[bool] = False, **kwargs
+    ):
+        options = kwargs.get("__options", (None, args_from_body))
+        self.exec_modifier, self.args_from_body = options
+        fn = exec_modifier
+        self._is_async = None
         self._klass = self._fn = None
 
-        if isinstance(fn, callback):
+        if isasyncgenfunction(fn):
+            InitializationError(f"Async generators are not supported yet.").fire()
+
+        elif isinstance(fn, callback):
             if fn._fn:
                 self._fn = fn._fn.callback
+                self._is_async = fn._fn.is_async
             else:
                 self._klass = fn
 
@@ -213,6 +246,7 @@ class fetcher(Decorator):
                 InitializationError("Lambdas is not supported.").fire()
 
             self._fn = fn
+            self._is_async = iscoroutinefunction(fn)
 
     @cached_property
     def _g(self) -> "Global":
@@ -221,14 +255,20 @@ class fetcher(Decorator):
     def __call__(self, *args, **kwargs):
         if self._fn:
             _, name = func_info(self._fn)
-            return getattr(self._g.call, name)(*args, **kwargs)
+            remote_call = getattr(self._g.call, name)
+            remote_call._set_fetcher_params(
+                is_async=self._is_async, fetcher=self._fn, args_from_body=self.args_from_body
+            )
+            if self.exec_modifier:
+                remote_call & self.exec_modifier
+            return remote_call(*args, **kwargs)
 
         elif self._klass:
             self._klass = self._klass(*args, **kwargs)
             return self
 
         else:
-            raise NotImplementedError
+            raise InitializationError("First argument must be function or class")
 
     def __getattr__(self, item):
 
@@ -238,10 +278,17 @@ class fetcher(Decorator):
         elif self._klass:
             if str(item).startswith("_"):
                 return getattr(self._klass, item)
-            return getattr(self._g.call, item)
+            remote_call = getattr(self._g.call, item)
+            cb = getattr(self._klass, item, None)
+            if cb:
+                _is_async = getattr(cb, "is_async", iscoroutinefunction(cb))
+                remote_call._set_fetcher_params(is_async=_is_async, fetcher=cb, args_from_body=self.args_from_body)
+            if self.exec_modifier:
+                remote_call & self.exec_modifier
+            return remote_call
 
 
-class __signature_unknown__:
+class __body_unknown__:
     def __init__(self, *args, **kwargs):
         """Used to simulate function/method logic"""
         pass
@@ -253,5 +300,11 @@ class __signature_unknown__:
         return None
 
 
-def callback_and_fetcher(fn: Callable[P, Any]):
-    return fetcher(callback(fn))
+def callback_and_fetcher(exec_modifier: Union[Callable[P, Any], "ALL_EXEC_MODIFIERS"]):
+    def _dec(fn: Callable[P, Any]):
+        return fetcher(callback(fn), __options=(exec_modifier, None))
+
+    if is_exec_modifier(exec_modifier):
+        return _dec
+
+    return fetcher(callback(exec_modifier))

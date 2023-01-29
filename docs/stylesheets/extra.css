@@ -1,3 +1,7 @@
+* {
+    font-family: Verdana, Geneva, Tahoma, sans-serif !important;
+}
+
 header {
 background: linear-gradient(51deg, rgb(225, 225, 242) 0%, rgba(53,53,68,1) 70%);
 }

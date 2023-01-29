@@ -1,4 +1,5 @@
 import logging
+from inspect import isclass
 from dataclasses import dataclass
 from typing import Optional, Union, Tuple, List, Type, Callable, Any
 from functools import wraps
@@ -11,7 +12,17 @@ from daffi.exceptions import InitializationError
 from daffi.utils.misc import iterable
 
 
-__all__ = ["FG", "BG", "PERIOD", "BROADCAST", "NO_RETURN", "RetryPolicy"]
+__all__ = [
+    "FG",
+    "BG",
+    "PERIOD",
+    "BROADCAST",
+    "NO_RETURN",
+    "RetryPolicy",
+    "ALL_EXEC_MODIFIERS",
+    "is_exec_modifier",
+    "is_exec_modifier_type",
+]
 
 logger = patch_logger(logging.getLogger("retry"), colors.grey)
 
@@ -92,3 +103,19 @@ class BROADCAST:
 @dataclass
 class STREAM:
     ...
+
+
+ALL_EXEC_MODIFIERS = (FG, BG, NO_RETURN, PERIOD, BROADCAST, STREAM)
+
+
+def is_exec_modifier(candidate: Union[object, type]) -> bool:
+    """Check if provided candidate is instance of one of exec modifiers or class of one of exec modifiers"""
+    if isclass(candidate):
+        return issubclass(candidate, ALL_EXEC_MODIFIERS)
+    return isinstance(candidate, ALL_EXEC_MODIFIERS)
+
+
+def is_exec_modifier_type(candidate: Union[object, type], exec_modifier: Union["ALL_EXEC_MODIFIERS"]):
+    if isclass(candidate):
+        return issubclass(candidate, exec_modifier)
+    return isinstance(candidate, exec_modifier)
