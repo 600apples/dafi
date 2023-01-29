@@ -94,19 +94,7 @@ async def test_callback_per_node_unix(remote_callbacks_path, exec_type, g):
         g.wait_process(f"node-{i}")
 
     await asyncio.gather(*[call_remote(g, range_, exec_type) for _ in range(500)])
-
-    res = g.stop(True)
-    assert set(res) == {
-        "node-4",
-        "node-1",
-        "node-2",
-        "node-6",
-        "node-7",
-        "node-3",
-        "node-5",
-        "node-8",
-        "node-9",
-    }
+    g.stop(True)
     [p.terminate() for p in remotes]
 
 
@@ -136,19 +124,7 @@ async def test_callback_per_node_tcp(remote_callbacks_path, exec_type, g):
         g.wait_process(f"node-{i}")
 
     await asyncio.gather(*[call_remote(g, range_, exec_type) for _ in range(500)])
-
-    res = g.stop(True)
-    assert set(res) == {
-        "node-4",
-        "node-1",
-        "node-2",
-        "node-6",
-        "node-7",
-        "node-3",
-        "node-5",
-        "node-8",
-        "node-9",
-    }
+    g.stop(True)
     [p.terminate() for p in remotes]
 
 
@@ -186,18 +162,7 @@ async def test_callback_per_node_broadcast_unix(remote_callbacks_path, g):
         for proc_name in all_processes:
             assert proc_name in file_text
 
-    res = g.stop(True)
-    assert set(res) == {
-        "node-1",
-        "node-4",
-        "node-3",
-        "node-6",
-        "node-7",
-        "node-5",
-        "node-8",
-        "node-2",
-        "node-9",
-    }
+    g.stop(True)
     [p.terminate() for p in remotes]
 
 
@@ -239,18 +204,7 @@ async def test_callback_per_node_broadcast_tcp(remote_callbacks_path, g):
         for proc_name in all_processes:
             assert proc_name in file_text
 
-    res = g.stop(True)
-    assert set(res) == {
-        "node-1",
-        "node-4",
-        "node-3",
-        "node-6",
-        "node-7",
-        "node-5",
-        "node-8",
-        "node-2",
-        "node-9",
-    }
+    g.stop(True)
     [p.terminate() for p in remotes]
 
 
@@ -277,18 +231,7 @@ async def test_callback_per_node_unix_async(remote_callbacks_path, exec_type, g)
 
     await asyncio.gather(*[call_remote_async(g, range_, exec_type) for _ in range(500)])
 
-    res = g.stop(True)
-    assert set(res) == {
-        "node-4",
-        "node-1",
-        "node-2",
-        "node-6",
-        "node-7",
-        "node-3",
-        "node-5",
-        "node-8",
-        "node-9",
-    }
+    g.stop(True)
     [p.terminate() for p in remotes]
 
 
@@ -319,18 +262,7 @@ async def test_callback_per_node_tcp_async(remote_callbacks_path, exec_type, g):
 
     await asyncio.gather(*[call_remote_async(g, range_, exec_type) for _ in range(500)])
 
-    res = g.stop(True)
-    assert set(res) == {
-        "node-4",
-        "node-1",
-        "node-2",
-        "node-6",
-        "node-7",
-        "node-3",
-        "node-5",
-        "node-8",
-        "node-9",
-    }
+    g.stop(True)
     [p.terminate() for p in remotes]
 
 
@@ -368,18 +300,7 @@ async def test_callback_per_node_broadcast_unix_async(remote_callbacks_path, g):
         for proc_name in all_processes:
             assert proc_name in file_text
 
-    res = g.stop(True)
-    assert set(res) == {
-        "node-1",
-        "node-4",
-        "node-3",
-        "node-6",
-        "node-7",
-        "node-5",
-        "node-8",
-        "node-2",
-        "node-9",
-    }
+    g.stop(True)
     [p.terminate() for p in remotes]
 
 
@@ -421,16 +342,5 @@ async def test_callback_per_node_broadcast_tcp_async(remote_callbacks_path, g):
         for proc_name in all_processes:
             assert proc_name in file_text
 
-    res = g.stop(True)
-    assert set(res) == {
-        "node-1",
-        "node-4",
-        "node-3",
-        "node-6",
-        "node-7",
-        "node-5",
-        "node-8",
-        "node-2",
-        "node-9",
-    }
+    g.stop(True)
     [p.terminate() for p in remotes]

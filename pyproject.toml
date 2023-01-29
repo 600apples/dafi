@@ -19,7 +19,6 @@ classifiers = [
     "License :: OSI Approved :: MIT License",
     "Operating System :: OS Independent",
     "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.7",
     "Programming Language :: Python :: 3.8",
     "Programming Language :: Python :: 3.9",
     "Programming Language :: Python :: 3.10",
@@ -71,7 +70,7 @@ dependencies = [
 ]
 [tool.hatch.envs.default.scripts]
 cov = "export DAFFI_DEBUG=True && pytest --cov-report=term-missing --cov-config=pyproject.toml --cov=daffi --cov-report=html --cov=tests -s -vv {args}"
-cov_git = "pytest --cov=daffi --cov-report={env:COVERAGE_REPORT:term-missing} --cov-config=pyproject.toml"
+cov_git = "pytest --cov=daffi --cov-report={env:COVERAGE_REPORT:term-missing} --cov-config=pyproject.toml -s -vv"
 no_cov = "pytest -vv {args}"
 compile = "python -m grpc_tools.protoc -I daffi/components/proto --python_out=daffi/components/proto --grpc_python_out=daffi/components/proto messager.proto"
 
@@ -112,7 +111,7 @@ all = [
 ]
 
 [[tool.hatch.envs.test.matrix]]
-python = ["37", "38", "39", "310", "311"]
+python = ["38", "39", "310", "311"]
 
 [tool.hatch.envs.coverage]
 detached = true

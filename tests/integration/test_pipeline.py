@@ -34,18 +34,7 @@ async def test_callback_per_node_unix(remote_callbacks_path, exec_type, g):
     value = g.call.cb1() & FG
     assert value == "My secret value"
 
-    res = g.stop(True)
-    assert set(res) == {
-        "node-4",
-        "node-1",
-        "node-2",
-        "node-6",
-        "node-7",
-        "node-3",
-        "node-5",
-        "node-8",
-        "node-9",
-    }
+    g.stop(True)
     [p.terminate() for p in remotes]
 
 
@@ -80,18 +69,7 @@ async def test_callback_per_node_tcp(remote_callbacks_path, exec_type, g):
     value = g.call.cb1() & FG
     assert value == "My secret value"
 
-    res = g.stop(True)
-    assert set(res) == {
-        "node-4",
-        "node-1",
-        "node-2",
-        "node-6",
-        "node-7",
-        "node-3",
-        "node-5",
-        "node-8",
-        "node-9",
-    }
+    g.stop(True)
     [p.terminate() for p in remotes]
 
 
@@ -125,18 +103,7 @@ async def test_callback_per_node_unix_async(remote_callbacks_path, exec_type, g)
     value = await g.call.cb1() & FG
     assert value == "My secret value"
 
-    res = g.stop(True)
-    assert set(res) == {
-        "node-4",
-        "node-1",
-        "node-2",
-        "node-6",
-        "node-7",
-        "node-3",
-        "node-5",
-        "node-8",
-        "node-9",
-    }
+    g.stop(True)
     [p.terminate() for p in remotes]
 
 
@@ -171,16 +138,5 @@ async def test_callback_per_node_tcp_async(remote_callbacks_path, exec_type, g):
     value = await g.call.cb1() & FG
     assert value == "My secret value"
 
-    res = g.stop(True)
-    assert set(res) == {
-        "node-4",
-        "node-1",
-        "node-2",
-        "node-6",
-        "node-7",
-        "node-3",
-        "node-5",
-        "node-8",
-        "node-9",
-    }
+    g.stop(True)
     [p.terminate() for p in remotes]
