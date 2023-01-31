@@ -34,10 +34,7 @@ async def test_callback_per_node_unix(remote_callbacks_path, g):
     res = g.call.test_callback() & FG(timeout="7s")
     assert res == "Ok"
 
-    res = await g.call.test_callback() & FG(timeout="7s")
-    assert res == "Ok"
-
-    res = await g.call.test_callback() & BG(eta=2)
+    res = g.call.test_callback() & BG(eta=2)
     res = await res.get_async()
     assert res == "Ok"
 

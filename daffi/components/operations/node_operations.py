@@ -157,18 +157,8 @@ class NodeOperations:
         self.channel.freeze()
         raise ReckAcceptError()
 
-    async def on_stop_request(self, msg: RpcMessage, process_name: str):
+    async def on_stop_request(self):
         self.logger.info(f"Termination signal received.")
-        message_to_return = RpcMessage(
-            flag=MessageFlag.SUCCESS,
-            transmitter=process_name,
-            receiver=msg.transmitter,
-            uuid=msg.uuid,
-            func_name=msg.func_name,
-            return_result=True,
-            func_args=(None,),
-        )
-        await self.channel.send(message_to_return)
         raise StopComponentError()
 
     async def on_stream_init(self, msg: RpcMessage, stub, sg, process_name):
@@ -213,6 +203,9 @@ class NodeOperations:
         stream_pair_group = self.stream_store.stream_pair_group_store.get(str(msg.uuid))
         if stream_pair_group:
             stream_pair_group.throttle_time = msg.data
+
+    def build_on_message(self, uuid: int, process_name: str):
+        return ServiceMessage(flag=MessageFlag.RECEIVER_ERROR, uuid=uuid, transmitter=process_name)
 
     async def _remote_func_stream_executor(
         self,

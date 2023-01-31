@@ -33,6 +33,7 @@ class MessageFlag:
     INIT_STREAM = 14
     STREAM_ERROR = 15
     STREAM_THROTTLE = 16
+    RECEIVER_ERROR = 17
 
 
 class Message(ABC):

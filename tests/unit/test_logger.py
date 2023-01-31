@@ -3,7 +3,7 @@ from logging import LoggerAdapter
 
 import pytest
 from daffi.utils import colors
-from daffi.utils.logger import patch_logger, ColoredFormatter
+from daffi.utils.logger import get_daffi_logger, ColoredFormatter
 
 
 class MockLevelRecord:
@@ -70,7 +70,7 @@ class TestConsoleWarningFormatter:
 
     async def test_patch_logging(self):
         # Preparation
-        logger = patch_logger(logging.getLogger(__name__), color=colors.red)
+        logger = get_daffi_logger(__name__, color=colors.red)
 
         # Assertion
         assert isinstance(logger, LoggerAdapter)

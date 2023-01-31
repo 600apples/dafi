@@ -5,12 +5,13 @@ from typing import ClassVar, Dict, Optional, Union, NoReturn, Type, Any
 
 from anyio import sleep
 
+from daffi.utils.misc import Observer
 from daffi.exceptions import RemoteError, TimeoutError, GlobalContextError
 from daffi.utils.custom_types import RemoteResult, SchedulerTaskType
 
 
 @dataclass
-class AsyncResult:
+class AsyncResult(Observer):
     _awaited_results: ClassVar[Dict[str, "AsyncResult"]] = dict()
 
     func_name: str
@@ -18,6 +19,7 @@ class AsyncResult:
     result: Optional[RemoteResult] = None
 
     def __post_init__(self):
+        super().__init__()
         self._ready = thEvent()
 
     @property
@@ -38,12 +40,15 @@ class AsyncResult:
             self.result = self._awaited_results.pop(self.uuid)
 
             if isinstance(self.result, RemoteError):
+                self.mark_fail()
                 self.result.raise_with_trackeback()
 
             if self.result == self:
+                self.mark_fail()
                 self.result = None
                 TimeoutError(f"Function {self.func_name} result timed out").fire()
 
+        self.mark_done()
         return self.result
 
     async def get_async(self, timeout: Union[int, float] = None) -> RemoteResult:

@@ -229,9 +229,9 @@ class ComponentsBase(UnixBase, TcpBase):
             self.logger.error(f"Unpredictable error during {self.__class__.__name__} execution: \n{err_msg}")
             self.stop()
 
-            if all(c.stop_event.is_set() for c in self.components) and self.global_terminate_event:
-                self.global_terminate_event.set()
-                self.components.clear()
+        if all(c.stop_event.is_set() for c in self.components) and self.global_terminate_event:
+            self.global_terminate_event.set()
+            self.components.clear()
 
     async def handle(self, task_status: TaskStatus = TASK_STATUS_IGNORED) -> NoReturn:
         # Register on_stop actions

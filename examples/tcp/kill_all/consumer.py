@@ -10,7 +10,9 @@ logging.basicConfig(level=logging.INFO)
 
 async def main():
     # Process name is not required argument and will be generated automatically if not provided.
-    Global(host="localhost", port=8888).join()
+    g = Global(host="localhost", port=8888)
+    g.join()
+    g.stop()
 
 
 if __name__ == "__main__":

@@ -9,10 +9,10 @@ from grpc.aio._call import AioRpcError
 from tenacity import retry, stop_after_attempt, retry_if_not_exception_type
 
 from daffi.utils import colors
-from daffi.utils.logger import patch_logger
+from daffi.utils.logger import get_daffi_logger
 from daffi.exceptions import StopComponentError, ReckAcceptError
 
-logger = patch_logger(logging.getLogger(__name__), colors.red)
+logger = get_daffi_logger(__name__, colors.red)
 
 
 debug = os.getenv("DAFFI_DEBUG")

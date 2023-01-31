@@ -100,7 +100,7 @@ async def test_callback_per_node_unix_async(remote_callbacks_path, exec_type, g)
     for i in range_:
         g.wait_process(f"node-{i}")
 
-    value = await g.call.cb1() & FG
+    value = g.call.cb1() & FG
     assert value == "My secret value"
 
     g.stop(True)
@@ -135,7 +135,7 @@ async def test_callback_per_node_tcp_async(remote_callbacks_path, exec_type, g):
     for i in range_:
         g.wait_process(f"node-{i}")
 
-    value = await g.call.cb1() & FG
+    value = g.call.cb1() & FG
     assert value == "My secret value"
 
     g.stop(True)

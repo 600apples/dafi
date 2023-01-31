@@ -1,4 +1,3 @@
-import logging
 from typing import Union, NoReturn
 from anyio import create_task_group, sleep
 from anyio._backends._asyncio import TaskGroup
@@ -6,7 +5,7 @@ from anyio.abc import TaskStatus
 
 from daffi.utils import colors
 
-from daffi.utils.logger import patch_logger
+from daffi.utils.logger import get_daffi_logger
 from daffi.async_result import AsyncResult
 from daffi.components import ComponentsBase
 from daffi.components.proto.message import RpcMessage, ServiceMessage, MessageFlag
@@ -38,7 +37,7 @@ class Node(ComponentsBase):
     # ------------------------------------------------------------------------------------------------------------------
 
     async def on_init(self) -> NoReturn:
-        self.logger = patch_logger(logging.getLogger(self.__class__.__name__.lower()), colors.green)
+        self.logger = get_daffi_logger(self.__class__.__name__.lower(), colors.green)
         self.operations = NodeOperations(
             logger=self.logger, async_backend=self.async_backend, reconnect_freq=self.reconnect_freq
         )
@@ -97,6 +96,7 @@ class Node(ComponentsBase):
                 await sleep(self.reconnect_freq.value)
                 if not self.reconnect_freq.locked:
                     self.reconnect_freq.limit_freq()
+                    self.logger.debug("send reconnect request.")
                     await self.channel.send(
                         ServiceMessage(
                             flag=MessageFlag.RECK_REQUEST,
@@ -147,7 +147,7 @@ class Node(ComponentsBase):
                 await self.operations.on_reconnection()
 
             elif msg.flag == MessageFlag.STOP_REQUEST:
-                await self.operations.on_stop_request(msg, self.process_name)
+                await self.operations.on_stop_request()
 
             elif msg.flag == MessageFlag.INIT_STREAM:
                 await self.operations.on_stream_init(msg, stub, sg, self.process_name)
@@ -175,8 +175,13 @@ class Node(ComponentsBase):
                 f"Unable to register result for callback {func_name}. return_result=False specified in message"
             ).fire()
         result = AsyncResult(func_name=func_name, uuid=msg.uuid)._register()
+        self.register_on_error_message(uuid=msg.uuid, result=result)
         self.send_threadsave(msg, 0)
         return result
+
+    def register_on_error_message(self, uuid: int, result: AsyncResult):
+        on_error_msg = self.operations.build_on_message(uuid=uuid, process_name=self.process_name)
+        result.register_fail_callback(self.send_threadsave, msg=on_error_msg, eta=0)
 
     # ------------------------------------------------------------------------------------------------------------------
     # Streaming

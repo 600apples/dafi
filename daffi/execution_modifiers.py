@@ -6,7 +6,7 @@ from functools import wraps
 from tenacity import retry, retry_if_exception, stop_after_attempt, stop_after_delay, after_log, wait_fixed, stop_any
 
 from daffi.utils import colors
-from daffi.utils.logger import patch_logger
+from daffi.utils.logger import get_daffi_logger
 from daffi.utils.custom_types import TimeUnits
 from daffi.exceptions import InitializationError
 from daffi.utils.misc import iterable
@@ -24,7 +24,7 @@ __all__ = [
     "is_exec_modifier_type",
 ]
 
-logger = patch_logger(logging.getLogger("retry"), colors.grey)
+logger = get_daffi_logger("retry", colors.grey)
 
 
 @dataclass

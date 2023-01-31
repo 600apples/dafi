@@ -1,18 +1,17 @@
 import re
-import sys
 import time
 from anyio import to_thread, sleep
 from dataclasses import dataclass, field
 from datetime import timedelta, datetime
 from threading import Event
-from inspect import getframeinfo, iscoroutine
+from inspect import iscoroutine
 from typing import Optional, Union, NoReturn, Callable, List, Any, Coroutine
 
 from daffi.async_result import AsyncResult, SchedulerTask
 from daffi.exceptions import GlobalContextError, InitializationError
 from daffi.utils.timeparse import timeparse
 from daffi.utils.custom_types import P, RemoteResult, TimeUnits
-from daffi.utils.misc import Period, search_remote_callback_in_mapping, run_in_threadpool
+from daffi.utils.misc import Period, search_remote_callback_in_mapping
 from daffi.execution_modifiers import (
     FG,
     BG,
@@ -31,7 +30,6 @@ __all__ = ["RemoteCall"]
 
 _empty_result = object()
 _available_operands = "|".join([o.__name__ for o in ALL_EXEC_MODIFIERS])
-_available_operands_search_pattern = re.compile(f"\\s*&\\s*({_available_operands})\\s*(\\(.*?\\))?")
 
 
 @dataclass
@@ -73,27 +71,6 @@ class RemoteCall:
         if return_result:
             return self._result
         return self
-
-    async def __self_await__(self):
-        return self
-
-    def __await__(self):
-        frame = sys._getframe(1)
-        info = getframeinfo(frame)
-        code_context = info.code_context
-        frame_locals = frame.f_locals
-        frame_globals = frame.f_globals
-        try:
-            next_operand, next_operand_args = re.findall(_available_operands_search_pattern, "".join(code_context))[0]
-        except (ValueError, IndexError):
-            return self.__self_await__().__await__()
-
-        try:
-            next_operand = eval(f"{next_operand}{next_operand_args}", frame_globals, frame_locals)
-            return self.__process_await__(next_operand).__await__()
-        except Exception:
-            self._result = None
-            return self.__self_await__().__await__()
 
     def __and__(self, other) -> RemoteResult:
         if self._result != _empty_result:

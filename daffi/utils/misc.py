@@ -97,20 +97,43 @@ class ReconnectFreq:
         self._limited = False
 
 
-class ConditionObserver:
-    def __init__(self, condition_timeout: int):
-        self.condition = Condition()
-        self.condition_timeout = condition_timeout
-        self.locked = False
-
+class Observer:
+    def __init__(self):
         self._done_callbacks = []
         self._fail_callbacks = []
+        self._callbacks = None
 
     def register_done_callback(self, cb: Callable[..., Any], *args, **kwargs) -> NoReturn:
         self._done_callbacks.append((cb, args, kwargs))
 
     def register_fail_callback(self, cb: Callable[..., Any], *args, **kwargs) -> NoReturn:
         self._fail_callbacks.append((cb, args, kwargs))
+
+    def _fire(self) -> NoReturn:
+        for cb, args, kwargs in self._callbacks:
+            cb(*args, **kwargs)
+
+    def mark_done(self) -> NoReturn:
+        self._callbacks = self._done_callbacks
+        self._fire()
+        self.clear()
+
+    def mark_fail(self) -> NoReturn:
+        self._callbacks = self._fail_callbacks
+        self._fire()
+        self.clear()
+
+    def clear(self) -> NoReturn:
+        self._fail_callbacks.clear()
+        self._done_callbacks.clear()
+
+
+class ConditionObserver(Observer):
+    def __init__(self, condition_timeout: int):
+        super().__init__()
+        self.condition = Condition()
+        self.condition_timeout = condition_timeout
+        self.locked = False
 
     async def done(self):
         async with self.condition:
@@ -120,6 +143,20 @@ class ConditionObserver:
         async with self.condition:
             await self.condition.wait()
 
+    async def _fire(self) -> NoReturn:
+        for cb, args, kwargs in self._callbacks:
+            res = cb(*args, **kwargs)
+            if asyncio.iscoroutine(res):
+                await res
+
+    async def mark_done(self) -> NoReturn:
+        self._callbacks = self._done_callbacks
+        await self._fire()
+
+    async def mark_fail(self) -> NoReturn:
+        self._callbacks = self._fail_callbacks
+        await self._fire()
+
     async def fire(self):
         with CancelScope(shield=True):
             async with self.condition:
@@ -127,14 +164,12 @@ class ConditionObserver:
                 with move_on_after(self.condition_timeout) as cancel_scope:
                     await self.condition.wait()
                 if cancel_scope.cancel_called:
+                    _callback_executor = self.mark_fail
                     self.condition.notify_all()
-                    callbacks = self._fail_callbacks
                 else:
-                    callbacks = self._done_callbacks
-            for cb, args, kwargs in callbacks:
-                res = cb(*args, **kwargs)
-                if asyncio.iscoroutine(res):
-                    await res
+                    _callback_executor = self.mark_done
+            await _callback_executor()
+            super().clear()
 
 
 class ConditionEvent:

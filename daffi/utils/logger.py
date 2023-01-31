@@ -1,9 +1,19 @@
 import sys
 import logging
 from typing import Callable
+from typing import Any
+
 from daffi.utils import colors
+from daffi.utils.settings import DEBUG
 
 logging.getLogger("grpc._cython.cygrpc").setLevel(logging.ERROR)
+
+
+class DaffiLoggerAdapter(logging.LoggerAdapter):
+    def debug(self, msg: Any, *args, **kwargs) -> None:
+        if DEBUG:
+            return self.info(msg=msg, *args, **kwargs)
+        return super().debug(msg=msg, *args, **kwargs)
 
 
 class ColoredFormatter(logging.Formatter):
@@ -23,7 +33,8 @@ class ColoredFormatter(logging.Formatter):
         return f"{self.get_level_message(record)} {message}"
 
 
-def patch_logger(logger: logging.Logger, color: Callable):
+def get_daffi_logger(name: str, color: Callable):
+    logger = logging.getLogger(name=name)
     root_level = logging.getLogger().getEffectiveLevel()
 
     cho = logging.StreamHandler(sys.stdout)
@@ -35,7 +46,7 @@ def patch_logger(logger: logging.Logger, color: Callable):
 
     cho.addFilter(lambda record: record.levelno <= logging.INFO)
     delim = color("|")
-    logger = logging.LoggerAdapter(logger, {"app": f"{delim} {logger.name:10} {delim}"})
+    logger = DaffiLoggerAdapter(logger, {"app": f"{delim} {logger.name:10} {delim}"})
 
     logger.setLevel(root_level)
     cho.setLevel(root_level)

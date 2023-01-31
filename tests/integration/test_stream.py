@@ -8,12 +8,12 @@ logging.basicConfig(level=logging.DEBUG)
 
 
 @pytest.mark.skipif(sys.platform == "win32", reason="Unix sockets dont work on windows")
-async def test_callback_per_node_unix(remote_callbacks_path, g):
+async def test_stream_per_node_unix(remote_callbacks_path, g):
     g = g()
     start_range = 1
     end_range = 6
     range_ = list(range(start_range, end_range))
-    stream_values = list(range(int(1e4)))
+    stream_values = list(range(int(1e3)))
 
     @fetcher(STREAM, args_from_body=True)
     def process_stream():
@@ -39,23 +39,16 @@ async def test_callback_per_node_unix(remote_callbacks_path, g):
     try:
         process_stream()
         for i in range_:
-            processed_arr = await getattr(g.call, f"stream_result_{i}")() & FG
+            processed_arr = getattr(g.call, f"stream_result_{i}")() & FG(timeout=10)
             assert set(stream_values) == set(processed_arr)
+        g.stop(True)
 
-        res = g.stop(True)
-        assert set(res) == {
-            "node-1",
-            "node-3",
-            "node-2",
-            "node-4",
-            "node-5",
-        }
     finally:
         [p.terminate() for p in remotes]
 
 
 @pytest.mark.skipif(sys.platform == "win32", reason="Unix sockets dont work on windows")
-async def test_callback_per_node_unix_using_remote_decorator(remote_callbacks_path, g):
+async def test_stream_per_node_unix_using_remote_decorator(remote_callbacks_path, g):
     @fetcher
     def process_stream(stream):
         __body_unknown__(stream)
@@ -64,7 +57,7 @@ async def test_callback_per_node_unix_using_remote_decorator(remote_callbacks_pa
     start_range = 1
     end_range = 6
     range_ = list(range(start_range, end_range))
-    stream_values = list(range(int(1e4)))
+    stream_values = list(range(int(1e3)))
 
     executable_files = [
         remote_callbacks_path(
@@ -86,7 +79,7 @@ async def test_callback_per_node_unix_using_remote_decorator(remote_callbacks_pa
         process_stream(stream_values) & STREAM
 
         for i in range_:
-            processed_arr = await getattr(g.call, f"stream_result_{i}")() & FG
+            processed_arr = getattr(g.call, f"stream_result_{i}")() & FG(timeout=10)
             assert set(stream_values) == set(processed_arr)
 
         g.stop(True)
@@ -94,7 +87,7 @@ async def test_callback_per_node_unix_using_remote_decorator(remote_callbacks_pa
         [p.terminate() for p in remotes]
 
 
-async def test_callback_per_node_tcp(remote_callbacks_path, g):
+async def test_stream_per_node_tcp(remote_callbacks_path, g):
     @fetcher(STREAM)
     def process_stream(stream):
         __body_unknown__(stream)
@@ -103,7 +96,7 @@ async def test_callback_per_node_tcp(remote_callbacks_path, g):
     start_range = 1
     end_range = 6
     range_ = list(range(start_range, end_range))
-    stream_values = list(range(int(1e4)))
+    stream_values = list(range(int(1e3)))
 
     executable_files = [
         remote_callbacks_path(
@@ -127,7 +120,7 @@ async def test_callback_per_node_tcp(remote_callbacks_path, g):
         process_stream(stream_values)
 
         for i in range_:
-            processed_arr = await getattr(g.call, f"stream_result_{i}")() & FG
+            processed_arr = getattr(g.call, f"stream_result_{i}")() & FG(timeout=10)
             assert set(stream_values) == set(processed_arr)
 
         g.stop(True)

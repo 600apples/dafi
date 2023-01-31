@@ -7,9 +7,9 @@ async def {{ cb_name }}(g: Global):
     return "My secret value"
 {% else %}
     {%- if exec_type == "FG" %}
-    res = await g.call.{{ next_cb_name }}() & FG
+    res = g.call.{{ next_cb_name }}() & FG
     {% else %}
-    future = await g.call.{{ next_cb_name }}() & BG
+    future = g.call.{{ next_cb_name }}() & BG
     res = await future.get_async()
     {% endif %}
     return res

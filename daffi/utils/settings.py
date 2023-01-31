@@ -1,5 +1,8 @@
+import os
 from typing import Dict, Set
 from daffi.utils.custom_types import GlobalCallback, K
+
+DEBUG = bool(os.getenv("DAFFI_DEBUG"))
 
 BYTES_CHUNK = int(4e6)  # 4 Mb
 BYTES_LIMIT = int(8e6)  # 8 Mb

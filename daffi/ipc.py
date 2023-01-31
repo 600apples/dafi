@@ -1,6 +1,7 @@
 import os
 import sys
-from itertools import chain
+import time
+from itertools import chain, cycle
 from logging import Logger
 from inspect import iscoroutinefunction
 from threading import Thread, Event
@@ -8,10 +9,12 @@ from typing import NoReturn, Dict, Union, Optional, Callable, Any, Tuple, AsyncG
 
 from anyio.from_thread import start_blocking_portal
 
+from daffi.utils import colors
+from daffi.utils.settings import DEBUG
 from daffi.async_result import get_result_type
 from daffi.components.controller import Controller
 from daffi.components.node import Node
-from daffi.exceptions import InitializationError, GlobalContextError, TimeoutError
+from daffi.exceptions import InitializationError, GlobalContextError
 from daffi.components.proto.message import RpcMessage, ServiceMessage, MessageFlag
 from daffi.signals import set_signal_handler
 from daffi.utils.misc import (
@@ -72,6 +75,7 @@ class Ipc(Thread):
             return self.node.node_callback_mapping
         return dict()
 
+    @property
     def controller_callback_mapping(self) -> Dict[str, Any]:
         """Return callback mapping for Controller."""
         if self.controller:
@@ -143,6 +147,7 @@ class Ipc(Thread):
             )
         if result:
             result._register()
+            self.node.register_on_error_message(uuid=msg.uuid, result=result)
         self.node.send_threadsave(msg, eta)
 
         if func_period:
@@ -155,7 +160,10 @@ class Ipc(Thread):
         return result
 
     def run(self) -> NoReturn:
+        if DEBUG:
+            self.logger.info(f"{colors.yellow('DEBUG')} mode enabled.")
         self.logger.info("Components initialization...")
+
         # TODO add windows support
         if sys.platform == "win32":
             backend_options = {}
@@ -364,13 +372,17 @@ class Ipc(Thread):
             self._check_node()
             func_name = "__kill_all"
             msg = RpcMessage(
-                flag=MessageFlag.STOP_REQUEST, transmitter=self.process_name, func_name=func_name, return_result=True
+                flag=MessageFlag.STOP_REQUEST, transmitter=self.process_name, func_name=func_name, return_result=False
             )
-            result = self.node.send_and_register_result(func_name=func_name, msg=msg)
-            try:
-                return result.get(timeout=10)
-            except TimeoutError:
-                pass
+            self.node.send_threadsave(msg, 0)
+            for i in cycle(range(1, 51)):
+                if not (diff := {k for k in self.controller_callback_mapping} - {self.process_name}):
+                    break
+                if i == 25:
+                    self.node.send_threadsave(msg, 0)
+                elif i == 50:
+                    self.logger.error(f"Node(s): {diff} are still pending after after kill signal.")
+                time.sleep(0.5)
 
     def stop(self, *args, **kwargs):
         self.global_terminate_event.set()

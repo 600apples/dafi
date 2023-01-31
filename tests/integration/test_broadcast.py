@@ -1,6 +1,6 @@
 import pytest
 import sys
-from daffi import BROADCAST
+from daffi import BROADCAST, __body_unknown__, fetcher
 from subprocess import Popen
 
 
@@ -19,6 +19,10 @@ expected = {
 
 @pytest.mark.skipif(sys.platform == "win32", reason="Unix sockets dont work on windows")
 async def test_callback_per_node_unix(remote_callbacks_path, g):
+    @fetcher(BROADCAST(return_result=True, timeout=10))
+    def broadcast_callback(value: str):
+        __body_unknown__(value)
+
     g = g()
     start_range = 1
     end_range = 10
@@ -39,7 +43,7 @@ async def test_callback_per_node_unix(remote_callbacks_path, g):
     for i in range_:
         g.wait_process(f"node-{i}")
 
-    result = g.call.broadcast_callback(value="broadcast_test") & BROADCAST(return_result=True)
+    result = broadcast_callback(value="broadcast_test")
     assert result == expected
 
     g.stop(True)
@@ -47,6 +51,10 @@ async def test_callback_per_node_unix(remote_callbacks_path, g):
 
 
 async def test_callback_per_node_tcp(remote_callbacks_path, g):
+    @fetcher(BROADCAST(return_result=True, timeout=10))
+    def broadcast_callback(value: str):
+        __body_unknown__(value)
+
     g = g(host="localhost")
     start_range = 1
     end_range = 10
@@ -69,7 +77,7 @@ async def test_callback_per_node_tcp(remote_callbacks_path, g):
     for i in range_:
         g.wait_process(f"node-{i}")
 
-    result = g.call.broadcast_callback(value="broadcast_test") & BROADCAST(return_result=True)
+    result = broadcast_callback(value="broadcast_test")
     assert result == expected
     g.stop(True)
     [p.terminate() for p in remotes]

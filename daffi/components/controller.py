@@ -1,4 +1,3 @@
-import logging
 import asyncio
 from typing import NoReturn
 
@@ -7,7 +6,7 @@ from anyio import create_task_group, move_on_after
 
 
 from daffi.utils import colors
-from daffi.utils.logger import patch_logger
+from daffi.utils.logger import get_daffi_logger
 from daffi.components import ComponentsBase
 from daffi.exceptions import GlobalContextError
 from daffi.components.proto.message import MessageFlag, messager_pb2, ServiceMessage
@@ -38,7 +37,7 @@ class Controller(ComponentsBase):
     # ------------------------------------------------------------------------------------------------------------------
 
     async def on_init(self) -> NoReturn:
-        self.logger = patch_logger(logging.getLogger(self.__class__.__name__.lower()), colors.yellow)
+        self.logger = get_daffi_logger(self.__class__.__name__.lower(), colors.yellow)
         self.operations = ControllerOperations(logger=self.logger)
 
     async def on_stop(self) -> NoReturn:
@@ -105,6 +104,9 @@ class Controller(ComponentsBase):
 
                 elif msg.flag == MessageFlag.STREAM_THROTTLE:
                     await self.operations.on_stream_throttle(msg)
+
+                elif msg.flag == MessageFlag.RECEIVER_ERROR:
+                    await self.operations.on_receiver_error(msg)
 
             await self.operations.on_channel_close(channel, process_identificator)
 

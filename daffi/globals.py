@@ -1,8 +1,6 @@
 import os
 import sys
-import logging
 from dataclasses import dataclass, field
-from cached_property import cached_property
 from threading import Event
 from typing import (
     Callable,
@@ -19,7 +17,7 @@ from anyio import sleep
 from tenacity import retry, retry_if_exception_type, wait_fixed, stop_after_attempt
 
 from daffi.utils import colors
-from daffi.utils.logger import patch_logger
+from daffi.utils.logger import get_daffi_logger
 from daffi.decorators import callback, __body_unknown__
 from daffi.exceptions import InitializationError, GlobalContextError
 from daffi.ipc import Ipc
@@ -27,7 +25,7 @@ from daffi.remote_call import LazyRemoteCall
 from daffi.utils.misc import Singleton, string_uuid
 from daffi.utils.func_validation import pretty_callbacks
 
-logger = patch_logger(logging.getLogger("global"), colors.blue)
+logger = get_daffi_logger("global", colors.blue)
 
 __all__ = ["Global", "get_g"]
 
