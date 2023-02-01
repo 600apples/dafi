@@ -16,7 +16,7 @@ from daffi.components.controller import Controller
 from daffi.components.node import Node
 from daffi.exceptions import InitializationError, GlobalContextError
 from daffi.components.proto.message import RpcMessage, ServiceMessage, MessageFlag
-from daffi.signals import set_signal_handler
+from daffi.signals import set_signal_handler, SIGNALS_TO_NAMES_DICT
 from daffi.utils.misc import (
     Period,
     search_remote_callback_in_mapping,
@@ -39,7 +39,6 @@ class Ipc(Thread):
         host: Optional[str] = None,
         port: Optional[int] = None,
         unix_sock_path: Optional[os.PathLike] = None,
-        reconnect_freq: Optional[int] = None,
         logger: Logger = None,
     ):
         super().__init__()
@@ -50,7 +49,6 @@ class Ipc(Thread):
         self.host = host
         self.port = port
         self.unix_sock_path = unix_sock_path
-        self.reconnect_freq = reconnect_freq
         self.logger = logger
         self.async_backend = async_library()
 
@@ -192,7 +190,6 @@ class Ipc(Thread):
                         process_name=self.process_name,
                         host=self.host,
                         port=self.port,
-                        reconnect_freq=self.reconnect_freq,
                         async_backend=self.async_backend,
                         global_terminate_event=self.global_terminate_event,
                     )
@@ -385,6 +382,11 @@ class Ipc(Thread):
                 time.sleep(0.5)
 
     def stop(self, *args, **kwargs):
+        if args:
+            sig_num = args[0]
+            sig_name = SIGNALS_TO_NAMES_DICT[sig_num]
+            self.logger.warning(f"Terminated by signal {sig_name!r}")
+
         self.global_terminate_event.set()
         self.join()
 

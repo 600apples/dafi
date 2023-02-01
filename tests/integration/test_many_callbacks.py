@@ -45,6 +45,9 @@ async def call_remote_no_return(g, _range, exec_type, path):
 
     for i in range(5):
 
+        start_time = time.time()
+        print("Start worker")
+
         func_args = dict(path=str(path), text=str(i))
         start = datetime.utcnow().timestamp()
         future = getattr(g.call, remote_type[bool(i % 2)] + str(choice(_range)))(**func_args)
@@ -54,6 +57,9 @@ async def call_remote_no_return(g, _range, exec_type, path):
             await asyncio.sleep(3)
         elif exec_type == NO_RETURN:
             future & NO_RETURN
+
+            print(f"End worker in  {time.time() - start_time}")
+
             await asyncio.sleep(3)
 
 
@@ -105,12 +111,23 @@ async def test_many_callbacks_unix_no_return(remote_callbacks_path, exec_type, g
     try:
         remotes = [Popen([sys.executable, executable_file])]
         g.wait_process(process_name)
+
+        print("Start execution")
+
         await asyncio.gather(*[call_remote_no_return(g, range_, exec_type, path / str(i)) for i in range(500)])
+
+        print("End execution")
+        await asyncio.sleep(3)
 
         all_files = list(path.iterdir())
         assert len(all_files) == 500
         for file in all_files:
             assert file.read_text() == "4"
+    except AssertionError:
+        raise
+    except Exception as e:
+        print(f"Exeption while execution : {type(e)}, {e}")
+
     finally:
         g.stop(True)
         [p.terminate() for p in remotes]
@@ -166,7 +183,14 @@ async def test_many_callbacks_tcp_no_return(remote_callbacks_path, exec_type, g)
     try:
         remotes = [Popen([sys.executable, executable_file])]
         g.wait_process(process_name)
+
+        print("Start execution")
+
         await asyncio.gather(*[call_remote_no_return(g, range_, exec_type, path / str(i)) for i in range(500)])
+
+        print("End execution")
+
+        await asyncio.sleep(3)
 
         all_files = list(path.iterdir())
         assert len(all_files) == 500

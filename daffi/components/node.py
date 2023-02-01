@@ -1,5 +1,5 @@
 from typing import Union, NoReturn
-from anyio import create_task_group, sleep
+from anyio import create_task_group
 from anyio._backends._asyncio import TaskGroup
 from anyio.abc import TaskStatus
 
@@ -12,7 +12,13 @@ from daffi.components.proto.message import RpcMessage, ServiceMessage, MessageFl
 
 from daffi.components.scheduler import Scheduler
 from daffi.components.proto import messager_pb2_grpc as grpc_messager
-from daffi.exceptions import UnableToFindCandidate, RemoteStoppedUnexpectedly, InitializationError, RemoteError
+from daffi.exceptions import (
+    UnableToFindCandidate,
+    RemoteStoppedUnexpectedly,
+    InitializationError,
+    RemoteError,
+    StopComponentError,
+)
 from daffi.utils.settings import LOCAL_CALLBACK_MAPPING, WELL_KNOWN_CALLBACKS
 from daffi.components.operations.node_operations import NodeOperations
 from daffi.components.operations.channel_store import ChannelPipe, MessageIterator, FreezableQueue
@@ -38,14 +44,12 @@ class Node(ComponentsBase):
 
     async def on_init(self) -> NoReturn:
         self.logger = get_daffi_logger(self.__class__.__name__.lower(), colors.green)
-        self.operations = NodeOperations(
-            logger=self.logger, async_backend=self.async_backend, reconnect_freq=self.reconnect_freq
-        )
+        self.operations = NodeOperations(logger=self.logger, async_backend=self.async_backend)
         self.scheduler = Scheduler(process_name=self.process_name, async_backend=self.async_backend)
 
     async def on_stop(self) -> NoReturn:
         await super().on_stop()
-        self.logger.debug("On stop event triggered")
+        self.logger.debug(f"On stop event triggered ({self.process_name})")
 
         await self.scheduler.on_scheduler_stop()
         for msg_uuid, ares in AsyncResult._awaited_results.items():
@@ -59,7 +63,7 @@ class Node(ComponentsBase):
             await self.channel.clear_queue()
             await self.channel.stop()
         FreezableQueue.factory_remove(self.ident)
-        self.logger.info(f"{self.__class__.__name__} stopped.")
+        self.logger.info(f"{self.__class__.__name__} {self.process_name!r} stopped.")
         self._stopped = True
 
     async def before_connect(self) -> NoReturn:
@@ -87,25 +91,9 @@ class Node(ComponentsBase):
 
             async with create_task_group() as sg:
                 sg.start_soon(self.read_commands, task_status, sg, stub)
-                sg.start_soon(self.reconnect_request)
                 sg.start_soon(self.read_streams, sg, stub)
 
-    async def reconnect_request(self):
-        if self.reconnect_freq:
-            while True:
-                await sleep(self.reconnect_freq.value)
-                if not self.reconnect_freq.locked:
-                    self.reconnect_freq.limit_freq()
-                    self.logger.debug("send reconnect request.")
-                    await self.channel.send(
-                        ServiceMessage(
-                            flag=MessageFlag.RECK_REQUEST,
-                            transmitter=self.process_name,
-                        )
-                    )
-
     async def read_commands(self, task_status: TaskStatus, sg: TaskGroup, stub):
-        self.reconnect_freq.lock()
         local_mapping_without_well_known_callbacks = {
             k: v.simplified() for k, v in LOCAL_CALLBACK_MAPPING.items() if k not in WELL_KNOWN_CALLBACKS
         }
@@ -142,10 +130,6 @@ class Node(ComponentsBase):
                     msg.error._awaited_error_type = UnableToFindCandidate
                 await self.operations.on_unable_to_find(msg)
 
-            elif msg.flag == MessageFlag.RECK_ACCEPT:
-                self.reconnect_freq.restore_freq()
-                await self.operations.on_reconnection()
-
             elif msg.flag == MessageFlag.STOP_REQUEST:
                 await self.operations.on_stop_request()
 
@@ -159,7 +143,7 @@ class Node(ComponentsBase):
                 await self.operations.on_stream_throttle(msg)
 
         if not self.global_terminate_event.is_set():
-            await self.operations.on_reconnection()
+            raise StopComponentError()
 
     def send_threadsave(self, msg: RpcMessage, eta: Union[int, float]):
         """Send message outside of node executor scope."""

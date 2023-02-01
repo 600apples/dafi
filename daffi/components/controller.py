@@ -43,10 +43,6 @@ class Controller(ComponentsBase):
     async def on_stop(self) -> NoReturn:
         await super().on_stop()
         self.logger.debug("On stop event triggered")
-        self.logger.debug("Wait all channels to be unlocked")
-
-        await self.operations.wait_all_channels_unlocked()
-        self.logger.debug("All channels unlocked.")
 
         async with create_task_group() as sg:
             with move_on_after(2):
@@ -55,7 +51,7 @@ class Controller(ComponentsBase):
             with move_on_after(2):
                 if self.listener:
                     sg.start_soon(self.listener.stop, 2)
-        self.logger.info(f"{self.__class__.__name__} stopped.")
+        self.logger.info(f"{self.__class__.__name__} {self.process_name!r} stopped.")
         self._stopped = True
 
     async def before_connect(self) -> NoReturn:
@@ -79,36 +75,32 @@ class Controller(ComponentsBase):
 
     async def handle_commands(self, channel: ChannelPipe, process_identificator: str):
 
-        async with create_task_group() as sg:
-            async for msg in channel:
-                if msg.flag in (MessageFlag.HANDSHAKE, MessageFlag.UPDATE_CALLBACKS):
-                    await self.operations.on_handshake(msg, channel)
+        async for msg in channel:
+            if msg.flag in (MessageFlag.HANDSHAKE, MessageFlag.UPDATE_CALLBACKS):
+                await self.operations.on_handshake(msg, channel)
 
-                elif msg.flag == MessageFlag.REQUEST:
-                    await self.operations.on_request(msg)
+            elif msg.flag == MessageFlag.REQUEST:
+                await self.operations.on_request(msg)
 
-                elif msg.flag == MessageFlag.SUCCESS:
-                    await self.operations.on_success(msg)
+            elif msg.flag == MessageFlag.SUCCESS:
+                await self.operations.on_success(msg)
 
-                elif msg.flag == MessageFlag.SCHEDULER_ERROR:
-                    await self.operations.on_scheduler_error(msg)
+            elif msg.flag == MessageFlag.SCHEDULER_ERROR:
+                await self.operations.on_scheduler_error(msg)
 
-                elif msg.flag in (MessageFlag.BROADCAST, MessageFlag.STOP_REQUEST):
-                    await self.operations.on_broadcast(msg, self.process_name)
+            elif msg.flag in (MessageFlag.BROADCAST, MessageFlag.STOP_REQUEST):
+                await self.operations.on_broadcast(msg, self.process_name)
 
-                elif msg.flag == MessageFlag.RECK_REQUEST:
-                    await self.operations.on_reconnect(msg, sg)
+            elif msg.flag == MessageFlag.INIT_STREAM:
+                await self.operations.on_stream_init(msg)
 
-                elif msg.flag == MessageFlag.INIT_STREAM:
-                    await self.operations.on_stream_init(msg)
+            elif msg.flag == MessageFlag.STREAM_THROTTLE:
+                await self.operations.on_stream_throttle(msg)
 
-                elif msg.flag == MessageFlag.STREAM_THROTTLE:
-                    await self.operations.on_stream_throttle(msg)
+            elif msg.flag == MessageFlag.RECEIVER_ERROR:
+                await self.operations.on_receiver_error(msg)
 
-                elif msg.flag == MessageFlag.RECEIVER_ERROR:
-                    await self.operations.on_receiver_error(msg)
-
-            await self.operations.on_channel_close(channel, process_identificator)
+        await self.operations.on_channel_close(channel, process_identificator)
 
     async def communicate(self, request_iterator, context):
         try:

@@ -3,7 +3,6 @@ import asyncio
 import warnings
 from enum import IntEnum
 from asyncio import PriorityQueue
-from contextlib import asynccontextmanager
 from typing import Any, Optional, ClassVar, Dict, NoReturn
 
 from daffi.interface import AbstractQueue
@@ -255,28 +254,3 @@ class QueueMixin:
     def proceed(self) -> NoReturn:
         """Unfreeze queue"""
         self.q.proceed()
-
-    async def transmit_item(self, item: Any):
-        """
-        This method works in pair with 'accept_item'
-            1. method1 send any item via queue
-            2. method1 waits until method2 take item from queue
-            3. method2 marks job done. method1 starts waiting stop marker received via the same queue
-        """
-        await self.send(item=item)
-        await self.wait()
-        await self.get()
-
-    @asynccontextmanager
-    async def accept_item(self):
-        """
-        This method works in pair with 'transmit_item'
-            1. method2 accept item from queue and mark task as done
-            2. after any necessary actions with transmitted object method2 sends stop marker to queue.
-        """
-        data = await self.get()
-        self.task_done()
-        try:
-            yield data.data
-        finally:
-            await self.send(item=STOP_MARKER)

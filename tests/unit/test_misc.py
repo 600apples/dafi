@@ -1,6 +1,6 @@
 import pytest
 from anyio import create_task_group, sleep
-from daffi.utils.misc import Period, ConditionObserver, async_library
+from daffi.utils.misc import Period, async_library
 from daffi.exceptions import InitializationError
 
 
@@ -21,46 +21,6 @@ class TestMiscSuite:
 
         with pytest.raises(InitializationError):
             Period(interval=-1).validate()
-
-    async def test_condition_observer_fail(self):
-        res = ""
-
-        def done_cb():
-            nonlocal res
-            res = True
-
-        def fail_cb():
-            nonlocal res
-            res = False
-
-        c = ConditionObserver(condition_timeout=3)
-        c.register_done_callback(done_cb)
-        c.register_fail_callback(fail_cb)
-
-        await c.fire()
-        assert res is False
-
-    async def test_condition_observer_true(self):
-        res = None
-
-        async def done_cb():
-            nonlocal res
-            res = True
-
-        async def fail_cb():
-            nonlocal res
-            res = False
-
-        c = ConditionObserver(condition_timeout=3)
-        c.register_done_callback(done_cb)
-        c.register_fail_callback(fail_cb)
-
-        async with create_task_group() as sg:
-            sg.start_soon(c.fire)
-            await sleep(1)
-            await c.done()
-
-        assert res is True
 
     async def test_async_library(self):
         assert async_library() == "asyncio"

@@ -1,5 +1,4 @@
 import types
-import asyncio
 from uuid import uuid4
 from random import choice
 from functools import partial
@@ -10,7 +9,7 @@ from collections.abc import Iterable
 from typing import Callable, Any, NamedTuple, NoReturn, Dict, DefaultDict, Optional, Tuple, Union, Sequence, List
 
 import sniffio
-from anyio import to_thread, Condition, move_on_after, CancelScope, run
+from anyio import to_thread, run
 from daffi.utils.custom_types import SchedulerTaskType
 from daffi.exceptions import InitializationError
 from daffi.utils.custom_types import GlobalCallback, K, AcceptableErrors
@@ -55,48 +54,6 @@ class Period(NamedTuple):
             return "interval"
 
 
-class ReconnectFreq:
-    LIMIT = 15
-
-    def __init__(self, reconnect_freq: int):
-        self.reconnect_freq = reconnect_freq
-        self._limited = False
-        self._locked = False
-
-    def __bool__(self):
-        return self.reconnect_freq is not None
-
-    @property
-    def value(self):
-        if self._limited:
-            return self.LIMIT
-        return self.reconnect_freq
-
-    @property
-    def locked(self):
-        return self._locked
-
-    @contextmanager
-    def locker(self):
-        try:
-            self.lock()
-            yield
-        finally:
-            self.unlock()
-
-    def lock(self):
-        self._locked = True
-
-    def unlock(self):
-        self._locked = False
-
-    def limit_freq(self):
-        self._limited = True
-
-    def restore_freq(self):
-        self._limited = False
-
-
 class Observer:
     def __init__(self):
         self._done_callbacks = []
@@ -126,50 +83,6 @@ class Observer:
     def clear(self) -> NoReturn:
         self._fail_callbacks.clear()
         self._done_callbacks.clear()
-
-
-class ConditionObserver(Observer):
-    def __init__(self, condition_timeout: int):
-        super().__init__()
-        self.condition = Condition()
-        self.condition_timeout = condition_timeout
-        self.locked = False
-
-    async def done(self):
-        async with self.condition:
-            self.condition.notify_all()
-
-    async def wait(self):
-        async with self.condition:
-            await self.condition.wait()
-
-    async def _fire(self) -> NoReturn:
-        for cb, args, kwargs in self._callbacks:
-            res = cb(*args, **kwargs)
-            if asyncio.iscoroutine(res):
-                await res
-
-    async def mark_done(self) -> NoReturn:
-        self._callbacks = self._done_callbacks
-        await self._fire()
-
-    async def mark_fail(self) -> NoReturn:
-        self._callbacks = self._fail_callbacks
-        await self._fire()
-
-    async def fire(self):
-        with CancelScope(shield=True):
-            async with self.condition:
-                self.locked = True
-                with move_on_after(self.condition_timeout) as cancel_scope:
-                    await self.condition.wait()
-                if cancel_scope.cancel_called:
-                    _callback_executor = self.mark_fail
-                    self.condition.notify_all()
-                else:
-                    _callback_executor = self.mark_done
-            await _callback_executor()
-            super().clear()
 
 
 class ConditionEvent:
