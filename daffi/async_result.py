@@ -22,6 +22,9 @@ class AsyncResult(Observer):
         super().__init__()
         self._ready = thEvent()
 
+    def __hash__(self):
+        return hash(f"{self.func_name}{self.uuid}")
+
     @property
     def ready(self) -> bool:
         return self._ready.is_set()

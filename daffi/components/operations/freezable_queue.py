@@ -1,31 +1,12 @@
-import time
 import asyncio
 import warnings
-from enum import IntEnum
-from asyncio import PriorityQueue
+from asyncio import Queue
 from typing import Any, Optional, ClassVar, Dict, NoReturn
 
 from daffi.interface import AbstractQueue
 
 
-__all__ = ["ItemPriority", "FreezableQueue", "QueueMixin"]
-
-
-class ItemPriority(IntEnum):
-    """Determine data priority for queue processing"""
-
-    FIRST = 1
-    NORMAL = 2
-    LAST = 3
-
-
-class PriorityEntry:
-    def __init__(self, priority: ItemPriority, data: Any):
-        self.data = data
-        self.priority = priority
-
-    def __lt__(self, other: "PriorityEntry"):
-        return self.priority < other.priority
+__all__ = ["FreezableQueue", "QueueMixin"]
 
 
 # Internal marker which indicate that receiving new items must be interrupted.
@@ -34,7 +15,7 @@ STOP_MARKER = object()
 
 class FreezableQueue(AbstractQueue):
     """
-    Extended asyncio.PriorityQueue with additional option to freeze receiving new items for provided period of time.
+    Extended asyncio.Queue with additional option to freeze receiving new items for provided period of time.
     """
 
     queues: ClassVar[Dict[str, Any]] = dict()
@@ -48,7 +29,7 @@ class FreezableQueue(AbstractQueue):
                 existing_loop = loop
             asyncio.set_event_loop(existing_loop)
 
-        self._queue = PriorityQueue()
+        self._queue = Queue()
         self._queue._loop = self.loop
         self._is_frozen = False  # Flag that indicated whether currently queue receiving is frozen.
         self._closed = False
@@ -113,11 +94,9 @@ class FreezableQueue(AbstractQueue):
         while True:
             if not self._is_frozen:
                 try:
-                    queue_entry = await self._queue.get()
+                    data = await self._queue.get()
                 except asyncio.exceptions.CancelledError:
                     break
-                data = queue_entry.data
-
                 if data == STOP_MARKER:
                     # Exit from iterator
                     self.task_done()
@@ -134,45 +113,48 @@ class FreezableQueue(AbstractQueue):
                 # If queue is frozen due to quota rate limit exceeded or other related issue we need to wait a bit.
                 await asyncio.sleep(0.5)
 
-    def send_threadsave(self, data: Any, priority: Optional[ItemPriority] = ItemPriority.NORMAL):
+    def send_threadsave(self, data: Any):
         """
         Threadsave option to send item to queue.
         Put one item into queue.
-        Item will be processed with NORMAL priority. This value cannot be changed.
         """
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
             try:
-                asyncio.run_coroutine_threadsafe(
-                    self._queue.put(PriorityEntry(priority=priority, data=data)), self.loop
-                ).result()
+                asyncio.run_coroutine_threadsafe(self._queue.put(data), self.loop).result()
             except RuntimeError:
                 ...
 
-    def send_no_wait(self, data: Any, priority: Optional[ItemPriority] = ItemPriority.NORMAL):
-        self._queue.put_nowait(PriorityEntry(priority=priority, data=data))
+    def send_no_wait(self, data: Any):
+        self._queue.put_nowait(data)
 
-    async def send(self, data: Any, priority: Optional[ItemPriority] = ItemPriority.NORMAL):
+    async def send(self, data: Any):
         """
         Threadsave option to send item to queue.
         Put one item into queue.
-        Item will be processed with NORMAL priority. This value cannot be changed.
         """
-        await self._queue.put(PriorityEntry(priority=priority, data=data))
-
-    async def send_with_time_priority(self, data: Any):
-        """Send item to queue with priority based on current timestamp"""
-        await self._queue.put(PriorityEntry(priority=time.time(), data=data))
+        await self._queue.put(data)
 
     async def wait(self) -> None:
         """Wait until queue is empty and all tasks finished."""
         await self._queue.join()
 
-    async def stop(self, priority: ItemPriority = ItemPriority.LAST):
+    async def stop(self):
         """Stop iterator"""
         if not self._closed:
             self._closed = True
-            await self._queue.put(PriorityEntry(priority=priority, data=STOP_MARKER))
+            await self._queue.put(STOP_MARKER)
+
+    def stop_threadsave(self):
+        """Stop iterator threadsave"""
+        if not self._closed:
+            self._closed = True
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore")
+                try:
+                    asyncio.run_coroutine_threadsafe(self.stop(), self.loop).result()
+                except RuntimeError:
+                    ...
 
     @classmethod
     def factory(cls, ident: str) -> "FreezableQueue":
@@ -224,28 +206,25 @@ class QueueMixin:
         """Mark job as done"""
         return self.q.task_done()
 
-    def send_threadsave(self, item: Any, priority: Optional[ItemPriority] = ItemPriority.NORMAL) -> NoReturn:
+    def send_threadsave(self, item: Any) -> NoReturn:
         """Send item with given priority from different thread"""
-        self.q.send_threadsave(item, priority)
+        self.q.send_threadsave(item)
 
     def send_no_wait(self, item):
         """Send item from current thread but not wait it to be taken"""
         self.q.send_no_wait(item)
 
-    async def send(self, item: Any, priority: Optional[ItemPriority] = ItemPriority.NORMAL) -> NoReturn:
+    async def send(self, item: Any) -> NoReturn:
         """Send item from current thread and wait it to be taken"""
-        await self.q.send(item, priority=priority)
+        await self.q.send(item)
 
-    async def send_with_time_priority(self, item: Any):
-        await self.q.send_with_time_priority(item)
-
-    def stop_threadsave(self, priority: Optional[ItemPriority] = ItemPriority.LAST) -> NoReturn:
+    def stop_threadsave(self) -> NoReturn:
         """Send stop marker to queue from different thread"""
-        self.send_threadsave(STOP_MARKER, priority)
+        self.send_threadsave(STOP_MARKER)
 
-    async def stop(self, priority: Optional[ItemPriority] = ItemPriority.LAST) -> NoReturn:
+    async def stop(self) -> NoReturn:
         """Send stop marker to queue from current thread"""
-        await self.q.stop(priority)
+        await self.q.stop()
 
     def freeze(self, timeout: int) -> NoReturn:
         """Freeze queue during given timeout."""

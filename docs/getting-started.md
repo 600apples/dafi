@@ -1,25 +1,14 @@
-Daffi may seem daunting at first - but don’t worry - this tutorial will get you started in no time. 
-It’s deliberately kept simple, so as to not confuse you with advanced features. 
-After you have finished this tutorial, it’s a good idea to browse the rest of the documentation.
+At the top level daffi consists of [Global](code-reference/global.md) object, two decorators [callback](code-reference/callback.md) and [fetcher](code-reference/fetcher.md) and [execution modifiers](execution-modifiers.md).
 
-At the top level daffi consists of [Global](code-reference/global.md) object and two decorators [callback](code-reference/callback.md) and [fetcher](code-reference/fetcher.md).
-
-- [Global](code-reference/global.md) object can be briefly described as daffi settings entrypoint. 
-This is the place where you can specify what to initialize in particular process (`Controller`,  `Node` or both), what kind of connection you want to have (Unix socket or TCP), specify host/port or UNIX socket path and so on. 
-[Global](code-reference/global.md) must be initialized at application startup.
-
-- [callback](code-reference/callback.md) decorator is used when you want to expose function or class ir order to make it visible for other processes (daffi nodes).
-In other words [callback](code-reference/callback.md) registers decorated function/class as remote callback so that you can trigger it from remote.
-
-- [fetcher](code-reference/fetcher.md) describes how to execute [callback](code-reference/callback.md). For example if you registered function `abc` in process `A` as [callback](code-reference/callback.md) 
-then in process `B` you need to register [fetcher](code-reference/fetcher.md) `abc` to execute `abc` from process `A` like it is local function. 
-<br/>[fetcher](code-reference/fetcher.md) works in pair with [execution modifiers](execution-modifiers.md) classes.
-<br/>[execution modifiers](execution-modifiers.md) are set of classes that describe 
-how to execute remote callback. Possible options you can consider is trigger callback in foreground (wait for result), background (allow process to wait result in background), use broadcast 
-(trigger several callbacks with the same name registered in different processes at once), use stream to remote callback/callbacks and more.
+| Daffi object             | Description                                                           | 
+|--------------------------|-----------------------------------------------------------------------|
+| [Global](code-reference/global.md)            | [Global](code-reference/global.md) object can be described as daffi configurator.<br/> This is the place where you can specify what to initialize in particular process (`Controller`,  `Node` or both), what kind of connection you want to have (Unix socket or TCP), specify host/port or UNIX socket path and so on.<br/>[Global](code-reference/global.md) must be initialized at application startup. | 
+| [callback](code-reference/callback.md)        | [callback](code-reference/callback.md) decorator is used when you want to expose function or class ir order to make it visible for other processes (daffi nodes).<br/>In other words [callback](code-reference/callback.md) registers decorated function/class as remote callback so that you can trigger it from remote. | 
+| [fetcher](code-reference/fetcher.md)          | [fetcher](code-reference/fetcher.md) decorator describes how to execute remote [callback](code-reference/callback.md). For example if you registered function `abc` in process `A` as [callback](code-reference/callback.md) then in process `B` you need to register [fetcher](code-reference/fetcher.md) with the same name `abc` to execute `abc` from process `A` like it is local function. <br/>[fetcher](code-reference/fetcher.md) works in pair with [execution modifiers](execution-modifiers.md) classes.
+| [execution modifiers](execution-modifiers.md) | [execution modifiers](execution-modifiers.md) are set of classes that describe how to execute remote callback. Possible options you can consider is trigger callback in foreground (wait for result), background (allow process to wait result in background), use broadcast (trigger several callbacks with the same name registered in different processes at once), use stream to remote callback/callbacks and more.| 
 
 
-#### Example
+### Example
 
 To give you a flavour of how it works let's create simple application.
 
@@ -52,14 +41,14 @@ if __name__ == '__main__':
 ```
 (This script is complete, it should run "as is")
 
-- on the line with marker `(1)` we use `callback` decorator which registers the function as a remote callback.
-It makes the function `sum_of_two_numbers` visible to all other processes where daffi is running.
+- `(1)` we use `callback` decorator which registers the function as a remote callback.
+It makes `sum_of_two_numbers` visible to all other processes where daffi is running.
 More details about using `callback` decorator you can find [here](callback-decorator.md).
   
-- on the line with marker `(2)` we initialize `Global` object. 
-  To know more about `Global` follow [this](global-object.md) link. It is worth to mention that we use `init_controller=True` here. Among several daffi processes you need to have one 
-  where `Controller` is initialized. More details about nodes and controllers [here](node-and-controller.md)
-- on the line with marker `(3)` we join [Global](code-reference/global.md) instance to main thread. By default [Global](code-reference/global.md) runs daffi components in separate thread.
+- `(2)` we initialize `Global` object. 
+  To know more about `Global` follow [this](global-object.md) link. It is worth to mention that we use `init_controller=True` here. Among several daffi processes we need to have one 
+  where `Controller` is initialized. `Controller` in daffi teminology is server. `Controller` can be stand-alone process or be combined with `Node` (as in this example). More details about nodes and controllers [here](node-and-controller.md)
+- `(3)` we join [Global](code-reference/global.md) instance to main thread. By default [Global](code-reference/global.md) runs daffi components in separate thread.
 
 <hr>
 
@@ -90,19 +79,27 @@ if __name__ == '__main__':
 ```
 (This script is complete, it should run "as is")
 
-- on the line with marker `(1)` we register `fetcher` as pointer to remote `sum_of_two_numbers` callback.
-<br/>Argument `exec_modifier=FG` means we want to wait for result. More details about available execution modifiers [here](execution-modifiers.md) 
+- `(1)` we register `fetcher` as pointer to remote `sum_of_two_numbers` callback.
+<br/>Argument `exec_modifier=FG` means each time we trigger `fetcher` we want to wait for result. More details about available execution modifiers [here](execution-modifiers.md) 
 <br>In this particular example decorated function name and signature must be the same as remote callback has.
-<br/>In function body we are using `__body_unknown__` mock initialization. [fetcher](code-reference/fetcher.md)
+<br/>In function body we are using `__body_unknown__` mock. [fetcher](code-reference/fetcher.md)
 doesn't use function body by default. Only function name and function signature (arguments) are used to trigger remote.
 Feel free to use `pass` statement instead of `__body_unknown__`.
-- on the line with marker `(2)` we initialize  [Global](code-reference/global.md). Port and host must correspond to port and host of `Controller` that we initialized in `publisher.py`.
-- on the line with marker `(3)` we trigger `sum_of_two_numbers`  [fetcher](code-reference/fetcher.md). Arguments passed to this fetcher will be transferred to `publisher.py` process
+- `(2)` we initialize  [Global](code-reference/global.md). Port and host must correspond to port and host of `Controller` that we initialized in `publisher.py`.
+- `(3)` we trigger `sum_of_two_numbers`  [fetcher](code-reference/fetcher.md). Arguments passed to this fetcher will be transferred to `publisher.py` process
 where [callback](code-reference/callback.md) `sum_of_two_numbers` will be triggered.
 
+<hr>
+To check how it works start `publisher.py` and `consumer.py` in two separate terminals
+```bash
+python3 publisher.py
+python3 consumer.py
+```
+
+<hr>
 
 There is also another argument `args_from_body` you can pass to [fetcher](code-reference/fetcher.md).
-In this case result returned by [fetcher](code-reference/fetcher.md) is using as arguments to pass to remote callback.
+In this case result returned from [fetcher](code-reference/fetcher.md)'s body is using as arguments to pass to remote callback.
 
 Let's modify `consumer.py`:
 
@@ -133,11 +130,11 @@ if __name__ == '__main__':
 (This script is complete, it should run "as is")
 
 
-- on the line with marker `(1)` we register [fetcher](code-reference/fetcher.md) with `args_from_body=True` argument. 
-<br/>It means values that are returned from [fetcher](code-reference/fetcher.md)  execution will be passed to remote callback `sum_of_two_numbers`. 
-<br/>In this example only [fetcher](code-reference/fetcher.md) name should be the same as name of remote callback.
-Feel free to specify any arguments you want. But return statement of fetcher must return single value or tuple of values that corresponds to arguments specified in [callback](code-reference/callback.md)  `sum_of_two_numbers` signature.
-<br/>So if `sum_of_two_numbers` [callback](code-reference/callback.md) expects two arguments `a` and `b` to be provided you should also return tuple of two items as result statement of `sum_of_two_numbers` [fetcher](code-reference/fetcher.md).
+- `(1)` we register [fetcher](code-reference/fetcher.md) with `args_from_body=True` argument. 
+<br/>In this example only decorated function name should be the same as name of remote callback.
+If `args_from_body=True` argument is provided then we can use any arguments want.<br>
+But return statement of decorated function must return tuple of 2 values `(a: int, b: int)` that corresponds to arguments specified in [callback](code-reference/callback.md)  `sum_of_two_numbers` signature.
+
 
 !!! note
     In case remote callback expects only 1 argument you can return single value from [fetcher](code-reference/fetcher.md).
@@ -186,7 +183,8 @@ def my_awersome_func(a: str, b: str) -> str:
 if __name__ == '__main__':
 
     g = Global(host="localhost", port=8888)
-
+    
+    # Trigger one `my_awersome_func` callback on remote and wait for result
     result = my_awersome_func(a="foo", b="bar") & FG
     print(f"Result = {result}")
 
@@ -197,6 +195,40 @@ if __name__ == '__main__':
     my_awersome_func(stream_values) & STREAM
     g.join()
 ```
+
+!!! note
+    [execution modifiers](execution-modifiers.md) take various arguments and can be passed to fetcher as class or class instance.
+    For example `BG` execution modifier has 2 arguments `timeout` and `eta`. `timeout` is used when you want to limit execution time on remote. If this value exceeded then `TimeoutError` will be thrown. `eta` describes delay in seconds before remote callback execution.
+    <br>So you can consider two options:
+    ```python
+    from daffi import Global, fetcher, BG
+    
+    @fetcher(BG)
+    def my_awersome_func(a: str, b: str) -> str:
+        __body_unknown__(a, b)  
+    ...
+    # BG execution modifier returns instance of `AsyncResult`. To obtain result we need to use .get() method of `AsyncResult`
+    future = my_awersome_func(1, 2)
+    result = future.get()
+    ```
+    (fetcher without timeout and without eta.)
+    
+    ```python
+    from daffi import Global, fetcher, BG
+    
+    fetcher(BG(timeout=10, eta=2))
+    def my_awersome_func(a: str, b: str) -> str:
+        __body_unknown__(a, b)  
+    ...
+    # BG execution modifier returns instance of `AsyncResult`. To obtain result we need to use .get() method of `AsyncResult`
+    future = my_awersome_func(1, 2)
+    result = future.get()
+    
+    ```
+    (fetcher waits for result no more then 10 seconds and trigger callback execution after 2 second of delay(eta))
+        
+  
+<hr>
 
 You can also trigger execute remote callback through [Global](global-object.md) object without [fetcher](code-reference/fetcher.md) registration.
 General syntax can be described as the following:
@@ -235,11 +267,11 @@ But it still can be considered for tiny microservices architecture.
 
 <hr>
 
-#### Bidirectional communication
+### Another example with bidirectional communication
 
 At this moment we considered only `consumer` to `publisher` communication. In other words only `consumer` triggered remote callbacks. 
 
-Lets modify `publisher.py` and `consumer.py` so that each of these processes registers a callback and triggers a callback from a neighboring process.
+Lets modify `publisher.py` and `consumer.py` so that each of these processes registers a callback and triggers a callback from other process.
 
 For example lets keep `sum_of_two_numbers` callback in `publisher.py` but create new function `consumer_time` in `consumer.py`.
  `consumer_time` should just return current UTC timestamp of consumer process.
@@ -457,11 +489,6 @@ if __name__ == "__main__":
 
 This way you can have only one common script instead of `publisher.py` and `consumer.py`. The only thing you should do is to pass env variables `PROCESS_NAME` and `INIT_CONTROLLER` (True or False) during initialization. 
 
-
-!!! note
-    All examples above represents the simplest way processes (nodes) to communicate each other.
-    Daffi controller can be registered as stand alone process as well. More details you can read in [node and controller](node-and-controller.md) section and [global object](global-object.md) section.
-    
 
 <hr>
 You can check another examples at: [https://github.com/600apples/dafi/tree/main/examples](https://github.com/600apples/dafi/tree/main/examples)

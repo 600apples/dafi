@@ -1,10 +1,10 @@
 import logging
-import asyncio
 import traceback
 from typing import Optional, Union, Generator, NoReturn
 
 from grpc._cython.cygrpc import UsageError
 
+from daffi.utils.misc import call_after
 from daffi.components.proto.message import Message, RpcMessage, ServiceMessage
 from daffi.components.operations.freezable_queue import FreezableQueue, QueueMixin
 from daffi.async_result import AsyncResult, RemoteError
@@ -26,7 +26,7 @@ class MessageIterator(QueueMixin):
             if eta:
                 # Put to queue again after eta.
                 # It prevents other message to be pushed meanwhile.
-                asyncio.create_task(self.send_with_eta(message=message, eta=eta))
+                await call_after(eta, self.send, message=message)
             else:
                 try:
                     for chunk in message.dumps():
@@ -44,10 +44,6 @@ class MessageIterator(QueueMixin):
 
     async def send(self, message: Message, eta: Optional[Union[int, float]] = None) -> NoReturn:
         await self.q.send((message, eta))
-
-    async def send_with_eta(self, message: Message, eta: Union[int, float]) -> NoReturn:
-        await asyncio.sleep(eta)
-        await self.send(message)
 
 
 class ChannelPipe:

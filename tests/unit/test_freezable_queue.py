@@ -1,6 +1,6 @@
 import time
 import asyncio
-from daffi.components.operations.freezable_queue import FreezableQueue, ItemPriority, STOP_MARKER
+from daffi.components.operations.freezable_queue import FreezableQueue, STOP_MARKER
 
 
 class TestFreezebleQueue:
@@ -24,45 +24,6 @@ class TestFreezebleQueue:
             await fq._queue.get()
 
         assert fq.size == 0
-
-    async def test_item_priority_last(self):
-        """
-        Test stop marker normally delivered as last item in queue.
-        This way we allow all products to be processed before terminating workers
-        """
-        # Preparation
-        fq = FreezableQueue()
-
-        for _ in range(3):
-            await fq.send(1)
-
-        await fq.stop(priority=ItemPriority.LAST)
-
-        res = await fq._queue.get()
-        assert res.data == 1
-        res = await fq._queue.get()
-        assert res.data == 1
-        res = await fq._queue.get()
-        assert res.data == 1
-
-        res = await fq._queue.get()
-        assert res.data == STOP_MARKER
-
-    async def test_item_priority_first(self):
-        """
-        Test stop marker normally delivered as first item in queue.
-        This way we force terminate workers without processing products
-        """
-        # Preparation
-        fq = FreezableQueue()
-
-        for _ in range(3):
-            await fq.send(1)
-
-        await fq.stop(ItemPriority.FIRST)
-
-        res = await fq._queue.get()
-        assert res.data == STOP_MARKER
 
     async def test_task_done(self):
         # Preparation
@@ -101,7 +62,7 @@ class TestFreezebleQueue:
             await fq.send(1)
 
         # Normally it just send stop marker which allow cycle to be terminated after all items are processed
-        await fq.stop(priority=ItemPriority.LAST)
+        await fq.stop()
 
         # Execution & Assertion
         task_done_counter = 101
@@ -124,7 +85,7 @@ class TestFreezebleQueue:
         await fq.send(1)
 
         # Normally it just send stop marker which allow cycle to be terminated after all items are processed
-        await fq.stop(priority=ItemPriority.LAST)
+        await fq.stop()
 
         initial_time = time.time()
         fq.freeze(10)  # freeze for 10 seconds

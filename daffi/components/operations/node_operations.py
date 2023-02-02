@@ -20,7 +20,6 @@ from daffi.utils.misc import run_in_threadpool, run_from_working_thread
 from daffi.utils.settings import (
     LOCAL_CALLBACK_MAPPING,
 )
-from daffi.components.operations.freezable_queue import ItemPriority
 from daffi.components.operations.channel_store import ChannelPipe
 from daffi.exceptions import StopComponentError
 from daffi.components.operations.streams_store import StreamPairStore
@@ -130,7 +129,7 @@ class NodeOperations:
         stream_pair = self.stream_store.get(f"{msg.transmitter}-{msg.uuid}")
         if stream_pair:
             stream_pair.closed = True
-            await stream_pair.stop(ItemPriority.FIRST)
+            await stream_pair.stop()
 
     async def on_scheduler_accept(self, msg: RpcMessage, process_name: str):
         transmitter = msg.transmitter
@@ -188,7 +187,7 @@ class NodeOperations:
         stream_pair = self.stream_store.get(f"{msg.transmitter}-{msg.uuid}")
         if stream_pair:
             stream_pair.closed = True
-            await stream_pair.stop(ItemPriority.FIRST)
+            await stream_pair.stop()
 
     async def on_stream_throttle(self, msg: ServiceMessage):
         msg.loads()
@@ -319,7 +318,7 @@ class NodeOperations:
             self.logger.error(info)
             error = RemoteError(info=info, traceback=pickle.dumps(sys.exc_info()))
 
-        if message.return_result or message.flag != MessageFlag.BROADCAST:
+        if message.return_result:
             try:
                 message_to_return = RpcMessage(
                     flag=MessageFlag.SUCCESS,

@@ -17,7 +17,6 @@ from daffi.exceptions import (
     RemoteStoppedUnexpectedly,
     InitializationError,
     RemoteError,
-    StopComponentError,
 )
 from daffi.utils.settings import LOCAL_CALLBACK_MAPPING, WELL_KNOWN_CALLBACKS
 from daffi.components.operations.node_operations import NodeOperations
@@ -142,16 +141,9 @@ class Node(ComponentsBase):
             elif msg.flag == MessageFlag.STREAM_THROTTLE:
                 await self.operations.on_stream_throttle(msg)
 
-        if not self.global_terminate_event.is_set():
-            raise StopComponentError()
-
     def send_threadsave(self, msg: RpcMessage, eta: Union[int, float]):
         """Send message outside of node executor scope."""
         self.channel.send_threadsave(msg, eta)
-
-    def send(self, msg: RpcMessage, eta: Union[int, float]):
-        """Send message inside of node executor scope."""
-        self.channel.send(msg, eta)
 
     def send_and_register_result(self, func_name: str, msg: RpcMessage) -> AsyncResult:
         if msg.return_result is False:

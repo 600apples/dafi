@@ -32,6 +32,7 @@ nav:
   - Execution modifiers: execution-modifiers.md
   - G object injection: g-object-injection.md
   - Asynchronous applications: async-apps.md
+  - Notes about daffi connections: all-connections-is-stream.md
   - Advanced:
     - Callback classes: callback-classes.md
     - Broadcasting: broadcasting.md
