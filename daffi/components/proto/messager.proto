@@ -27,7 +27,8 @@ message RpcRealm {
   bytes data = 6;
   bool return_result = 7;
   Period period = 8;
-  bool complete_marker = 9;
+  uint64 timeout = 9;
+  bool complete_marker = 10;
 }
 
 message ServiceRealm {

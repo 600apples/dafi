@@ -6,7 +6,7 @@ from anyio import sleep
 
 from daffi.utils.settings import WELL_KNOWN_CALLBACKS, DEBUG
 from daffi.utils.custom_types import K, GlobalCallback
-from daffi.utils.misc import search_remote_callback_in_mapping
+from daffi.utils.misc import search_remote_callback_in_mapping, call_after
 from daffi.components.operations.streams_store import StreamPairStore
 from daffi.components.operations.channel_store import ChannelStore, ChannelPipe, FreezableQueue
 from daffi.components.proto.message import RpcMessage, ServiceMessage, MessageFlag, RemoteError
@@ -162,11 +162,12 @@ class ControllerOperations:
         if receiver and receiver in self.controller_callback_mapping:
             msg.receiver = receiver
             # Take channel of destination process where function/method will be triggered.
-            chan = await self.channel_store.get_chan(receiver)
-
-            if chan:
-                # Assign transmitter to RpcMessage id in order to redirect result after processing.
-                self.awaited_procs[msg.uuid] = transmitter, receiver
+            if chan := await self.channel_store.get_chan(receiver):
+                if msg.return_result:
+                    # Assign transmitter to RpcMessage id in order to redirect result after processing.
+                    self.awaited_procs[msg.uuid] = transmitter, receiver
+                    if msg.timeout:
+                        await call_after(msg.timeout + 1, self.awaited_procs.pop, msg.uuid, None)
                 await chan.send(msg)
 
                 if msg.period and trans_chan:
@@ -267,6 +268,8 @@ class ControllerOperations:
         if return_result:
             aggregated = dict()
             self.awaited_broadcast_procs[msg.uuid] = (transmitter, aggregated)
+            if msg.timeout:
+                await call_after(msg.timeout + 1, self.awaited_broadcast_procs.pop, msg.uuid, None)
         if msg.func_name in WELL_KNOWN_CALLBACKS:
             async for receiver, chan in self.channel_store.iterate():
                 if receiver == process_name:
@@ -289,7 +292,7 @@ class ControllerOperations:
                         if return_result:
                             aggregated[receiver] = RESULT_EMPTY
                         await chan.send(msg.copy(receiver=receiver))
-                self.logger.debug(f"receivers: {list(aggregated)} found for callback {msg.func_name}")
+                self.logger.debug(f"receivers: {sorted(list(aggregated))} found for callback {msg.func_name}")
 
             else:
                 # TODO test when broadcast request sent but no available receivers
@@ -311,6 +314,8 @@ class ControllerOperations:
 
         aggregated = dict()
         self.awaited_stream_procs[msg.uuid] = (transmitter, aggregated)
+        if msg.timeout:
+            await call_after(msg.timeout + 1, self.awaited_stream_procs.pop, msg.uuid, None)
 
         data = search_remote_callback_in_mapping(
             self.controller_callback_mapping, msg.func_name, exclude=msg.transmitter, take_all=True

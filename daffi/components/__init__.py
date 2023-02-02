@@ -130,7 +130,7 @@ class ComponentsBase(UnixBase, TcpBase):
         self.ident = string_uuid()
         self.global_terminate_event = global_terminate_event
         self._stopped = self._connected = False
-        self.stop_event: asyncio.Event = None  # No eventloop here. Will be initialized in on_stop task
+        self.stop_event: bool = False
         self.stop_callbacks: List[Callable] = []
 
         self.components.append(self)
@@ -155,8 +155,7 @@ class ComponentsBase(UnixBase, TcpBase):
         raise NotImplementedError
 
     async def on_stop(self) -> NoReturn:
-        self.stop_event = asyncio.Event()
-        while not self.stop_event.is_set():
+        while not self.stop_event:
             await asyncio.sleep(0.1)
 
     @cached_property
@@ -164,8 +163,7 @@ class ComponentsBase(UnixBase, TcpBase):
         return self._base.info(self)
 
     def stop(self, wait: Optional[bool] = False):
-        if not self.stop_event.is_set():
-            self.stop_event.set()
+        self.stop_event = True
         if wait:
             for ind in count(1):
 
@@ -208,24 +206,22 @@ class ComponentsBase(UnixBase, TcpBase):
             if type(exception) == AioRpcError and "Cancelling all calls" in str(exception):
                 self.logger.debug("Cancelling all tasks and stop.")
                 self.stop()
-                return
-
-            retry_object.wait = wait_fixed(self.RETRY_TIMEOUT)
-            if attempt == 3 or not attempt % 5:
-                self.logger.error(
-                    f"Unable to connect {self.__class__.__name__}"
-                    f" {self.process_name!r}. Error = {type(exception)} {exception}. Retrying..."
-                )
+            else:
+                retry_object.wait = wait_fixed(self.RETRY_TIMEOUT)
+                if attempt == 3 or not attempt % 5:
+                    self.logger.error(
+                        f"Unable to connect {self.__class__.__name__}"
+                        f" {self.process_name!r}. Error = {type(exception)} {exception}. Retrying..."
+                    )
         else:
             retry_object.wait = wait_fixed(self.RETRY_TIMEOUT)
             err_msg = "".join(traceback.format_exception(exception))
             self.logger.error(f"Unpredictable error during {self.__class__.__name__} execution: \n{err_msg}")
             self.stop()
 
-        if all(c.stop_event.is_set() for c in self.components) and self.global_terminate_event:
+        if all(c.stop_event for c in self.components) and self.global_terminate_event:
             self.logger.debug("All components are stopped. Set global terminate event.")
             self.global_terminate_event.set()
-            self.components.clear()
 
     async def handle(self, task_status: TaskStatus = TASK_STATUS_IGNORED) -> NoReturn:
         # Register on_stop actions
@@ -238,7 +234,7 @@ class ComponentsBase(UnixBase, TcpBase):
             after=self.after_exception,
         ):
             with attempt:
-                if self._stopped:
+                if self.stop_event:
                     return
 
                 await self.before_connect()
@@ -257,9 +253,8 @@ class ComponentsBase(UnixBase, TcpBase):
             self.logger.error("Unhandled exception:", exc_info=(exc_type, exc_value, exc_traceback))
             for component in self.components:
                 component.stop()
-            self.components.clear()
 
-            if all(c.stop_event.is_set() for c in self.components) and self.global_terminate_event:
+            if all(c.stop_event for c in self.components) and self.global_terminate_event:
                 self.global_terminate_event.set()
 
         # Assign the excepthook to the handler

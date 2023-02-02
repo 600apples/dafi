@@ -1,4 +1,5 @@
 import types
+import asyncio
 from uuid import uuid4
 from random import choice
 from functools import partial
@@ -175,6 +176,16 @@ async def run_from_working_thread(backend: str, func: Callable[..., Any], *args,
         return run(func, *args, backend=backend)
 
     return await to_thread.run_sync(dec)
+
+
+async def call_after(eta: int, func: Callable[..., Any], *args, **kwargs):
+    async def _dec():
+        await asyncio.sleep(eta)
+        result = func(*args, **kwargs)
+        if asyncio.iscoroutine(result):
+            await result
+
+    asyncio.create_task(_dec())
 
 
 def search_remote_callback_in_mapping(

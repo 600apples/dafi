@@ -9,7 +9,7 @@ from daffi.exceptions import RemoteError
 from daffi.utils.misc import uuid, Period
 from daffi.utils.settings import BYTES_CHUNK, BYTES_LIMIT
 from daffi.components.proto import messager_pb2
-from daffi.exceptions import InitializationError, GlobalContextError
+from daffi.exceptions import InitializationError
 
 
 logger = logging.getLogger(__name__)
@@ -168,6 +168,7 @@ class RpcMessage(ServiceMessage):
     return_result: Optional[bool] = True
     func_name: Optional[str] = ""
     period: Optional[Period] = None
+    timeout: Optional[int] = 0
 
     # Byte content.
     func_args: Optional[Tuple] = field(default_factory=tuple)

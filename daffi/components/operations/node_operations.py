@@ -319,7 +319,7 @@ class NodeOperations:
             self.logger.error(info)
             error = RemoteError(info=info, traceback=pickle.dumps(sys.exc_info()))
 
-        if message.return_result or message.flag != MessageFlag.BROADCAST:
+        if message.return_result:
             try:
                 message_to_return = RpcMessage(
                     flag=MessageFlag.SUCCESS,

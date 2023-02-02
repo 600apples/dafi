@@ -174,6 +174,17 @@ class FreezableQueue(AbstractQueue):
             self._closed = True
             await self._queue.put(PriorityEntry(priority=priority, data=STOP_MARKER))
 
+    def stop_threadsave(self, priority: ItemPriority = ItemPriority.LAST):
+        """Stop iterator threadsave"""
+        if not self._closed:
+            self._closed = True
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore")
+                try:
+                    asyncio.run_coroutine_threadsafe(self.stop(priority=priority), self.loop).result()
+                except RuntimeError:
+                    ...
+
     @classmethod
     def factory(cls, ident: str) -> "FreezableQueue":
         """
