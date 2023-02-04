@@ -7,6 +7,8 @@ DEBUG = bool(os.getenv("DAFFI_DEBUG"))
 BYTES_CHUNK = int(4e6)  # 4 Mb
 BYTES_LIMIT = int(8e6)  # 8 Mb
 
+RECONNECTION_TIMEOUT = 15  # sec
+
 LOCAL_CLASS_CALLBACKS: Set = set()
 LOCAL_CALLBACK_MAPPING: Dict[K, GlobalCallback] = dict()
 

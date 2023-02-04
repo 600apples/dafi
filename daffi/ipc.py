@@ -40,6 +40,7 @@ class Ipc(Thread):
         host: Optional[str] = None,
         port: Optional[int] = None,
         unix_sock_path: Optional[os.PathLike] = None,
+        reconnect_freq: Optional[int] = None,
         logger: Logger = None,
     ):
         super().__init__()
@@ -50,6 +51,7 @@ class Ipc(Thread):
         self.host = host
         self.port = port
         self.unix_sock_path = unix_sock_path
+        self.reconnect_freq = reconnect_freq
         self.logger = logger
         self.async_backend = async_library()
 
@@ -204,6 +206,7 @@ class Ipc(Thread):
                         process_name=self.process_name,
                         host=self.host,
                         port=self.port,
+                        reconnect_freq=self.reconnect_freq,
                         async_backend=self.async_backend,
                         global_terminate_event=self.global_terminate_event,
                     )

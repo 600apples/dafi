@@ -32,6 +32,8 @@ class MessageFlag:
     STREAM_ERROR = 13
     STREAM_THROTTLE = 14
     RECEIVER_ERROR = 15
+    RECK_REQUEST = 16
+    RECK_ACCEPT = 17
 
 
 class Message(ABC):

@@ -40,6 +40,10 @@ class TimeoutError(BaseException):
     ...
 
 
+class ReckAcceptError(Exception):
+    ...
+
+
 class StopComponentError(Exception):
     ...
 

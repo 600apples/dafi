@@ -43,6 +43,10 @@ class Controller(ComponentsBase):
     async def on_stop(self) -> NoReturn:
         await super().on_stop()
         self.logger.debug("On stop event triggered")
+        self.logger.debug("Wait all channels to be unlocked")
+
+        await self.operations.wait_all_channels_unlocked()
+        self.logger.debug("All channels unlocked.")
 
         async with create_task_group() as sg:
             with move_on_after(2):
@@ -99,6 +103,9 @@ class Controller(ComponentsBase):
 
             elif msg.flag == MessageFlag.RECEIVER_ERROR:
                 await self.operations.on_receiver_error(msg)
+
+            elif msg.flag == MessageFlag.RECK_REQUEST:
+                await self.operations.on_reconnect(msg)
 
         await self.operations.on_channel_close(channel, process_identificator)
 

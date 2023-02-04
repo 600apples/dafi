@@ -22,8 +22,9 @@ from daffi.utils.settings import (
 )
 from daffi.components.operations.freezable_queue import ItemPriority
 from daffi.components.operations.channel_store import ChannelPipe
-from daffi.exceptions import StopComponentError
+from daffi.exceptions import ReckAcceptError, StopComponentError
 from daffi.components.operations.streams_store import StreamPairStore
+from daffi.utils.misc import ReconnectFreq
 
 import tblib.pickling_support
 
@@ -33,11 +34,12 @@ tblib.pickling_support.install()
 class NodeOperations:
     """Node operations specification object"""
 
-    def __init__(self, logger: logging.Logger, async_backend: str):
+    def __init__(self, logger: logging.Logger, async_backend: str, reconnect_freq: ReconnectFreq):
         self.logger = logger
         self._channel = None
         self.stream_store = StreamPairStore()
         self.async_backend = async_backend
+        self.reconnect_freq = reconnect_freq
         self.node_callback_mapping: Dict[K, Dict[K, GlobalCallback]] = dict()
 
     @property
@@ -94,7 +96,8 @@ class NodeOperations:
             self.logger.error(info)
 
         elif msg.period:
-            await scheduler.register(msg=msg, channel=self.channel)
+            with self.reconnect_freq.locker():
+                await scheduler.register(msg=msg, channel=self.channel)
 
         else:
             with CancelScope(shield=True):
@@ -148,6 +151,10 @@ class NodeOperations:
                 AsyncResult._set_and_trigger(msg.uuid, msg.error)
         else:
             self.logger.error(msg.error.info)
+
+    async def on_reconnection(self):
+        self.channel.freeze()
+        raise ReckAcceptError()
 
     async def on_stop_request(self):
         self.logger.debug(f"Termination signal received.")
@@ -269,29 +276,28 @@ class NodeOperations:
             finally:
                 items_queue.put_nowait(_stop_marker)
 
-        stream_poller = asyncio.create_task(_stream_poller())
-        try:
-            await run_in_threadpool(_stream_executor)
-            self.logger.debug(f"Stop streaming process for function: {message.func_name}. Process = {process_name}")
-        except Exception as e:
-            err_msg = (
-                f"Exception while streaming to function {message.func_name!r} on remote executor {process_name!r}. {e}"
-            )
-            error = RemoteError(info=err_msg, traceback=pickle.dumps(sys.exc_info()))
-            self.logger.error(err_msg)
-        finally:
-            stream_poller.cancel()
+        with self.reconnect_freq.locker():
+            stream_poller = asyncio.create_task(_stream_poller())
+            try:
+                await run_in_threadpool(_stream_executor)
+                self.logger.debug(f"Stop streaming process for function: {message.func_name}. Process = {process_name}")
+            except Exception as e:
+                err_msg = f"Exception while streaming to function {message.func_name!r} on remote executor {process_name!r}. {e}"
+                error = RemoteError(info=err_msg, traceback=pickle.dumps(sys.exc_info()))
+                self.logger.error(err_msg)
+            finally:
+                stream_poller.cancel()
 
-        message_to_return = RpcMessage(
-            flag=MessageFlag.SUCCESS,
-            transmitter=process_name,
-            receiver=message.transmitter,
-            uuid=message.uuid,
-            func_name=message.func_name,
-            func_args=(None,),
-            error=error,
-        )
-        await self.channel.send(message_to_return)
+            message_to_return = RpcMessage(
+                flag=MessageFlag.SUCCESS,
+                transmitter=process_name,
+                receiver=message.transmitter,
+                uuid=message.uuid,
+                func_name=message.func_name,
+                func_args=(None,),
+                error=error,
+            )
+            await self.channel.send(message_to_return)
 
     async def _remote_func_executor(
         self,
@@ -303,45 +309,46 @@ class NodeOperations:
         fn_args = message.func_args
         fn_kwargs = message.func_kwargs
 
-        try:
-            if remote_callback.is_async:
-                result = await run_from_working_thread(self.async_backend, remote_callback, *fn_args, **fn_kwargs)
-            else:
-                result = await run_in_threadpool(remote_callback, *fn_args, **fn_kwargs)
-        except TypeError as e:
-            if "were given" in str(e) or "got an unexpected" in str(e) or "missing" in str(e):
-                info = f"{e}. Function signature is: {message.func_name}{remote_callback.signature}: ..."
-            else:
-                info = f"Exception while processing function {message.func_name!r} on remote executor. {e}"
-            error = RemoteError(info=info, traceback=pickle.dumps(sys.exc_info()))
-        except Exception as e:
-            info = f"Exception while processing function {message.func_name!r} on remote executor. {e}"
-            self.logger.error(info)
-            error = RemoteError(info=info, traceback=pickle.dumps(sys.exc_info()))
-
-        if message.return_result:
+        with self.reconnect_freq.locker():
             try:
-                message_to_return = RpcMessage(
-                    flag=MessageFlag.SUCCESS,
-                    transmitter=process_name,
-                    receiver=message.transmitter,
-                    uuid=message.uuid,
-                    func_name=message.func_name,
-                    func_args=(result,) if (message.return_result and not error) else None,
-                    return_result=message.return_result,
-                    error=error,
-                )
+                if remote_callback.is_async:
+                    result = await run_from_working_thread(self.async_backend, remote_callback, *fn_args, **fn_kwargs)
+                else:
+                    result = await run_in_threadpool(remote_callback, *fn_args, **fn_kwargs)
             except TypeError as e:
-                info = f"Unsupported return type {type(result)}."
-                self.logger.error(info + f" {e}")
+                if "were given" in str(e) or "got an unexpected" in str(e) or "missing" in str(e):
+                    info = f"{e}. Function signature is: {message.func_name}{remote_callback.signature}: ..."
+                else:
+                    info = f"Exception while processing function {message.func_name!r} on remote executor. {e}"
                 error = RemoteError(info=info, traceback=pickle.dumps(sys.exc_info()))
-                message_to_return = RpcMessage(
-                    flag=MessageFlag.SUCCESS,
-                    transmitter=process_name,
-                    receiver=message.transmitter,
-                    uuid=message.uuid,
-                    func_name=message.func_name,
-                    return_result=message.return_result,
-                    error=error,
-                )
-            await self.channel.send(message_to_return)
+            except Exception as e:
+                info = f"Exception while processing function {message.func_name!r} on remote executor. {e}"
+                self.logger.error(info)
+                error = RemoteError(info=info, traceback=pickle.dumps(sys.exc_info()))
+
+            if message.return_result:
+                try:
+                    message_to_return = RpcMessage(
+                        flag=MessageFlag.SUCCESS,
+                        transmitter=process_name,
+                        receiver=message.transmitter,
+                        uuid=message.uuid,
+                        func_name=message.func_name,
+                        func_args=(result,) if (message.return_result and not error) else None,
+                        return_result=message.return_result,
+                        error=error,
+                    )
+                except TypeError as e:
+                    info = f"Unsupported return type {type(result)}."
+                    self.logger.error(info + f" {e}")
+                    error = RemoteError(info=info, traceback=pickle.dumps(sys.exc_info()))
+                    message_to_return = RpcMessage(
+                        flag=MessageFlag.SUCCESS,
+                        transmitter=process_name,
+                        receiver=message.transmitter,
+                        uuid=message.uuid,
+                        func_name=message.func_name,
+                        return_result=message.return_result,
+                        error=error,
+                    )
+                await self.channel.send(message_to_return)

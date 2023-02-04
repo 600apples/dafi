@@ -19,10 +19,10 @@ from grpc.aio._call import AioRpcError
 from anyio import TASK_STATUS_IGNORED
 from tenacity import AsyncRetrying, wait_fixed, retry_if_exception_type, RetryCallState, wait_none
 
-from daffi.exceptions import StopComponentError
+from daffi.exceptions import InitializationError, ReckAcceptError, StopComponentError
 from daffi.interface import ComponentI
 from daffi.components.proto import messager_pb2_grpc as grpc_messager
-from daffi.utils.misc import string_uuid
+from daffi.utils.misc import string_uuid, ReconnectFreq
 
 
 class UnixBase(ComponentI, grpc_messager.MessagerServiceServicer):
@@ -106,7 +106,7 @@ class TcpBase(ComponentI, grpc_messager.MessagerServiceServicer):
 
 class ComponentsBase(UnixBase, TcpBase):
     RETRY_TIMEOUT = 2  # 2 sec
-    IMMEDIATE_ACTION_ERRORS = tuple()  # For future releases
+    IMMEDIATE_ACTION_ERRORS = (ReckAcceptError,)
     NON_IMMEDIATE_ACTION_ERRORS = (AioRpcError, RuntimeError)
     STOP_ACTION_ERRORS = (StopComponentError,)
 
@@ -119,12 +119,14 @@ class ComponentsBase(UnixBase, TcpBase):
         host: Optional[str] = None,
         port: Optional[int] = None,
         unix_sock_path: Optional[os.PathLike] = None,
+        reconnect_freq: Optional[int] = None,
         async_backend: Optional[str] = None,
         global_terminate_event: Optional[thEvent] = None,
     ):
         self._set_keyboard_interrupt_handler()
 
         self.process_name = process_name
+        self.reconnect_freq = ReconnectFreq(reconnect_freq)
         self.async_backend = async_backend or "asyncio"
         self.operations = None
         self.ident = string_uuid()
@@ -136,9 +138,16 @@ class ComponentsBase(UnixBase, TcpBase):
         self.components.append(self)
 
         if host:  # Check only host. Full host/port validation already took place before.
+            if self.reconnect_freq and self.reconnect_freq.value < ReconnectFreq.LIMIT:
+                InitializationError(
+                    "Too little reconnect frequency was specified."
+                    " Specify value for 'reconnect_freq' argument greater than one minute."
+                ).fire()
+
             self._base = TcpBase
             self._base.__init__(self, host, port)
         else:
+            self.reconnect_freq = ReconnectFreq(None)
             self._base = UnixBase
             self._base.__init__(self, unix_sock_path)
 
