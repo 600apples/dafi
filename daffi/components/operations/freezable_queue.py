@@ -157,16 +157,34 @@ class FreezableQueue(AbstractQueue):
                     ...
 
     @classmethod
+    def copy(cls, queue: "FreezableQueue") -> "FreezableQueue":
+        new_queue = FreezableQueue()
+
+        while True:
+            try:
+                item = queue._queue.get_nowait()
+                new_queue._queue.put_nowait(item)
+            except asyncio.queues.QueueEmpty:
+                break
+
+        q = queue._queue
+        q.put_nowait(STOP_MARKER)
+        queue._queue = new_queue._queue
+        return new_queue
+
+    @classmethod
     def factory(cls, ident: str) -> "FreezableQueue":
         """
         Create new FreezableQueue by given 'ident' key
-        or return existing queue if such key already exist in 'queues' dictionary
+        or return copy of existing queue if such key already exist in 'queues' dictionary
         """
-        _queue = cls.queues.get(ident)
-        if not _queue or _queue._closed:
-            _queue = FreezableQueue()
-            cls.queues[ident] = _queue
-        return _queue
+        if (_queue := cls.queues.get(ident)) is None:
+            cls.queues[ident] = FreezableQueue()
+        elif _queue._closed:
+            cls.queues[ident] = FreezableQueue()
+        else:
+            cls.queues[ident] = cls.copy(_queue)
+        return cls.queues[ident]
 
     @classmethod
     def factory_remove(cls, ident: str) -> NoReturn:

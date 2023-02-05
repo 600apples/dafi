@@ -1,4 +1,5 @@
 import logging
+import asyncio
 from collections import defaultdict
 from typing import Dict, Tuple, Any
 
@@ -24,6 +25,7 @@ class ControllerOperations:
         self.stream_store = StreamPairStore()
         self.controller_callback_mapping: Dict[K, Dict[K, GlobalCallback]] = dict()
         self.awaited_procs: Dict[str, Tuple[str, str]] = dict()
+        self.closed_procs: Dict[str, asyncio.Task] = dict()
         self.awaited_broadcast_procs: Dict[str, Tuple[str, Dict[str, Any]]] = dict()
         self.awaited_stream_procs: Dict[str, Tuple[str, Dict[str, Any]]] = dict()
 
@@ -32,6 +34,20 @@ class ControllerOperations:
             await sleep(0.1)
 
     async def on_channel_close(self, channel: ChannelPipe, process_identificator: str):
+        channel.lock()
+        # Give 5 seconds to reconnect. If process unable to recconect within 5 seconds then channel will be
+        # deleted and all other processes will be notified channel is not available anymore.
+        if process_identificator not in self.closed_procs:
+            self.closed_procs[process_identificator] = await call_after(
+                5, self._on_channel_close, channel=channel, process_identificator=process_identificator
+            )
+
+    async def on_all_channels_close(self):
+        async for proc, chan in self.channel_store.iterate():
+            await self._on_channel_close(chan, chan.ident)
+
+    async def _on_channel_close(self, channel: ChannelPipe, process_identificator: str):
+        self.closed_procs.pop(process_identificator, None)
         del_proc = await self.channel_store.find_process_name_by_channel(channel)
         await self.channel_store.delete_channel(del_proc)
         self.controller_callback_mapping.pop(del_proc, None)
@@ -128,7 +144,7 @@ class ControllerOperations:
                         )
                         self.awaited_broadcast_procs.pop(msg_uuid, None)
 
-    async def on_handshake(self, msg: ServiceMessage, channel: ChannelPipe):
+    async def on_handshake(self, msg: ServiceMessage, channel: ChannelPipe, process_identificator: str):
         msg.loads()
         transmitter = msg.transmitter
         self.controller_callback_mapping[transmitter] = msg.data
@@ -139,12 +155,16 @@ class ControllerOperations:
         )
 
         msg.set_data(self.controller_callback_mapping)
-
         # Send handshake (callbacks info) to all connected nodes if it is initial handshake (not re-connection)
         await self.channel_store.add_channel(channel=channel, process_name=msg.transmitter)
-        async for proc, chan in self.channel_store.iterate():
-            # Send updated self.controller_callback_mapping to all processes except transmitter process.
-            await chan.send(msg.copy(transmitter=msg.transmitter, receiver=proc))
+        if not (on_close_chan_task := self.closed_procs.pop(process_identificator, None)):
+            async for proc, chan in self.channel_store.iterate():
+                # Send updated self.controller_callback_mapping to all processes except transmitter process.
+                await chan.send(msg.copy(transmitter=msg.transmitter, receiver=proc))
+        else:
+            # Process re-connected within 5 seconds. Cancel on_channel_close task.
+            on_close_chan_task.cancel()
+            await channel.send(msg.copy(transmitter=msg.transmitter, receiver=msg.receiver))
 
     async def on_request(self, msg: RpcMessage):
 

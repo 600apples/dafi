@@ -195,9 +195,6 @@ class NodeOperations:
         if stream_pair_group:
             stream_pair_group.throttle_time = msg.data
 
-    def build_on_message(self, uuid: int, process_name: str):
-        return ServiceMessage(flag=MessageFlag.RECEIVER_ERROR, uuid=uuid, transmitter=process_name)
-
     async def _remote_func_stream_executor(
         self,
         remote_callback: "RemoteCallback",

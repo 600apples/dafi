@@ -11,7 +11,7 @@ from anyio.from_thread import start_blocking_portal
 
 from daffi.utils import colors
 from daffi.utils.settings import DEBUG
-from daffi.async_result import get_result_type
+from daffi.async_result import get_result_type, AsyncResult, RetryPolicy
 from daffi.components.controller import Controller
 from daffi.components.node import Node
 from daffi.components.operations.task_waiter import TaskWaiter
@@ -58,6 +58,8 @@ class Ipc(Thread):
         self.controller = self.node = None
         self.task_waiter = TaskWaiter()
 
+        AsyncResult._ipc = self
+
         if not (self.init_controller or self.init_node):
             InitializationError("At least one of 'init_controller' or 'init_node' must be True.").fire()
 
@@ -98,6 +100,7 @@ class Ipc(Thread):
         broadcast: Optional[bool] = False,
         inside_callback_context: Optional[bool] = False,
         stream: Optional[bool] = False,
+        retry_policy: Optional[RetryPolicy] = None,
     ):
         self._check_node()
         assert func_name is not None
@@ -145,13 +148,9 @@ class Ipc(Thread):
         result_class = get_result_type(inside_callback_context=inside_callback_context, is_period=bool(func_period))
 
         if return_result or func_period:
-            result = result_class(
-                func_name=func_name,
-                uuid=msg.uuid,
-            )
+            result = result_class(msg=msg, retry_policy=retry_policy)
         if result:
             result._register()
-            self.node.register_on_error_message(uuid=msg.uuid, result=result)
 
         if wait_in_task_waiter:
             # Wait result in background.
@@ -162,7 +161,6 @@ class Ipc(Thread):
         self.node.send_threadsave(msg, eta)
 
         if func_period:
-            result._ipc = self
             result._scheduler_type = func_period.scheduler_type
             return result.get()
 
@@ -276,7 +274,7 @@ class Ipc(Thread):
                 func_name=func_name,
             )
             # Register result in order to obtain all available receivers
-            result = self.node.send_and_register_result(func_name=func_name, msg=msg)
+            result = self.node.send_and_register_result(msg=msg)
 
             self.logger.debug("Wait available stream receivers")
             receivers = result.get()
@@ -337,7 +335,7 @@ class Ipc(Thread):
                 func_args=(func, *args),
                 func_kwargs=kwargs,
             )
-            return self.node.send_and_register_result(func_name=func_name, msg=msg).get()
+            return self.node.send_and_register_result(msg=msg).get()
 
     async def async_transfer_and_call(self, remote_process: str, func: Callable[..., Any], *args, **kwargs) -> Any:
         if self.is_running:
@@ -357,7 +355,7 @@ class Ipc(Thread):
                 func_args=(func, *args),
                 func_kwargs=kwargs,
             )
-            return await self.node.send_and_register_result(func_name=func_name, msg=msg).get()
+            return await self.node.send_and_register_result(msg=msg).get()
 
     def cancel_scheduler(self, remote_process: str, msg_uuid: str, func_name: Optional[str] = None) -> NoReturn:
         if self.is_running:
@@ -369,7 +367,7 @@ class Ipc(Thread):
                 func_name="__cancel_scheduled_task",
                 func_args=(msg_uuid, self.process_name, func_name),
             )
-            return self.node.send_and_register_result(func_name=func_name, msg=msg).get()
+            return self.node.send_and_register_result(msg=msg).get()
 
     def get_all_scheduled_tasks(self, remote_process: str):
         if self.is_running:
@@ -382,7 +380,7 @@ class Ipc(Thread):
                 func_name=func_name,
                 func_args=(self.process_name,),
             )
-            return self.node.send_and_register_result(func_name=func_name, msg=msg).get()
+            return self.node.send_and_register_result(msg=msg).get()
 
     def kill_all(self) -> NoReturn:
         if self.is_running:
