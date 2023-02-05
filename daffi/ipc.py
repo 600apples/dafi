@@ -14,9 +14,10 @@ from daffi.utils.settings import DEBUG
 from daffi.async_result import get_result_type
 from daffi.components.controller import Controller
 from daffi.components.node import Node
+from daffi.components.operations.task_waiter import TaskWaiter
 from daffi.exceptions import InitializationError, GlobalContextError
 from daffi.components.proto.message import RpcMessage, ServiceMessage, MessageFlag
-from daffi.signals import set_signal_handler
+from daffi.signals import set_signal_handler, SIGNALS_TO_NAMES_DICT
 from daffi.utils.misc import (
     Period,
     search_remote_callback_in_mapping,
@@ -39,7 +40,6 @@ class Ipc(Thread):
         host: Optional[str] = None,
         port: Optional[int] = None,
         unix_sock_path: Optional[os.PathLike] = None,
-        reconnect_freq: Optional[int] = None,
         logger: Logger = None,
     ):
         super().__init__()
@@ -50,13 +50,13 @@ class Ipc(Thread):
         self.host = host
         self.port = port
         self.unix_sock_path = unix_sock_path
-        self.reconnect_freq = reconnect_freq
         self.logger = logger
         self.async_backend = async_library()
 
         self.daemon = True
         self.global_condition_event = ConditionEvent()
         self.controller = self.node = None
+        self.task_waiter = TaskWaiter()
 
         if not (self.init_controller or self.init_node):
             InitializationError("At least one of 'init_controller' or 'init_node' must be True.").fire()
@@ -129,14 +129,18 @@ class Ipc(Thread):
         remote_callback.validate_provided_arguments(*args, **kwargs)
         result = None
 
+        # At this moment works only for NO_RETURN
+        wait_in_task_waiter = async_ and not return_result and not func_period
+
         msg = RpcMessage(
             flag=MessageFlag.REQUEST if not broadcast else MessageFlag.BROADCAST,
             transmitter=self.process_name,
             func_name=func_name,
             func_args=args,
             func_kwargs=kwargs,
-            return_result=return_result,
+            return_result=return_result or wait_in_task_waiter,
             period=func_period,
+            timeout=timeout or 0,
         )
         result_class = get_result_type(inside_callback_context=inside_callback_context, is_period=bool(func_period))
 
@@ -148,6 +152,13 @@ class Ipc(Thread):
         if result:
             result._register()
             self.node.register_on_error_message(uuid=msg.uuid, result=result)
+
+        if wait_in_task_waiter:
+            # Wait result in background.
+            # such an waiting is purely informational in nature to inform the user about the error.
+            # It make sense only when user is not expecting result to be returned.
+            self.task_waiter.register_result(msg)
+
         self.node.send_threadsave(msg, eta)
 
         if func_period:
@@ -169,8 +180,9 @@ class Ipc(Thread):
             backend_options = {}
         else:
             backend_options = {"use_uvloop": True}
-        c_future = n_future = None
+        c_future = n_future = tw_future = None
         with resilent(RuntimeError):
+            Controller.components.clear()
             with start_blocking_portal(backend="asyncio", backend_options=backend_options) as portal:
                 if self.init_controller:
                     self.controller = Controller(
@@ -192,7 +204,6 @@ class Ipc(Thread):
                         process_name=self.process_name,
                         host=self.host,
                         port=self.port,
-                        reconnect_freq=self.reconnect_freq,
                         async_backend=self.async_backend,
                         global_terminate_event=self.global_terminate_event,
                     )
@@ -201,17 +212,24 @@ class Ipc(Thread):
                         self.node.handle,
                         name=Node.__class__.__name__,
                     )
+
+                    tw_future, _ = portal.start_task(
+                        self.task_waiter,
+                        name=self.task_waiter.__class__.__name__,
+                    )
+
                 self.global_condition_event.mark_success()
                 self.global_terminate_event.wait()
 
                 # Wait controller and node to finish 'on_stop' lifecycle callbacks.
                 if self.node:
                     self.node.stop(wait=True)
+                    self.task_waiter.stop()
                 if self.controller:
                     self.controller.stop(wait=True)
 
                 # Wait pending futures to complete their tasks
-                for future in filter(None, (c_future, n_future)):
+                for future in filter(None, (c_future, n_future, tw_future)):
                     if not future.done():
                         future.cancel()
 
@@ -286,7 +304,6 @@ class Ipc(Thread):
                     "Stream was closed unexpectedly. Seems payload is too big."
                     " Please adjust payload size or consider using unary exec modifiers FG, BG etc."
                 )
-            self.logger.debug("Confirmed.")
 
     def update_callbacks(self) -> NoReturn:
         if self.node:
@@ -385,6 +402,11 @@ class Ipc(Thread):
                 time.sleep(0.5)
 
     def stop(self, *args, **kwargs):
+        if args:
+            sig_num = args[0]
+            sig_name = SIGNALS_TO_NAMES_DICT[sig_num]
+            self.logger.warning(f"Terminated by signal {sig_name!r}")
+
         self.global_terminate_event.set()
         self.join()
 
@@ -395,3 +417,6 @@ class Ipc(Thread):
                 " The node has not been initialized in the current process."
                 " Make sure you passed 'init_node' = True in Global object."
             ).fire()
+
+    def _wait_all_bg_tasks(self):
+        self.task_waiter.wait_all_results()

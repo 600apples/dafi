@@ -19,10 +19,10 @@ from grpc.aio._call import AioRpcError
 from anyio import TASK_STATUS_IGNORED
 from tenacity import AsyncRetrying, wait_fixed, retry_if_exception_type, RetryCallState, wait_none
 
-from daffi.exceptions import InitializationError, ReckAcceptError, StopComponentError
+from daffi.exceptions import StopComponentError
 from daffi.interface import ComponentI
 from daffi.components.proto import messager_pb2_grpc as grpc_messager
-from daffi.utils.misc import string_uuid, ReconnectFreq
+from daffi.utils.misc import string_uuid
 
 
 class UnixBase(ComponentI, grpc_messager.MessagerServiceServicer):
@@ -106,7 +106,7 @@ class TcpBase(ComponentI, grpc_messager.MessagerServiceServicer):
 
 class ComponentsBase(UnixBase, TcpBase):
     RETRY_TIMEOUT = 2  # 2 sec
-    IMMEDIATE_ACTION_ERRORS = (ReckAcceptError,)
+    IMMEDIATE_ACTION_ERRORS = tuple()  # For future releases
     NON_IMMEDIATE_ACTION_ERRORS = (AioRpcError, RuntimeError)
     STOP_ACTION_ERRORS = (StopComponentError,)
 
@@ -119,35 +119,26 @@ class ComponentsBase(UnixBase, TcpBase):
         host: Optional[str] = None,
         port: Optional[int] = None,
         unix_sock_path: Optional[os.PathLike] = None,
-        reconnect_freq: Optional[int] = None,
         async_backend: Optional[str] = None,
         global_terminate_event: Optional[thEvent] = None,
     ):
         self._set_keyboard_interrupt_handler()
 
         self.process_name = process_name
-        self.reconnect_freq = ReconnectFreq(reconnect_freq)
         self.async_backend = async_backend or "asyncio"
         self.operations = None
         self.ident = string_uuid()
         self.global_terminate_event = global_terminate_event
         self._stopped = self._connected = False
-        self.stop_event: asyncio.Event = None  # No eventloop here. Will be initialized in on_stop task
+        self.stop_event: bool = False
         self.stop_callbacks: List[Callable] = []
 
         self.components.append(self)
 
         if host:  # Check only host. Full host/port validation already took place before.
-            if self.reconnect_freq and self.reconnect_freq.value < 15:
-                InitializationError(
-                    "Too little reconnect frequency was specified."
-                    " Specify value for 'reconnect_freq' argument greater than one minute."
-                ).fire()
-
             self._base = TcpBase
             self._base.__init__(self, host, port)
         else:
-            self.reconnect_freq = ReconnectFreq(None)
             self._base = UnixBase
             self._base.__init__(self, unix_sock_path)
 
@@ -164,8 +155,7 @@ class ComponentsBase(UnixBase, TcpBase):
         raise NotImplementedError
 
     async def on_stop(self) -> NoReturn:
-        self.stop_event = asyncio.Event()
-        while not self.stop_event.is_set():
+        while not self.stop_event:
             await asyncio.sleep(0.1)
 
     @cached_property
@@ -173,8 +163,7 @@ class ComponentsBase(UnixBase, TcpBase):
         return self._base.info(self)
 
     def stop(self, wait: Optional[bool] = False):
-        if not self.stop_event.is_set():
-            self.stop_event.set()
+        self.stop_event = True
         if wait:
             for ind in count(1):
 
@@ -210,28 +199,29 @@ class ComponentsBase(UnixBase, TcpBase):
             retry_object.wait = wait_none()
 
         elif type(exception) in self.STOP_ACTION_ERRORS:
+            self.logger.debug("Perform stop action")
             self.stop()
 
         elif type(exception) in self.NON_IMMEDIATE_ACTION_ERRORS:
             if type(exception) == AioRpcError and "Cancelling all calls" in str(exception):
+                self.logger.debug("Cancelling all tasks and stop.")
                 self.stop()
-                return
-
-            retry_object.wait = wait_fixed(self.RETRY_TIMEOUT)
-            if attempt == 3 or not attempt % 5:
-                self.logger.error(
-                    f"Unable to connect {self.__class__.__name__}"
-                    f" {self.process_name!r}. Error = {type(exception)} {exception}. Retrying..."
-                )
+            else:
+                retry_object.wait = wait_fixed(self.RETRY_TIMEOUT)
+                if attempt == 3 or not attempt % 5:
+                    self.logger.error(
+                        f"Unable to connect {self.__class__.__name__}"
+                        f" {self.process_name!r}. Error = {type(exception)} {exception}. Retrying..."
+                    )
         else:
             retry_object.wait = wait_fixed(self.RETRY_TIMEOUT)
             err_msg = "".join(traceback.format_exception(exception))
             self.logger.error(f"Unpredictable error during {self.__class__.__name__} execution: \n{err_msg}")
             self.stop()
 
-        if all(c.stop_event.is_set() for c in self.components) and self.global_terminate_event:
+        if all(c.stop_event for c in self.components) and self.global_terminate_event:
+            self.logger.debug("All components are stopped. Set global terminate event.")
             self.global_terminate_event.set()
-            self.components.clear()
 
     async def handle(self, task_status: TaskStatus = TASK_STATUS_IGNORED) -> NoReturn:
         # Register on_stop actions
@@ -244,7 +234,7 @@ class ComponentsBase(UnixBase, TcpBase):
             after=self.after_exception,
         ):
             with attempt:
-                if self._stopped:
+                if self.stop_event:
                     return
 
                 await self.before_connect()
@@ -263,9 +253,8 @@ class ComponentsBase(UnixBase, TcpBase):
             self.logger.error("Unhandled exception:", exc_info=(exc_type, exc_value, exc_traceback))
             for component in self.components:
                 component.stop()
-            self.components.clear()
 
-            if all(c.stop_event.is_set() for c in self.components) and self.global_terminate_event:
+            if all(c.stop_event for c in self.components) and self.global_terminate_event:
                 self.global_terminate_event.set()
 
         # Assign the excepthook to the handler

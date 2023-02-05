@@ -9,7 +9,7 @@ from daffi.exceptions import RemoteError
 from daffi.utils.misc import uuid, Period
 from daffi.utils.settings import BYTES_CHUNK, BYTES_LIMIT
 from daffi.components.proto import messager_pb2
-from daffi.exceptions import InitializationError, GlobalContextError
+from daffi.exceptions import InitializationError
 
 
 logger = logging.getLogger(__name__)
@@ -27,13 +27,11 @@ class MessageFlag:
     SCHEDULER_ERROR = 8
     SCHEDULER_ACCEPT = 9
     BROADCAST = 10
-    RECK_REQUEST = 11
-    RECK_ACCEPT = 12
-    STOP_REQUEST = 13
-    INIT_STREAM = 14
-    STREAM_ERROR = 15
-    STREAM_THROTTLE = 16
-    RECEIVER_ERROR = 17
+    STOP_REQUEST = 11
+    INIT_STREAM = 12
+    STREAM_ERROR = 13
+    STREAM_THROTTLE = 14
+    RECEIVER_ERROR = 15
 
 
 class Message(ABC):
@@ -170,6 +168,7 @@ class RpcMessage(ServiceMessage):
     return_result: Optional[bool] = True
     func_name: Optional[str] = ""
     period: Optional[Period] = None
+    timeout: Optional[int] = 0
 
     # Byte content.
     func_args: Optional[Tuple] = field(default_factory=tuple)

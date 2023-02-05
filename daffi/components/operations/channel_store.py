@@ -1,13 +1,11 @@
 import logging
-import asyncio
 import traceback
 from typing import Optional, Union, Generator, NoReturn
 
 from grpc._cython.cygrpc import UsageError
 
+from daffi.utils.misc import call_after
 from daffi.components.proto.message import Message, RpcMessage, ServiceMessage
-from daffi.utils.misc import ConditionObserver
-from daffi.utils.settings import RECONNECTION_TIMEOUT
 from daffi.components.operations.freezable_queue import FreezableQueue, QueueMixin
 from daffi.async_result import AsyncResult, RemoteError
 
@@ -28,7 +26,7 @@ class MessageIterator(QueueMixin):
             if eta:
                 # Put to queue again after eta.
                 # It prevents other message to be pushed meanwhile.
-                asyncio.create_task(self.send_with_eta(message=message, eta=eta))
+                await call_after(eta, self.send, message=message)
             else:
                 try:
                     for chunk in message.dumps():
@@ -47,21 +45,15 @@ class MessageIterator(QueueMixin):
     async def send(self, message: Message, eta: Optional[Union[int, float]] = None) -> NoReturn:
         await self.q.send((message, eta))
 
-    async def send_with_eta(self, message: Message, eta: Union[int, float]) -> NoReturn:
-        await asyncio.sleep(eta)
-        await self.send(message)
 
-
-class ChannelPipe(ConditionObserver):
+class ChannelPipe:
     def __init__(
         self,
         send_iterator: MessageIterator,
         receive_iterator: Generator,
-        reconnection_timeout: Optional[int] = RECONNECTION_TIMEOUT,
     ):
         self.send_iterator = send_iterator
         self.receive_iterator = receive_iterator
-        super().__init__(condition_timeout=reconnection_timeout)
 
     # create an instance of the iterator
     async def __aiter__(self) -> Generator[Union[RpcMessage, ServiceMessage], None, None]:
@@ -77,7 +69,7 @@ class ChannelPipe(ConditionObserver):
     async def send(self, message: Message, eta: Optional[Union[int, float]] = None):
         await self.send_iterator.send(message, eta)
 
-    def freeze(self, timeout: Optional[int] = RECONNECTION_TIMEOUT) -> NoReturn:
+    def freeze(self, timeout: Optional[int] = 15) -> NoReturn:
         self.send_iterator.freeze(timeout=timeout)
 
     def proceed(self) -> NoReturn:
@@ -92,14 +84,8 @@ class ChannelPipe(ConditionObserver):
 
 
 class ChannelStore(dict):
-    async def add_channel(self, channel: ChannelPipe, process_name: str) -> bool:
-        was_locked = False
-        prev_chan = self.get(process_name)
-        if prev_chan and prev_chan.locked:
-            was_locked = True
-            await prev_chan.done()
+    async def add_channel(self, channel: ChannelPipe, process_name: str):
         self[process_name] = channel
-        return was_locked
 
     async def find_process_name_by_channel(self, channel: ChannelPipe) -> str:
         try:
@@ -112,16 +98,8 @@ class ChannelStore(dict):
 
     async def iterate(self):
         for proc_name in list(self):
-            chan = await self.get_chan(proc_name)
-            if chan:
+            if chan := await self.get_chan(proc_name):
                 yield proc_name, chan
 
     async def get_chan(self, process_name: str) -> Optional[ChannelPipe]:
-        while True:
-            chan = super().get(process_name)
-            if not chan:
-                return
-            elif chan.locked:
-                await chan.wait()
-            else:
-                return chan
+        return super().get(process_name)

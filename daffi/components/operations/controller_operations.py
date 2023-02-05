@@ -1,14 +1,12 @@
 import logging
-from itertools import chain
 from collections import defaultdict
 from typing import Dict, Tuple, Any
 
 from anyio import sleep
-from anyio.abc import TaskGroup
 
 from daffi.utils.settings import WELL_KNOWN_CALLBACKS, DEBUG
 from daffi.utils.custom_types import K, GlobalCallback
-from daffi.utils.misc import search_remote_callback_in_mapping
+from daffi.utils.misc import search_remote_callback_in_mapping, call_after
 from daffi.components.operations.streams_store import StreamPairStore
 from daffi.components.operations.channel_store import ChannelStore, ChannelPipe, FreezableQueue
 from daffi.components.proto.message import RpcMessage, ServiceMessage, MessageFlag, RemoteError
@@ -33,15 +31,7 @@ class ControllerOperations:
         while self.awaited_procs or self.awaited_broadcast_procs or self.awaited_stream_procs:
             await sleep(0.1)
 
-    async def wait_all_channels_unlocked(self):
-        while any(c.locked for c in self.channel_store.values()):
-            await sleep(0.1)
-
     async def on_channel_close(self, channel: ChannelPipe, process_identificator: str):
-        self.logger.debug(f"node {process_identificator} is about to disconnect. Channel is locked = {channel.locked}")
-        if channel.locked:
-            return
-
         del_proc = await self.channel_store.find_process_name_by_channel(channel)
         await self.channel_store.delete_channel(del_proc)
         self.controller_callback_mapping.pop(del_proc, None)
@@ -145,17 +135,16 @@ class ControllerOperations:
 
         self.logger.debug(
             f"received {'handshake' if msg.flag == MessageFlag.HANDSHAKE else 'update callback'}"
-            f" event from {msg.transmitter!r}. Available callbacks: {list(msg.data)}")
+            f" event from {msg.transmitter!r}. Available callbacks: {list(msg.data)}"
+        )
 
         msg.set_data(self.controller_callback_mapping)
 
         # Send handshake (callbacks info) to all connected nodes if it is initial handshake (not re-connection)
-        if not await self.channel_store.add_channel(channel=channel, process_name=msg.transmitter):
-            async for proc, chan in self.channel_store.iterate():
-                # Send updated self.controller_callback_mapping to all processes except transmitter process.
-                await chan.send(msg.copy(transmitter=msg.transmitter, receiver=proc))
-        else:
-            self.logger.debug("handshake after re-connection request. Skip nodes notification")
+        await self.channel_store.add_channel(channel=channel, process_name=msg.transmitter)
+        async for proc, chan in self.channel_store.iterate():
+            # Send updated self.controller_callback_mapping to all processes except transmitter process.
+            await chan.send(msg.copy(transmitter=msg.transmitter, receiver=proc))
 
     async def on_request(self, msg: RpcMessage):
 
@@ -173,11 +162,12 @@ class ControllerOperations:
         if receiver and receiver in self.controller_callback_mapping:
             msg.receiver = receiver
             # Take channel of destination process where function/method will be triggered.
-            chan = await self.channel_store.get_chan(receiver)
-
-            if chan:
-                # Assign transmitter to RpcMessage id in order to redirect result after processing.
-                self.awaited_procs[msg.uuid] = transmitter, receiver
+            if chan := await self.channel_store.get_chan(receiver):
+                if msg.return_result:
+                    # Assign transmitter to RpcMessage id in order to redirect result after processing.
+                    self.awaited_procs[msg.uuid] = transmitter, receiver
+                    if msg.timeout:
+                        await call_after(msg.timeout + 1, self.awaited_procs.pop, msg.uuid, None)
                 await chan.send(msg)
 
                 if msg.period and trans_chan:
@@ -278,6 +268,8 @@ class ControllerOperations:
         if return_result:
             aggregated = dict()
             self.awaited_broadcast_procs[msg.uuid] = (transmitter, aggregated)
+            if msg.timeout:
+                await call_after(msg.timeout + 1, self.awaited_broadcast_procs.pop, msg.uuid, None)
         if msg.func_name in WELL_KNOWN_CALLBACKS:
             async for receiver, chan in self.channel_store.iterate():
                 if receiver == process_name:
@@ -300,7 +292,7 @@ class ControllerOperations:
                         if return_result:
                             aggregated[receiver] = RESULT_EMPTY
                         await chan.send(msg.copy(receiver=receiver))
-                self.logger.debug(f"receivers: {list(aggregated)} found for callback {msg.func_name}")
+                self.logger.debug(f"receivers: {sorted(list(aggregated))} found for callback {msg.func_name}")
 
             else:
                 # TODO test when broadcast request sent but no available receivers
@@ -314,27 +306,6 @@ class ControllerOperations:
                         await trans_chan.send(msg)
                 self.logger.error(info)
 
-    async def on_reconnect(self, msg: ServiceMessage, sg: TaskGroup):
-        transmitter = msg.transmitter
-        self.logger.debug(f"reconnect request received from {transmitter}")
-
-        if transmitter in self.awaited_procs:
-            self.logger.debug("reconnection not allowed. one-to-one awaited entries found")
-            return
-
-        for proc, aggregated_result in chain(self.awaited_broadcast_procs.items(), self.awaited_stream_procs.items()):
-            if transmitter == proc or transmitter in aggregated_result:
-                self.logger.debug("reconnection not allowed. broadcast/stream awaited entries found")
-                return
-
-        if chan := await self.channel_store.get_chan(transmitter):
-            self.logger.debug(f"reconnection allowed. Give 15 seconds for {transmitter} to reconnect.")
-            # Give channel some time to reconnect (15 sec by default). If channel is not connected during timeout
-            # option then delete channel from store.
-            chan.register_fail_callback(self.on_channel_close, chan, transmitter)
-            sg.start_soon(chan.fire)
-            await chan.send(ServiceMessage(flag=MessageFlag.RECK_ACCEPT))
-
     async def on_stream_init(self, msg: RpcMessage):
         transmitter = msg.transmitter
         trans_chan = await self.channel_store.get_chan(transmitter)
@@ -343,6 +314,8 @@ class ControllerOperations:
 
         aggregated = dict()
         self.awaited_stream_procs[msg.uuid] = (transmitter, aggregated)
+        if msg.timeout:
+            await call_after(msg.timeout + 1, self.awaited_stream_procs.pop, msg.uuid, None)
 
         data = search_remote_callback_in_mapping(
             self.controller_callback_mapping, msg.func_name, exclude=msg.transmitter, take_all=True
@@ -382,8 +355,8 @@ class ControllerOperations:
             if DEBUG:
                 info += f"{'-':>10} message represents one-to-one operation\n"
                 info += f"{'-':>10} message receiver = {receiver}\n"
-                if chan := await self.channel_store.get_chan(receiver):
-                    info += f"{'-':>10} receiver channel found, channel lock state = {chan.locked}\n"
+                if await self.channel_store.get_chan(receiver):
+                    info += f"{'-':>10} receiver channel found\n"
                 else:
                     info += f"{'-':>10} receiver channel not found\n"
             del self.awaited_procs[uuid]
@@ -399,14 +372,14 @@ class ControllerOperations:
                     if result != RESULT_EMPTY:
                         info += f"{'-':>10} receiver {receiver!r} already delivered result to controller\n"
                     else:
-                        if chan := await self.channel_store.get_chan(receiver):
-                            info += f"{'-':>10} receiver {receiver!r} found but not delivered result! channel lock state: {chan.locked}\n"
+                        if await self.channel_store.get_chan(receiver):
+                            info += f"{'-':>10} receiver {receiver!r} found but not delivered result!\n"
                         else:
                             info += f"{'-':>10} receiver {receiver!r} not found\n"
             del self.awaited_broadcast_procs[uuid]
 
         else:
-            info += f"{'-':>10} message not found!\n"
+            info += f"{'-':>10} message not found! (timeout or canceled)\n"
 
         if info:
             self.logger.error(info)

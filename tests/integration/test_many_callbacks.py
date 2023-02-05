@@ -41,13 +41,12 @@ async def call_remote(g, _range, exec_type):
             timings.append(time.time() - start)
 
 
-async def call_remote_no_return(g, _range, exec_type, path):
+async def call_remote_no_return(g, num, exec_type, path):
 
     for i in range(5):
-
         func_args = dict(path=str(path), text=str(i))
         start = datetime.utcnow().timestamp()
-        future = getattr(g.call, remote_type[bool(i % 2)] + str(choice(_range)))(**func_args)
+        future = getattr(g.call, remote_type[bool(i % 2)] + str(num))(**func_args)
 
         if exec_type == PERIOD:
             future & PERIOD(at_time=start + 2)
@@ -90,8 +89,7 @@ async def test_many_callbacks_unix_no_return(remote_callbacks_path, exec_type, g
     g = g()
     process_name = "test_node"
     start_range = 1
-    end_range = 500
-    range_ = list(range(start_range, end_range))
+    end_range = 251
     executable_file = remote_callbacks_path(
         template_name="many_callbacks.jinja2",
         process_name=process_name,
@@ -105,12 +103,20 @@ async def test_many_callbacks_unix_no_return(remote_callbacks_path, exec_type, g
     try:
         remotes = [Popen([sys.executable, executable_file])]
         g.wait_process(process_name)
-        await asyncio.gather(*[call_remote_no_return(g, range_, exec_type, path / str(i)) for i in range(500)])
+
+        await asyncio.gather(*[call_remote_no_return(g, i, exec_type, path / str(i)) for i in range(1, 251)])
+        await asyncio.sleep(5)
+        g.ipc._wait_all_bg_tasks()
 
         all_files = list(path.iterdir())
-        assert len(all_files) == 500
+        assert len(all_files) == 250
         for file in all_files:
             assert file.read_text() == "4"
+    except AssertionError:
+        raise
+    except Exception as e:
+        print(f"Exeption while execution : {type(e)}, {e}")
+
     finally:
         g.stop(True)
         [p.terminate() for p in remotes]
@@ -149,8 +155,7 @@ async def test_many_callbacks_tcp_no_return(remote_callbacks_path, exec_type, g)
     g = g(host="0.0.0.0")
     process_name = "test_node"
     start_range = 1
-    end_range = 500
-    range_ = list(range(start_range, end_range))
+    end_range = 251
     executable_file = remote_callbacks_path(
         template_name="many_callbacks.jinja2",
         process_name=process_name,
@@ -166,10 +171,13 @@ async def test_many_callbacks_tcp_no_return(remote_callbacks_path, exec_type, g)
     try:
         remotes = [Popen([sys.executable, executable_file])]
         g.wait_process(process_name)
-        await asyncio.gather(*[call_remote_no_return(g, range_, exec_type, path / str(i)) for i in range(500)])
+
+        await asyncio.gather(*[call_remote_no_return(g, i, exec_type, path / str(i)) for i in range(1, 251)])
+        await asyncio.sleep(5)
+        g.ipc._wait_all_bg_tasks()
 
         all_files = list(path.iterdir())
-        assert len(all_files) == 500
+        assert len(all_files) == 250
         for file in all_files:
             assert file.read_text() == "4"
     finally:

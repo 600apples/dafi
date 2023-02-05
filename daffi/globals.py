@@ -44,11 +44,6 @@ class Global(metaclass=Singleton):
        port: Optional port to connect `Controller`/`Node` via tcp. If not provided random port will be chosen.
        unix_sock_path: Folder where UNIX socket will be created. If not provided default path is < tmp directory >/dafi/
           where `<tmp directory >` is default temporary directory on system.
-       reconnect_freq: Optional interval in seconds after which `Node` that is running in current process
-            will be re-connected to `Controller`. Daffi uses grpc bidirectional streams to communicate between processes
-            They need to keep connection alive all the time by default. It is not the case for some applications
-            running behind nginx proxy server or other similar proxies where connection timeout can be specified.
-            For such situation this option might help for long running daffi application.
     """
 
     process_name: Optional[str] = field(default_factory=string_uuid)
@@ -57,7 +52,6 @@ class Global(metaclass=Singleton):
     host: Optional[str] = None
     port: Optional[int] = None
     unix_sock_path: Optional[os.PathLike] = None
-    reconnect_freq: Optional[int] = 30
 
     _inside_callback_context: Optional[bool] = field(repr=False, default=False)
 
@@ -91,7 +85,6 @@ class Global(metaclass=Singleton):
             host=self.host,
             port=self.port,
             unix_sock_path=self.unix_sock_path,
-            reconnect_freq=self.reconnect_freq,
             logger=logger,
         )
 
@@ -153,6 +146,7 @@ class Global(metaclass=Singleton):
             if not self.is_controller:
                 logger.error("You can kill all nodes only from a process that has a controller")
             else:
+                logger.debug(f"`Kill all` operation triggered ({self.process_name})")
                 res = self.kill_all()
         self.ipc.stop()
         return res
