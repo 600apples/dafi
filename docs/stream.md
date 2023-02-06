@@ -1,7 +1,7 @@
 Stream is Daffi's special ability to pass iterables to remote callbacks.
 It is very optimized for huge bandwidth.
 
-A stream can be considered as a union of `BROADCAST` and `NO_RETURN` execution modifiers.
+A stream can be considered as a union of `BROADCAST` and `BG(no_return=True)` execution modifiers.
 
 For instance we have remote callback which takes one `int` as argument and store this argument to 
 global list and we need to pass range of integers from 1 to 100 from another `Node`.
@@ -24,7 +24,7 @@ def process_sequence(a: int) -> None:
 
 process 2
 ```python
-from daffi import Global, NO_RETURN, fetcher, __body_unknown__
+from daffi import Global, fetcher, __body_unknown__, BG
 
 
 @fetcher
@@ -35,7 +35,7 @@ def process_sequence(a: int) -> None:
 g = Global(host='localhost', port=8888)
 
 for i in range(1, 101):
-    process_sequence(i) & NO_RETURN
+    process_sequence(i) & BG(no_return=True)
 ```
 
 Or let's even say we have `process_sequence` callback registered on many nodes and we need to pass
@@ -107,10 +107,10 @@ This argument becomes stream item on each iteration of stream process.
     g.call.process_stream(arguments) & STREAM
     ```
 
-You might be wondering why not just use `BROADCAST` and `NO_RETURN` execution modifiers in the cycle?
+You might be wondering why not just use `BROADCAST` and `BG` execution modifiers in the cycle?
 
 Answering briefly `STREAM` is much more optimized for passing big ranges to remote callback whereas 
-`BROADCAST`, `NO_RETURN`, `FG`, `BG` modifiers are more optimized for single callback execution
+`BROADCAST`, `FG`, `BG` modifiers are more optimized for single callback execution
 
 
 #### Example with opencv camera stream

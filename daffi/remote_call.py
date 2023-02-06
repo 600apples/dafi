@@ -1,4 +1,3 @@
-import re
 import time
 from anyio import to_thread, sleep
 from dataclasses import dataclass, field
@@ -15,7 +14,6 @@ from daffi.utils.misc import Period, search_remote_callback_in_mapping
 from daffi.execution_modifiers import (
     FG,
     BG,
-    NO_RETURN,
     PERIOD,
     BROADCAST,
     STREAM,
@@ -51,11 +49,11 @@ class RemoteCall:
         args_kwargs = f"{args}{kwargs}".strip(",").strip()
         return f"<{self.__class__.__name__} {self.func_name}({args_kwargs})>"
 
-    def obtain_result_in_thread(self, next_operand: Union[FG, BG, BROADCAST, NO_RETURN, PERIOD, STREAM]):
+    def obtain_result_in_thread(self, next_operand: Union[FG, BG, BROADCAST, PERIOD, STREAM]):
         self._result = self & next_operand
 
     async def __process_await__(
-        self, next_operand: Union[FG, BG, BROADCAST, NO_RETURN, PERIOD, STREAM], return_result: Optional[bool] = False
+        self, next_operand: Union[FG, BG, BROADCAST, PERIOD, STREAM], return_result: Optional[bool] = False
     ):
         if self._args_pre_processor:
             args = self._args_pre_processor(*self.args, **self.kwargs)
@@ -92,10 +90,7 @@ class RemoteCall:
             return self.fg(timeout=other.timeout, retry_policy=other.retry_policy)
 
         elif is_exec_modifier_type(other, BG):
-            return self.bg(timeout=other.timeout, eta=other.eta)
-
-        elif is_exec_modifier_type(other, NO_RETURN):
-            return self.no_return(eta=other.eta)
+            return self.bg(timeout=other.timeout, eta=other.eta, no_return=other.no_return)
 
         elif is_exec_modifier_type(other, PERIOD):
             return self.period(at_time=other.at_time, interval=other.interval)
@@ -122,9 +117,8 @@ class RemoteCall:
         return bool(self.info)
 
     def fg(self, timeout: Optional[TimeUnits] = None, retry_policy: Optional[RetryPolicy] = None) -> RemoteResult:
-        executable = retry_policy.wrap(self._ipc.call) if isinstance(retry_policy, RetryPolicy) else self._ipc.call
         timeout = self._get_duration(timeout, "timeout")
-        return executable(
+        return self._ipc.call(
             self.func_name,
             args=self.args,
             kwargs=self.kwargs,
@@ -132,9 +126,16 @@ class RemoteCall:
             async_=False,
             return_result=True,
             inside_callback_context=self._inside_callback_context,
+            retry_policy=retry_policy,
         )
 
-    def bg(self, timeout: Optional[TimeUnits] = None, eta: Optional[TimeUnits] = None) -> AsyncResult:
+    def bg(
+        self,
+        timeout: Optional[TimeUnits] = None,
+        eta: Optional[TimeUnits] = None,
+        retry_policy: Optional[RetryPolicy] = None,
+        no_return: Optional[bool] = False,
+    ) -> AsyncResult:
         timeout = self._get_duration(timeout, "timeout")
         eta = self._get_duration(eta, "eta", 0)
         return self._ipc.call(
@@ -144,20 +145,9 @@ class RemoteCall:
             timeout=timeout,
             eta=eta,
             async_=True,
-            return_result=True,
+            return_result=not no_return,
             inside_callback_context=self._inside_callback_context,
-        )
-
-    def no_return(self, eta: Optional[TimeUnits] = None) -> NoReturn:
-        eta = self._get_duration(eta, "eta", 0)
-        return self._ipc.call(
-            self.func_name,
-            args=self.args,
-            kwargs=self.kwargs,
-            eta=eta,
-            async_=True,
-            return_result=False,
-            inside_callback_context=self._inside_callback_context,
+            retry_policy=retry_policy,
         )
 
     def broadcast(
@@ -169,8 +159,7 @@ class RemoteCall:
     ) -> Optional[AsyncResult]:
         timeout = self._get_duration(timeout, "timeout")
         eta = self._get_duration(eta, "eta", 0)
-        executable = retry_policy.wrap(self._ipc.call) if isinstance(retry_policy, RetryPolicy) else self._ipc.call
-        return executable(
+        return self._ipc.call(
             self.func_name,
             args=self.args,
             kwargs=self.kwargs,
@@ -180,6 +169,7 @@ class RemoteCall:
             return_result=return_result,
             broadcast=True,
             inside_callback_context=self._inside_callback_context,
+            retry_policy=retry_policy,
         )
 
     def period(

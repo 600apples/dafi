@@ -1,6 +1,7 @@
 import asyncio
 from typing import NoReturn
 
+import grpc
 from anyio.abc import TaskStatus
 from anyio import create_task_group, move_on_after
 
@@ -58,6 +59,9 @@ class Controller(ComponentsBase):
         await FreezableQueue.clear_all()
         self.listener = None
 
+    def on_error(self) -> NoReturn:
+        pass
+
     # ------------------------------------------------------------------------------------------------------------------
     # Message operations
     # ------------------------------------------------------------------------------------------------------------------
@@ -77,7 +81,7 @@ class Controller(ComponentsBase):
 
         async for msg in channel:
             if msg.flag in (MessageFlag.HANDSHAKE, MessageFlag.UPDATE_CALLBACKS):
-                await self.operations.on_handshake(msg, channel)
+                await self.operations.on_handshake(msg, channel, process_identificator)
 
             elif msg.flag == MessageFlag.REQUEST:
                 await self.operations.on_request(msg)
@@ -110,8 +114,8 @@ class Controller(ComponentsBase):
         except StopIteration:
             GlobalContextError("Process name is not provided in metadata.").fire()
 
-        message_iterator = MessageIterator(FreezableQueue.factory(ident))
-        channel = ChannelPipe(receive_iterator=request_iterator, send_iterator=message_iterator)
+        message_iterator = MessageIterator(await FreezableQueue.factory(ident))
+        channel = ChannelPipe(receive_iterator=request_iterator, send_iterator=message_iterator, ident=ident)
 
         asyncio.create_task(self.handle_commands(channel, ident))
         async for message in channel.send_iterator:

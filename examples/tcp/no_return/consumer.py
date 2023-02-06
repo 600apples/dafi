@@ -3,7 +3,7 @@ Consumer is the process that consumes available remote functions.
 """
 import logging
 import time
-from daffi import Global, GlobalContextError, NO_RETURN
+from daffi import Global, GlobalContextError, BG
 
 logging.basicConfig(level=logging.INFO)
 
@@ -19,7 +19,7 @@ def main():
         while True:
             # We dont expect any return value here.
             print("Call some_func on publisher")
-            g.call.some_func() & NO_RETURN  # another syntax: g.call.some_func().no_return()
+            g.call.some_func() & BG(no_return=True)  # another syntax: g.call.some_func().no_return()
             time.sleep(5)
 
     except GlobalContextError as e:

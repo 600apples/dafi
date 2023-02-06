@@ -1,7 +1,7 @@
 import os
 import logging
 from itertools import cycle
-from daffi import Global, callback, NO_RETURN
+from daffi import Global, callback, BG
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
@@ -14,7 +14,7 @@ async def colorize(title: str, content: str, g: Global):
     color = next(colors)
     logger.warning(f"Color {color!r} has been chosen.")
     logger.warning(f"Calling a remote callback to send an email...")
-    g.call.send_email(title=title, content=content) & NO_RETURN
+    g.call.send_email(title=title, content=content) & BG(no_return=True)
     return color
 
 

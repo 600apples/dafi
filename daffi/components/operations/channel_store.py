@@ -1,3 +1,4 @@
+import asyncio
 import logging
 import traceback
 from typing import Optional, Union, Generator, NoReturn
@@ -47,13 +48,11 @@ class MessageIterator(QueueMixin):
 
 
 class ChannelPipe:
-    def __init__(
-        self,
-        send_iterator: MessageIterator,
-        receive_iterator: Generator,
-    ):
+    def __init__(self, send_iterator: MessageIterator, receive_iterator: Generator, ident: str):
         self.send_iterator = send_iterator
         self.receive_iterator = receive_iterator
+        self.ident = ident
+        self._locked = False
 
     # create an instance of the iterator
     async def __aiter__(self) -> Generator[Union[RpcMessage, ServiceMessage], None, None]:
@@ -62,6 +61,9 @@ class ChannelPipe:
                 yield msg
         except UsageError:
             ...
+
+    def lock(self):
+        self._locked = True
 
     def send_threadsave(self, message: Message, eta: Optional[Union[int, float]] = None):
         self.send_iterator.send_threadsave(message, eta)
@@ -102,4 +104,10 @@ class ChannelStore(dict):
                 yield proc_name, chan
 
     async def get_chan(self, process_name: str) -> Optional[ChannelPipe]:
-        return super().get(process_name)
+        while True:
+            if (chan := super().get(process_name)) is None:
+                return
+            elif chan._locked:
+                await asyncio.sleep(0.1)
+            else:
+                return chan

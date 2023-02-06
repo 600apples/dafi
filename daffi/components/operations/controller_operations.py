@@ -1,6 +1,6 @@
 import logging
-from collections import defaultdict
-from typing import Dict, Tuple, Any
+import asyncio
+from typing import Dict
 
 from anyio import sleep
 
@@ -10,6 +10,7 @@ from daffi.utils.misc import search_remote_callback_in_mapping, call_after
 from daffi.components.operations.streams_store import StreamPairStore
 from daffi.components.operations.channel_store import ChannelStore, ChannelPipe, FreezableQueue
 from daffi.components.proto.message import RpcMessage, ServiceMessage, MessageFlag, RemoteError
+from daffi.components.operations.ttl_store import OneToOneCallStore, OneToManyCallStore
 
 
 RESULT_EMPTY = object()
@@ -23,38 +24,38 @@ class ControllerOperations:
         self.channel_store = ChannelStore()
         self.stream_store = StreamPairStore()
         self.controller_callback_mapping: Dict[K, Dict[K, GlobalCallback]] = dict()
-        self.awaited_procs: Dict[str, Tuple[str, str]] = dict()
-        self.awaited_broadcast_procs: Dict[str, Tuple[str, Dict[str, Any]]] = dict()
-        self.awaited_stream_procs: Dict[str, Tuple[str, Dict[str, Any]]] = dict()
+        self.closed_procs: Dict[str, asyncio.Task] = dict()
+
+        self.awaited_procs = OneToOneCallStore()
+        self.awaited_broadcast_procs = OneToManyCallStore()
+        self.awaited_stream_procs = OneToManyCallStore()
 
     async def wait_all_requests_done(self):
         while self.awaited_procs or self.awaited_broadcast_procs or self.awaited_stream_procs:
             await sleep(0.1)
 
     async def on_channel_close(self, channel: ChannelPipe, process_identificator: str):
+        channel.lock()
+        # Give 5 seconds to reconnect. If process unable to recconect within 5 seconds then channel will be
+        # deleted and all other processes will be notified channel is not available anymore.
+        if process_identificator not in self.closed_procs:
+            self.closed_procs[process_identificator] = await call_after(
+                5, self._on_channel_close, channel=channel, process_identificator=process_identificator
+            )
+
+    async def on_all_channels_close(self):
+        async for proc, chan in self.channel_store.iterate():
+            await self._on_channel_close(chan, chan.ident)
+
+    async def _on_channel_close(self, channel: ChannelPipe, process_identificator: str):
+        self.closed_procs.pop(process_identificator, None)
         del_proc = await self.channel_store.find_process_name_by_channel(channel)
         await self.channel_store.delete_channel(del_proc)
         self.controller_callback_mapping.pop(del_proc, None)
         FreezableQueue.factory_remove(process_identificator)
 
         # Delete RpcMessage pointers that deleted process expects to obtain.
-        awaited_by_deleted_proc = [uuid for uuid, (trans, rec) in self.awaited_procs.items() if trans == del_proc]
-        for uuid in awaited_by_deleted_proc:
-            self.awaited_procs.pop(uuid, None)
-        awaited_by_deleted_proc = [
-            uuid for uuid, (trans, rec) in self.awaited_broadcast_procs.items() if trans == del_proc
-        ]
-        for uuid in awaited_by_deleted_proc:
-            self.awaited_broadcast_procs.pop(uuid, None)
-
-        # Find receivers that awaiting result from deleted process (regular messages)
-        awaited_trmrs_for_single_message = defaultdict(list)
-        [
-            awaited_trmrs_for_single_message[trans].append(uuid)
-            for uuid, (trans, rec) in self.awaited_procs.items()
-            if rec == del_proc
-        ]
-
+        awaited_trmrs_for_single_message = self.awaited_procs.on_delete(del_proc)
         async for proc, chan in self.channel_store.iterate():
             # Send updated self.controller_callback_mapping to all processes including transmitter process.
             await chan.send(
@@ -79,13 +80,7 @@ class ControllerOperations:
                     )
 
         # Find receivers that awaiting result from deleted process (broadcast messages)
-        awaited_trmrs_for_broadcast = defaultdict(list)
-        [
-            awaited_trmrs_for_broadcast[trans].append(uuid)
-            for uuid, (trans, agg_msg) in self.awaited_broadcast_procs.items()
-            if del_proc in agg_msg
-        ]
-
+        awaited_trmrs_for_broadcast = self.awaited_broadcast_procs.on_delete(del_proc)
         async for proc, chan in self.channel_store.iterate():
             awaited_messages = awaited_trmrs_for_broadcast.get(proc)
             if awaited_messages:
@@ -104,13 +99,7 @@ class ControllerOperations:
                         self.awaited_broadcast_procs.pop(msg_uuid, None)
 
             # Stop streams if exist
-            awaited_trmrs_for_stream = defaultdict(list)
-            [
-                awaited_trmrs_for_stream[trans].append(uuid)
-                for uuid, (trans, agg_msg) in self.awaited_stream_procs.items()
-                if del_proc in agg_msg
-            ]
-
+            awaited_trmrs_for_stream = self.awaited_stream_procs.on_delete(del_proc)
             async for proc, chan in self.channel_store.iterate():
                 awaited_messages = awaited_trmrs_for_stream.get(proc)
                 if awaited_messages:
@@ -128,7 +117,7 @@ class ControllerOperations:
                         )
                         self.awaited_broadcast_procs.pop(msg_uuid, None)
 
-    async def on_handshake(self, msg: ServiceMessage, channel: ChannelPipe):
+    async def on_handshake(self, msg: ServiceMessage, channel: ChannelPipe, process_identificator: str):
         msg.loads()
         transmitter = msg.transmitter
         self.controller_callback_mapping[transmitter] = msg.data
@@ -139,12 +128,16 @@ class ControllerOperations:
         )
 
         msg.set_data(self.controller_callback_mapping)
-
         # Send handshake (callbacks info) to all connected nodes if it is initial handshake (not re-connection)
         await self.channel_store.add_channel(channel=channel, process_name=msg.transmitter)
-        async for proc, chan in self.channel_store.iterate():
-            # Send updated self.controller_callback_mapping to all processes except transmitter process.
-            await chan.send(msg.copy(transmitter=msg.transmitter, receiver=proc))
+        if not (on_close_chan_task := self.closed_procs.pop(process_identificator, None)):
+            async for proc, chan in self.channel_store.iterate():
+                # Send updated self.controller_callback_mapping to all processes except transmitter process.
+                await chan.send(msg.copy(transmitter=msg.transmitter, receiver=proc))
+        else:
+            # Process re-connected within 5 seconds. Cancel on_channel_close task.
+            on_close_chan_task.cancel()
+            await channel.send(msg.copy(transmitter=msg.transmitter, receiver=msg.receiver))
 
     async def on_request(self, msg: RpcMessage):
 
@@ -153,10 +146,9 @@ class ControllerOperations:
         trans_chan = await self.channel_store.get_chan(transmitter)
 
         if not receiver:
-            data = search_remote_callback_in_mapping(
+            if data := search_remote_callback_in_mapping(
                 self.controller_callback_mapping, msg.func_name, exclude=transmitter
-            )
-            if data:
+            ):
                 receiver, _ = data
 
         if receiver and receiver in self.controller_callback_mapping:
@@ -165,11 +157,9 @@ class ControllerOperations:
             if chan := await self.channel_store.get_chan(receiver):
                 if msg.return_result:
                     # Assign transmitter to RpcMessage id in order to redirect result after processing.
-                    self.awaited_procs[msg.uuid] = transmitter, receiver
-                    if msg.timeout:
-                        await call_after(msg.timeout + 1, self.awaited_procs.pop, msg.uuid, None)
-                await chan.send(msg)
+                    await self.awaited_procs.set(key=msg.uuid, value=(transmitter, receiver), ttl=msg.timeout)
 
+                await chan.send(msg)
                 if msg.period and trans_chan:
                     # Return back to transmitter info that scheduled task was accepted.
                     await trans_chan.send(
@@ -267,9 +257,8 @@ class ControllerOperations:
         return_result = msg.return_result
         if return_result:
             aggregated = dict()
-            self.awaited_broadcast_procs[msg.uuid] = (transmitter, aggregated)
-            if msg.timeout:
-                await call_after(msg.timeout + 1, self.awaited_broadcast_procs.pop, msg.uuid, None)
+            await self.awaited_broadcast_procs.set(key=msg.uuid, value=(transmitter, aggregated), ttl=msg.timeout)
+
         if msg.func_name in WELL_KNOWN_CALLBACKS:
             async for receiver, chan in self.channel_store.iterate():
                 if receiver == process_name:
@@ -279,10 +268,9 @@ class ControllerOperations:
                     aggregated[receiver] = RESULT_EMPTY
                 await chan.send(msg.copy(receiver=receiver))
         else:
-            data = search_remote_callback_in_mapping(
+            if data := search_remote_callback_in_mapping(
                 self.controller_callback_mapping, msg.func_name, exclude=transmitter, take_all=True
-            )
-            if data:
+            ):
                 for receiver, _ in data:
                     if receiver == process_name:
                         # Do not send broadcast RpcMessage to itself!
@@ -295,7 +283,6 @@ class ControllerOperations:
                 self.logger.debug(f"receivers: {sorted(list(aggregated))} found for callback {msg.func_name}")
 
             else:
-                # TODO test when broadcast request sent but no available receivers
                 info = f"Unable to find remote process candidate to execute {msg.func_name!r}"
                 self.awaited_broadcast_procs.pop(msg.uuid, None)
                 if return_result:
@@ -313,14 +300,11 @@ class ControllerOperations:
         self.logger.debug(f"Received stream request from transmitter: {transmitter}")
 
         aggregated = dict()
-        self.awaited_stream_procs[msg.uuid] = (transmitter, aggregated)
-        if msg.timeout:
-            await call_after(msg.timeout + 1, self.awaited_stream_procs.pop, msg.uuid, None)
+        await self.awaited_stream_procs.set(key=msg.uuid, value=(transmitter, aggregated), ttl=msg.timeout)
 
-        data = search_remote_callback_in_mapping(
+        if data := search_remote_callback_in_mapping(
             self.controller_callback_mapping, msg.func_name, exclude=msg.transmitter, take_all=True
-        )
-        if data:
+        ):
             for receiver, _ in data:
                 chan = await self.channel_store.get_chan(receiver)
                 if chan:
@@ -343,7 +327,12 @@ class ControllerOperations:
             await chan.send(msg)
 
     async def on_receiver_error(self, msg: ServiceMessage):
-        """Explain why error is happened"""
+        """
+        MessageFlag.RECEIVER_ERROR
+        Give extra information about why error happened.
+        At this moment this method is not used since there is no implementation on Node side.
+        But it might be helpful for debugging. That is why it is here.
+        """
         uuid = msg.uuid
         if DEBUG:
             info = f"Error reason for message {uuid!r} intended for transmitter: {msg.transmitter}\n"
