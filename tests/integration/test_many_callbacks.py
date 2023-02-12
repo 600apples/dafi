@@ -111,7 +111,7 @@ async def test_many_callbacks_unix_no_return(remote_callbacks_path, exec_type, g
         all_files = list(path.iterdir())
         assert len(all_files) == 250
         for file in all_files:
-            assert file.read_text() == "4"
+            assert set(file.read_text()) == set("01234")
     except AssertionError:
         raise
     except Exception as e:
@@ -179,7 +179,7 @@ async def test_many_callbacks_tcp_no_return(remote_callbacks_path, exec_type, g)
         all_files = list(path.iterdir())
         assert len(all_files) == 250
         for file in all_files:
-            assert file.read_text() == "4"
+            assert set(file.read_text()) == set("01234")
     finally:
         g.stop(True)
         [p.terminate() for p in remotes]

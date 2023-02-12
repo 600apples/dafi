@@ -1,3 +1,6 @@
+"""
+A library of various helpers functions and classes
+"""
 import types
 import asyncio
 from uuid import uuid4
