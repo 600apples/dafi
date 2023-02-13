@@ -1,9 +1,9 @@
 ![broadcasting](images/broadcasting.png) 
-<br /><br /><br /><br /><br /><br />
+<br/>
 
 Broadcasting illustration.
 
-<br /><br /><br /><br /><br /><br />
+<br/>
 
 It is possible to register callback with the same name on many nodes.
 
@@ -31,7 +31,7 @@ from daffi import Global, BROADCAST, fetcher, __body_unknown__
 
 proc_name = "node-4"
 
-@fetcher
+@fetcher(BROADCAST(return_result=True))
 def my_callback(some_string: str) -> str:
     __body_unknown__(some_string)
 
@@ -42,7 +42,7 @@ g = Global(init_controller=True)
 for proc in ("node-1", "node-2", "node-3"):
     g.wait_process(proc)
 
-result = my_callback(some_string="abc") & BROADCAST(return_result=True)
+result = my_callback(some_string="abc")
 
 print(result)
 ```

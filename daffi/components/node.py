@@ -66,12 +66,20 @@ class Node(ComponentsBase):
         self._stopped = True
 
     async def before_connect(self) -> NoReturn:
-        channel = getattr(self, "channel", None)
-        if channel:
-            await self.channel.clear_queue()
-            await self.channel.stop()
-        FreezableQueue.factory_remove(self.ident)
-        self.channel = None
+        if not getattr(self, "channel", None):
+            FreezableQueue.factory_remove(self.ident)
+            self.channel = None
+
+    def on_error(self) -> NoReturn:
+        if channel := getattr(self, "channel", None):
+            channel.freeze(10)
+        for msg_uuid, ares in AsyncResult._awaited_results.items():
+            if isinstance(ares, AsyncResult):
+                AsyncResult._awaited_results[msg_uuid] = RemoteError(
+                    info="Lost connection to Controller.",
+                    _awaited_error_type=RemoteStoppedUnexpectedly,
+                )
+                ares._set()
 
     # ------------------------------------------------------------------------------------------------------------------
     # Message operations
@@ -82,10 +90,12 @@ class Node(ComponentsBase):
         async with self.connect_listener() as aio_listener:
             stub = grpc_messager.MessagerServiceStub(aio_listener)
 
-            message_iterator = MessageIterator(FreezableQueue.factory(self.ident))
+            message_iterator = MessageIterator(await FreezableQueue.factory(self.ident))
             receive_iterator = stub.communicate(message_iterator, metadata=[("ident", self.ident)])
 
-            self.channel = ChannelPipe(send_iterator=message_iterator, receive_iterator=receive_iterator)
+            self.channel = ChannelPipe(
+                send_iterator=message_iterator, receive_iterator=receive_iterator, ident=self.ident
+            )
             self.operations.channel = self.channel
 
             async with create_task_group() as sg:
@@ -145,19 +155,14 @@ class Node(ComponentsBase):
         """Send message outside of node executor scope."""
         self.channel.send_threadsave(msg, eta)
 
-    def send_and_register_result(self, func_name: str, msg: RpcMessage) -> AsyncResult:
+    def send_and_register_result(self, msg: RpcMessage) -> AsyncResult:
         if msg.return_result is False:
             InitializationError(
-                f"Unable to register result for callback {func_name}. return_result=False specified in message"
+                f"Unable to register result for callback {msg.func_name}. return_result=False specified in message"
             ).fire()
-        result = AsyncResult(func_name=func_name, uuid=msg.uuid)._register()
-        self.register_on_error_message(uuid=msg.uuid, result=result)
+        result = AsyncResult(msg=msg)._register()
         self.send_threadsave(msg, 0)
         return result
-
-    def register_on_error_message(self, uuid: int, result: AsyncResult):
-        on_error_msg = self.operations.build_on_message(uuid=uuid, process_name=self.process_name)
-        result.register_fail_callback(self.send_threadsave, msg=on_error_msg, eta=0)
 
     # ------------------------------------------------------------------------------------------------------------------
     # Streaming

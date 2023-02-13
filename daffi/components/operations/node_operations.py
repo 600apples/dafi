@@ -1,4 +1,5 @@
 import sys
+import time
 import pickle
 import logging
 import asyncio
@@ -38,6 +39,7 @@ class NodeOperations:
         self.stream_store = StreamPairStore()
         self.async_backend = async_backend
         self.node_callback_mapping: Dict[K, Dict[K, GlobalCallback]] = dict()
+        self.init_ts = None  # Timestamp of handshake.
 
     @property
     def channel(self) -> ChannelPipe:
@@ -58,9 +60,12 @@ class NodeOperations:
         else:
             self.node_callback_mapping = msg.data
             if msg.transmitter == process_name and msg.flag == MessageFlag.HANDSHAKE:
-                self.logger.info(
-                    f"Node has been started successfully. Process identificator: {process_name!r}. Connection info: {info}"
-                )
+                # Prevent flooding to terminal if re-connections are happen too ofter.
+                if not self.init_ts or (time.time() - self.init_ts) > 2:
+                    self.init_ts = time.time()
+                    self.logger.info(
+                        f"Node has been started successfully. Process identificator: {process_name!r}. Connection info: {info}"
+                    )
                 if task_status._future._state == "PENDING":
                     # Consider Node to be started only after handshake response is received.
                     task_status.started("STARTED")
@@ -110,7 +115,7 @@ class NodeOperations:
         if msg.return_result:
             ares = AsyncResult._awaited_results.get(msg.uuid)
             if not ares and not error:
-                self.logger.warning(f"Result {msg.uuid} was taken by timeout")
+                self.logger.warning(f"Result {msg.uuid} was deleted by timeout")
             elif not ares and error:
                 # Result already taken by timeout. No need to raise error but need to notify about
                 # finally remote call returned exception.
@@ -194,9 +199,6 @@ class NodeOperations:
         stream_pair_group = self.stream_store.stream_pair_group_store.get(str(msg.uuid))
         if stream_pair_group:
             stream_pair_group.throttle_time = msg.data
-
-    def build_on_message(self, uuid: int, process_name: str):
-        return ServiceMessage(flag=MessageFlag.RECEIVER_ERROR, uuid=uuid, transmitter=process_name)
 
     async def _remote_func_stream_executor(
         self,

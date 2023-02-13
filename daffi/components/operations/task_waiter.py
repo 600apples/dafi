@@ -40,7 +40,7 @@ class TaskWaiter(QueueMixin):
 
     def register_result(self, msg: RpcMessage):
         """Register new result"""
-        result = AsyncResult(func_name=msg.func_name, uuid=msg.uuid)._register()
+        result = AsyncResult(msg=msg)._register()
         self.send_threadsave(result)
 
     async def wait_result(self, result: AsyncResult) -> NoReturn:

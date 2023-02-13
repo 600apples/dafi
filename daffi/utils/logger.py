@@ -51,7 +51,7 @@ def get_daffi_logger(name: str, color: Callable):
     logger.setLevel(root_level)
     cho.setLevel(root_level)
     che.setLevel(logging.WARNING)
-    formatter = ColoredFormatter("%(app)s %(message)s")
+    formatter = ColoredFormatter("%(asctime)s %(app)s %(message)s", "%Y-%m-%d %H:%M:%S")
     cho.setFormatter(formatter)
     che.setFormatter(formatter)
 

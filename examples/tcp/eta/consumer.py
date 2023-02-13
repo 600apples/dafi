@@ -4,7 +4,13 @@ Consumer is the process that consumes available remote functions.
 import logging
 import time
 import asyncio
-from daffi import Global, BG
+from daffi import Global, BG, fetcher
+
+
+@fetcher(BG(eta=5))
+async def add(arg1: int, arg2: int):
+    """Used by 'consumer.py' process."""
+    pass
 
 
 logging.basicConfig(level=logging.INFO)
@@ -24,7 +30,7 @@ async def main():
 
         # bg returns instance of AsyncResult.
 
-        ares = g.call.add(5, 15) & BG(eta=5)
+        ares = await add(5, 15)
 
         # Simulate long running job
         time.sleep(2)

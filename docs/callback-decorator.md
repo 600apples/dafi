@@ -19,12 +19,21 @@ in example above we registered callbacks with names `sum_two_numbers` and `subtr
 Now it is possible to execute callback from remote process:
 
 ```python
-from daffi import Global, FG
+from daffi import Global, FG, fetcher, __body_unknown__
+
+@fetcher(FG)
+def sum_two_numbers(a: int, b: int) -> int:
+    __body_unknown__(a, b)
+
+
+@fetcher(FG)
+async def subtract_two_numbers(a: int, b: int) -> int:
+    __body_unknown__(a, b)
 
 g = Global(process_name='my awersome process', init_controller=True, host='localhost', port=8888)
 
-result1 = g.call.sum_two_numbers(10, 15) & FG
-result2 = g.call.subtract_two_numbers(22, 13) & FG
+result1 = sum_two_numbers(10, 15)
+result2 = subtract_two_numbers(22, 13)
 ```
 
 `FG` in this example is execution modifier. You can read about execution modifiers [here](execution-modifiers.md)
@@ -54,6 +63,9 @@ result2 = g.call.subtract_two_numbers(22, 13) & FG
 instead of decorating functions you can create a decorated class:
 
 ```python
+from daffi import callback
+
+
 @callback
 class RemoteCallbackGroup:
 

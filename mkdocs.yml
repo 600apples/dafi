@@ -25,15 +25,18 @@ theme:
 nav:
   - Overview: index.md
   - Installtion: installation.md
-  - Getting started: getting-started.md
+  - Usage:
+    - Base objects: base-objects.md
+    - Global: global-object.md
+    - callback decorator: callback-decorator.md
+    - fetcher decorator: fetcher-decorator.md
+    - Execution modifiers: execution-modifiers.md
+    - Basic example: basic-example.md
+    - Example with bidirectional communication: example-bidirectional-com.md
   - Node and Controller: node-and-controller.md
-  - Global object: global-object.md
-  - callback decorator: callback-decorator.md
-  - Execution modifiers: execution-modifiers.md
-  - G object injection: g-object-injection.md
   - Asynchronous applications: async-apps.md
-  - Notes about daffi connections: all-connections-is-stream.md
   - Advanced:
+    - G object injection: g-object-injection.md
     - Callback classes: callback-classes.md
     - Broadcasting: broadcasting.md
     - Pipeline and g object injection: pipeline.md

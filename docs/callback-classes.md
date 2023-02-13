@@ -40,15 +40,20 @@ as to trigger static or class method there is no neeed to instantiate object of 
 Now, If we try to execute `method1` we got `GlobalContextError` error
 
 ```python
-from daffi import Global, FG
+from daffi import Global, FG, fetcher
 
 proc_name = "node-2"
+
+
+@fetcher(FG)
+def method1():
+    pass
 
 g = Global(init_controller=True)
 
 g.wait_process('node-1')
 
-result = g.call.method1() & FG
+result = method1()
 
 # ---- traceback ----
 # GlobalContextError(

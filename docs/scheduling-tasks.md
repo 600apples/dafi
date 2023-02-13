@@ -12,10 +12,16 @@ For instance lets consider you want to execute remote callback `my_callback` 3 t
 
 ```python
 from datetime import datetime
-from daffi import Global, PERIOD
+from daffi import Global, PERIOD, fetcher
 
 g = Global(host="localhost", port=8888)
 
+
+# Here we registered fetcher without execution modifier. If execution modifier not provided then it should be specified 
+# during fetcher execution using syntax <fetcher>(*args, **kwargs) & <execution modifier>
+@fetcher
+def some_func():
+    pass
 # Wait my_callback function to be available on remote
 g.wait_function("some_func")
 
@@ -24,7 +30,7 @@ now = datetime.utcnow().timestamp()
 # 2 sec, 10 sec and 60 sec later
 at_time = [now + 2, now + 10, now + 60]
 
-task = g.call.some_func() & PERIOD(at_time=at_time)
+task = some_func() & PERIOD(at_time=at_time)
 ```
 
 Execution with `PERIOD` modifier returns `ScheduledTask` instance as result of execution.
@@ -33,7 +39,7 @@ You can cancel all tasks triggered from this execution:
 ```python
 ...
 at_time = [now + 2, now + 10, now + 60]
-task = g.call.some_func() & PERIOD(at_time=at_time)
+task = some_func() & PERIOD(at_time=at_time)
 
 ... # do smth
 time.sleep(3)
@@ -49,7 +55,12 @@ Using `interval` has the same execution signature and also returns instance of `
 ```python
 import time
 from datetime import datetime
-from daffi import Global, PERIOD
+from daffi import Global, PERIOD, fetcher
+
+
+@fetcher(PERIOD(interval=5))
+def some_func():
+    pass
 
 g = Global(host="localhost", port=8888)
 
@@ -59,8 +70,7 @@ g.wait_function("some_func")
 now = datetime.utcnow().timestamp()
 
 # Execute remote callback `some_func` each 5 seconds
-task = g.call.some_func() & PERIOD(interval=5)
-
+task = some_func()
 time.sleep(60)
 task.cancel()
 ```
@@ -71,12 +81,10 @@ On example above we started recurring execution each 5 second and canceled it af
     interval also takes special string formatted expressions as values
     for instance next statement is also valid:
     
-    ```python
-    task = g.call.some_func() & PERIOD(interval="5s")
-    ```
-    
+    PERIOD(interval="5s")
+
     Another examples:
     
-    '1m24s'       ==  84 seconds
+    PERIOD(interval="1m24s")  # == 84 seconds
     
-    '1.2 minutes' == 72 seconds
+    PERIOD(interval="1.2 minutes")  # == 72 seconds

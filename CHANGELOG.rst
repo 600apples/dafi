@@ -16,3 +16,10 @@ Date: 2023-01-23
 
 - Added `fetcher` and `callback_and_fetcher` decorators
 - Added `retry_policy` argument to FG and BROADCAST execution modifiers
+
+
+1.6.0
+=====
+Date: 2023-02-13
+
+- Deleted `NO_RETURN` execution modifier. It replaces with `BG(return_result=False)`

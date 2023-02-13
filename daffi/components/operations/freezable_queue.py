@@ -91,10 +91,11 @@ class FreezableQueue(AbstractQueue):
     async def iterate(self):
         """Start handling tasks in the cycle."""
 
+        _queue = self._queue
         while True:
             if not self._is_frozen:
                 try:
-                    data = await self._queue.get()
+                    data = await _queue.get()
                 except asyncio.exceptions.CancelledError:
                     break
                 if data == STOP_MARKER:
@@ -157,16 +158,37 @@ class FreezableQueue(AbstractQueue):
                     ...
 
     @classmethod
-    def factory(cls, ident: str) -> "FreezableQueue":
+    async def copy(cls, queue: "FreezableQueue") -> "FreezableQueue":
+        """Create new queue and copy all items from old queue to it."""
+        new_queue = FreezableQueue()
+
+        while True:
+            try:
+                # Copy items
+                item = queue._queue.get_nowait()
+                new_queue._queue.put_nowait(item)
+            except asyncio.queues.QueueEmpty:
+                break
+
+        q = queue._queue
+        # Stop old queue
+        q.put_nowait(STOP_MARKER)
+        queue._queue = new_queue._queue
+        return new_queue
+
+    @classmethod
+    async def factory(cls, ident: str) -> "FreezableQueue":
         """
         Create new FreezableQueue by given 'ident' key
-        or return existing queue if such key already exist in 'queues' dictionary
+        or return copy of existing queue if such key already exist in 'queues' dictionary
         """
-        _queue = cls.queues.get(ident)
-        if not _queue or _queue._closed:
-            _queue = FreezableQueue()
-            cls.queues[ident] = _queue
-        return _queue
+        if (_queue := cls.queues.get(ident)) is None:
+            cls.queues[ident] = FreezableQueue()
+        elif _queue._closed:
+            cls.queues[ident] = FreezableQueue()
+        else:
+            cls.queues[ident] = await cls.copy(_queue)
+        return cls.queues[ident]
 
     @classmethod
     def factory_remove(cls, ident: str) -> NoReturn:

@@ -1,5 +1,4 @@
 import os
-import logging
 import traceback
 from pathlib import Path
 
@@ -10,7 +9,7 @@ from tenacity import retry, stop_after_attempt, retry_if_not_exception_type
 
 from daffi.utils import colors
 from daffi.utils.logger import get_daffi_logger
-from daffi.exceptions import StopComponentError, ReckAcceptError
+from daffi.exceptions import StopComponentError
 
 logger = get_daffi_logger(__name__, colors.red)
 
@@ -40,6 +39,6 @@ with_debug_trace = retry(
     reraise=True,
     retry_error_callback=write_exception_trace,
     retry=retry_if_not_exception_type(
-        (EndOfStream, StopIteration, StopAsyncIteration, StopComponentError, AioRpcError, ReckAcceptError)
+        (EndOfStream, StopIteration, StopAsyncIteration, StopComponentError, AioRpcError)
     ),
 )

@@ -7,31 +7,68 @@ which leverage on event loop.
 
 But `Global` also has `join_async` method which fits async non blocking model.
 
-Also there are two methods `get` and `get_async` to take result depending on application tipe.
+Also there are two methods `get` and `get_async` to take result depending on application type.
+
+As example we can use `BG` execution modifier (run in background) which returns instance of `AsyncResult` instead of result itself:
+
 
 ```python
+from daffi import fetcher, BG
+
+@fetcher(BG)
+def my_callback():
+    pass
+
+future = my_callback()
+
+# get result in blocking manner
+result = future.get()
+
+# get result in async applications
 result = await future.get_async()
 ```
 
-In synchronous applications there is method `get` does this job.
+Despite on remote callback type we can declare synchronous or asynchronous fetcher depends on our application.
 
-Another methods category is generic methods. For instance execution modifiers can be sync or async depends on situation:
+For instance if in `process-1` we have callback with name `trigger_me`:
+
+process-1
 ```python
-delta = g.call.func1(10, 3) & FG
+from daffi import callback
+
+@callback
+def trigger_me():
+    print("Triggered")
 ```
 
-For async applications it is also possible to use this statement as coroutine:
+In `process-2` we can declare sync or async fetcher to trigger callback:
+
+process-2
 ```python
-delta = await g.call.func1(10, 3) & FG
+from daffi import fetcher, FG
+
+@fetcher(FG)
+def trigger_me():
+    pass
+
+def main():
+    trigger_me()
+
+# .... 
 ```
 
-But async modifiers option has certain limitation. For example following syntax is not valid:
-```python
- fg = FG(timeout=10)
-delta = await g.call.func1(10, 3) & fg
-```
+The more appropriate syntax for asynchronous applications will be:
 
-Only one-liner expression will be treated as coroutine:
+process-2
 ```python
-delta = await g.call.func1(10, 3) & FG(timeout=10)
+from daffi import fetcher, FG
+
+@fetcher(FG)
+async def trigger_me():
+    pass
+
+async def main():
+    await trigger_me()
+
+# ....
 ```
