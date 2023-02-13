@@ -7,6 +7,7 @@ from daffi import Global, STREAM, fetcher, __body_unknown__
 
 logging.basicConfig(level=logging.INFO)
 
+
 @fetcher
 async def process_stream(item) -> None:
     __body_unknown__(item)
@@ -28,7 +29,6 @@ def main():
     process_stream(iterator()) & STREAM
 
     g.stop()
-
 
 
 if __name__ == "__main__":

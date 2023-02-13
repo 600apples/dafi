@@ -6,7 +6,7 @@ from random import choices, choice
 from subprocess import Popen
 
 import pytest
-from daffi import FG, BG, PERIOD, NO_RETURN
+from daffi import FG, BG, PERIOD
 
 
 timings = []
@@ -51,8 +51,8 @@ async def call_remote_no_return(g, num, exec_type, path):
         if exec_type == PERIOD:
             future & PERIOD(at_time=start + 2)
             await asyncio.sleep(3)
-        elif exec_type == NO_RETURN:
-            future & NO_RETURN
+        elif exec_type == BG:
+            future & BG(no_return=True)
             await asyncio.sleep(3)
 
 
@@ -82,7 +82,7 @@ async def test_many_callbacks_unix(remote_callbacks_path, exec_type, g):
         [p.terminate() for p in remotes]
 
 
-@pytest.mark.parametrize("exec_type", [PERIOD, NO_RETURN])
+@pytest.mark.parametrize("exec_type", [PERIOD, BG])
 @pytest.mark.skipif(sys.platform == "win32", reason="Unix sockets dont work on windows")
 async def test_many_callbacks_unix_no_return(remote_callbacks_path, exec_type, g):
     timings.clear()
@@ -111,7 +111,7 @@ async def test_many_callbacks_unix_no_return(remote_callbacks_path, exec_type, g
         all_files = list(path.iterdir())
         assert len(all_files) == 250
         for file in all_files:
-            assert file.read_text() == "4"
+            assert set(file.read_text()) == set("01234")
     except AssertionError:
         raise
     except Exception as e:
@@ -149,7 +149,7 @@ async def test_many_callbacks_tcp(remote_callbacks_path, exec_type, g):
         [p.terminate() for p in remotes]
 
 
-@pytest.mark.parametrize("exec_type", [PERIOD, NO_RETURN])
+@pytest.mark.parametrize("exec_type", [PERIOD, BG])
 async def test_many_callbacks_tcp_no_return(remote_callbacks_path, exec_type, g):
     timings.clear()
     g = g(host="0.0.0.0")
@@ -179,7 +179,7 @@ async def test_many_callbacks_tcp_no_return(remote_callbacks_path, exec_type, g)
         all_files = list(path.iterdir())
         assert len(all_files) == 250
         for file in all_files:
-            assert file.read_text() == "4"
+            assert set(file.read_text()) == set("01234")
     finally:
         g.stop(True)
         [p.terminate() for p in remotes]
