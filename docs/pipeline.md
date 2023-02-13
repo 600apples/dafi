@@ -1,9 +1,9 @@
 ![pipeline](images/pipeline.png) 
-<br /><br /><br /><br />
+<br/>
 
 Pipeline illustration.
 
-<br /><br /><br /><br /><br /><br />
+<br/>
 
 It is possible to trigger chain of callbacks where one callback takes result from another and returns this result to caller.
 
@@ -48,10 +48,13 @@ def pipeline_cb3():
 So if we execute `pipeline_cb1` from separate process:
 
 ```python
-from daffi import Global, FG
+from daffi import Global, FG, fetcher
 
 proc_name = "node-4"
 
+@fetcher(FG)
+def pipeline_cb1():
+    pass
 
 g = Global(init_controller=True)
 
@@ -59,7 +62,7 @@ g = Global(init_controller=True)
 for proc in ("node-1", "node-2", "node-3"):
     g.wait_process(proc)
 
-result = g.call.pipeline_cb1() & FG
+result = pipeline_cb1()
 
 print(result)
 ```

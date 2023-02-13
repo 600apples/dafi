@@ -2,7 +2,7 @@ import time
 import logging
 from dataclasses import dataclass
 from threading import Event as thEvent
-from typing import ClassVar, Dict, Optional, Union, NoReturn, Type, Any, Tuple, Callable
+from typing import ClassVar, Optional, Union, NoReturn, Type, Any, Tuple, Callable
 
 from anyio import sleep
 

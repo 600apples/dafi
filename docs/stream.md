@@ -27,7 +27,7 @@ process 2
 from daffi import Global, fetcher, __body_unknown__, BG
 
 
-@fetcher
+@fetcher(BG(no_return=True))
 def process_sequence(a: int) -> None:
     __body_unknown__(a)
 
@@ -35,7 +35,7 @@ def process_sequence(a: int) -> None:
 g = Global(host='localhost', port=8888)
 
 for i in range(1, 101):
-    process_sequence(i) & BG(no_return=True)
+    process_sequence(i)
 ```
 
 Or let's even say we have `process_sequence` callback registered on many nodes and we need to pass
@@ -46,7 +46,7 @@ process 2
 from daffi import Global, BROADCAST, fetcher, __body_unknown__
 
 
-@fetcher
+@fetcher(BROADCAST)
 def process_sequence(a: int) -> None:
     __body_unknown__(a)
 
@@ -54,17 +54,17 @@ def process_sequence(a: int) -> None:
 g = Global(host='localhost', port=8888)
 
 for i in range(1, 101):
-    process_sequence(i) & BROADCAST
+    process_sequence(i)
 ```
 
-The 2 examples above work as they should, but there is a more concise syntax:
+The 2 examples above work as they should, but there is a more optimized `STREAM` execution modifier:
 
 process 2
 ```python
 from daffi import Global, STREAM, fetcher, __body_unknown__
 
 
-@fetcher
+@fetcher(STREAM)
 def process_sequence(a: int) -> None:
     __body_unknown__(a)
 
@@ -73,7 +73,7 @@ g = Global(host='localhost', port=8888)
 
 integers_range = range(1, 101)
 
-process_sequence(integers_range) & STREAM
+process_sequence(integers_range)
 ```
 
 Callbacks registered for streams have only one limitation. The should take exactly 1 argument
@@ -98,13 +98,18 @@ This argument becomes stream item on each iteration of stream process.
 
     process 2
     ```python
-    from daffi import Global, STREAM
+    from daffi import Global, STREAM, fetcher
+    
+    
+    @fetcher(STREAM)
+    def process_stream(sequence_item)
+        pass
     
     g = Global(host='localhost', port=8888)
     
     arguments = [(1, 2, "a"), (3, 4, "b"), (5, 6, "c")]
     
-    g.call.process_stream(arguments) & STREAM
+    process_stream(arguments)
     ```
 
 You might be wondering why not just use `BROADCAST` and `BG` execution modifiers in the cycle?
@@ -139,7 +144,7 @@ logging.basicConfig(level=logging.INFO)
 cap = cv2.VideoCapture(0)
 
 
-@fetcher
+@fetcher(STREAM)
 async def show_stream(frame: int) -> None:
     """Display the resulting image frame"""
     __body_unknown__(frame)
@@ -151,7 +156,7 @@ def frame_iterator():
     # Percent of original size
     # Images with high resolution might cause stream throttling
     # It depends on your camera. Adjust this value if needed.
-    scale_percent = 30
+    scale_percent = 20
     ret, frame = cap.read()
     while ret:
         ret, frame = cap.read()
@@ -168,7 +173,7 @@ async def main():
         for proc in ('process2', 'process3'):
             g.wait_process(proc)
 
-        show_stream(frame_iterator()) & STREAM
+        show_stream(frame_iterator())
 
     cap.release()
     cv2.destroyAllWindows()
