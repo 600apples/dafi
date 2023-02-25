@@ -24,6 +24,7 @@ from daffi.ipc import Ipc
 from daffi.remote_call import LazyRemoteCall
 from daffi.utils.misc import Singleton, string_uuid
 from daffi.utils.func_validation import pretty_callbacks
+from daffi.registry._base import BaseRegistry
 
 logger = get_daffi_logger("global", colors.blue)
 
@@ -88,7 +89,7 @@ class Global(metaclass=Singleton):
             logger=logger,
         )
 
-        callback._ipc = self.ipc
+        BaseRegistry._ipc = self.ipc
         self.ipc.start()
         if not self.ipc.wait():
             self.stop()
