@@ -10,7 +10,7 @@ from typing import NoReturn, Dict, Union, Optional, Callable, Any, Tuple, AsyncG
 from anyio.from_thread import start_blocking_portal
 
 from daffi.utils import colors
-from daffi.utils.settings import DEBUG
+from daffi.settings import DEBUG
 from daffi.async_result import get_result_type, AsyncResult, RetryPolicy
 from daffi.components.controller import Controller
 from daffi.components.node import Node
@@ -27,7 +27,7 @@ from daffi.utils.misc import (
     iterable,
 )
 from daffi.utils.func_validation import pretty_callbacks
-from daffi.utils.settings import LOCAL_CALLBACK_MAPPING, LOCAL_CLASS_CALLBACKS, WELL_KNOWN_CALLBACKS
+from daffi.settings import LOCAL_CALLBACK_MAPPING, WELL_KNOWN_CALLBACKS, clear_method_type_stores
 
 
 class Ipc(Thread):
@@ -233,8 +233,7 @@ class Ipc(Thread):
         if not self.global_condition_event.success:
             self.global_condition_event.mark_fail()
 
-        LOCAL_CALLBACK_MAPPING.clear()
-        LOCAL_CLASS_CALLBACKS.clear()
+        clear_method_type_stores()
 
     def stream(self, func_name, args: Tuple) -> NoReturn:
         if self.is_running:

@@ -6,6 +6,7 @@ from threading import Event
 from inspect import iscoroutine
 from typing import Optional, Union, NoReturn, Callable, List, Any, Coroutine
 
+from daffi.registry import Args
 from daffi.async_result import AsyncResult, SchedulerTask
 from daffi.exceptions import GlobalContextError, InitializationError
 from daffi.utils.timeparse import timeparse
@@ -59,10 +60,7 @@ class RemoteCall:
             args = self._args_pre_processor(*self.args, **self.kwargs)
             if iscoroutine(args):
                 args = await args
-            if not isinstance(args, tuple):
-                args = (args,)
-            self.args = args
-            self.kwargs = {}
+            self.args, self.kwargs = Args._aggregate_args(args=args)
             self._args_pre_processor = None
 
         await to_thread.run_sync(self.obtain_result_in_thread, next_operand)
@@ -78,10 +76,7 @@ class RemoteCall:
             args = self._args_pre_processor(*self.args, **self.kwargs)
             if iscoroutine(args):
                 raise InitializationError("Use await to execute asynchronous fetcher!")
-            if not isinstance(args, tuple):
-                args = (args,)
-            self.args = args
-            self.kwargs = {}
+            self.args, self.kwargs = Args._aggregate_args(args=args)
 
         if type(other) == type:
             other = other()
@@ -107,7 +102,7 @@ class RemoteCall:
             GlobalContextError(f"Invalid operand {type(other)}. Use one of {_available_operands}").fire()
 
     @property
-    def info(self) -> Optional["RemoteCallback"]:
+    def info(self) -> Optional["CallbackExecutor"]:
         data = search_remote_callback_in_mapping(self._ipc.node_callback_mapping, self.func_name)
         if data:
             return data[1]
@@ -230,9 +225,9 @@ class LazyRemoteCall:
     _exec_modifier: "ALL_EXEC_MODIFIERS" = field(repr=False, default=None)
     _is_async: bool = field(repr=False, default=False)
 
-    # In case there is fetcher initialized with 'args_from_body=True'
+    # In case there is fetcher initialized with 'proxy=True'
     _fetcher: Optional[Callable[..., Any]] = field(repr=False, default=None)
-    _args_from_body: Optional[bool] = field(repr=False, default=False)
+    _proxy: Optional[bool] = field(repr=False, default=False)
 
     def __str__(self):
         return self.__class__.__name__ if not self._func_name else f"{self.__class__.__name__}({self._func_name})"
@@ -290,28 +285,18 @@ class LazyRemoteCall:
             return self._wait_async(condition_executable, interval)
         return self._wait(condition_executable, interval)
 
-    def __call__(
-        __self__, *args, __exec_modifier__: Optional["ALL_EXEC_MODIFIERS"] = None, **kwargs
-    ) -> [RemoteCall, Coroutine]:
+    def __call__(__self__, *args,  **kwargs) -> [RemoteCall, Coroutine]:
         if not __self__._func_name:
             GlobalContextError(
                 "Invalid syntax. Use `Global.call.func_name(*args, **kwargs)` to build RemoteCall instance."
             ).fire()
-
-        # Exec modifier passed in arguments is more important then provided in decorator.
-        if __exec_modifier__:
-            if not is_exec_modifier(__exec_modifier__):
-                raise InitializationError(
-                    f"Invalid type for `__exec_modifier__` argument. Allowed classes are: {_available_operands}"
-                )
-            __self__._exec_modifier = __exec_modifier__
 
         remote_call = RemoteCall(
             _ipc=__self__._ipc,
             func_name=__self__._func_name,
             args=args,
             kwargs=kwargs,
-            _args_pre_processor=__self__._fetcher if (__self__._fetcher and __self__._args_from_body) else None,
+            _args_pre_processor=__self__._fetcher if (__self__._fetcher and not __self__._proxy) else None,
             _inside_callback_context=__self__._inside_callback_context,
         )
         if __self__._exec_modifier:
@@ -338,7 +323,7 @@ class LazyRemoteCall:
                 break
             await sleep(interval)
 
-    def _set_fetcher_params(self, is_async: bool, fetcher: Optional[Callable[..., Any]], args_from_body: bool):
+    def _set_fetcher_params(self, is_async: bool, fetcher: Optional[Callable[..., Any]], proxy: bool):
         self._is_async = is_async
         self._fetcher = fetcher
-        self._args_from_body = args_from_body
+        self._proxy = proxy

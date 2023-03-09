@@ -18,7 +18,7 @@ from daffi.exceptions import (
     InitializationError,
     RemoteError,
 )
-from daffi.utils.settings import LOCAL_CALLBACK_MAPPING, WELL_KNOWN_CALLBACKS
+from daffi.settings import LOCAL_CALLBACK_MAPPING, WELL_KNOWN_CALLBACKS
 from daffi.components.operations.node_operations import NodeOperations
 from daffi.components.operations.channel_store import ChannelPipe, MessageIterator, FreezableQueue
 

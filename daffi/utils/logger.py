@@ -4,7 +4,7 @@ from typing import Callable
 from typing import Any
 
 from daffi.utils import colors
-from daffi.utils.settings import DEBUG
+from daffi.settings import DEBUG
 
 logging.getLogger("grpc._cython.cygrpc").setLevel(logging.ERROR)
 

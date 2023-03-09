@@ -18,7 +18,7 @@ from daffi.components.proto.message import RpcMessage, ServiceMessage, MessageFl
 from daffi.components.scheduler import Scheduler
 from daffi.utils.misc import run_in_threadpool, run_from_working_thread
 
-from daffi.utils.settings import (
+from daffi.settings import (
     LOCAL_CALLBACK_MAPPING,
 )
 from daffi.components.operations.channel_store import ChannelPipe
@@ -202,7 +202,7 @@ class NodeOperations:
 
     async def _remote_func_stream_executor(
         self,
-        remote_callback: "RemoteCallback",
+        remote_callback: "CallbackExecutor",
         message: RpcMessage,
         process_name: str,
         stub,
@@ -296,7 +296,7 @@ class NodeOperations:
 
     async def _remote_func_executor(
         self,
-        remote_callback: "RemoteCallback",
+        remote_callback: "CallbackExecutor",
         message: RpcMessage,
         process_name: str,
     ):

@@ -14,7 +14,7 @@ from daffi.components.proto.message import RpcMessage, RemoteError, MessageFlag
 from daffi.utils.logger import get_daffi_logger
 from daffi.utils.misc import run_in_threadpool, run_from_working_thread
 
-from daffi.utils.settings import LOCAL_CALLBACK_MAPPING
+from daffi.settings import LOCAL_CALLBACK_MAPPING
 
 
 logger = get_daffi_logger("scheduler", colors.magenta)

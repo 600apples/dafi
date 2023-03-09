@@ -10,6 +10,7 @@ __all__ = [
     "BG",
     "PERIOD",
     "BROADCAST",
+    "STREAM",
     "ALL_EXEC_MODIFIERS",
     "is_exec_modifier",
     "is_exec_modifier_type",

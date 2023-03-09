@@ -45,6 +45,7 @@ class Global(metaclass=Singleton):
        port: Optional port to connect `Controller`/`Node` via tcp. If not provided random port will be chosen.
        unix_sock_path: Folder where UNIX socket will be created. If not provided default path is < tmp directory >/dafi/
           where `<tmp directory >` is default temporary directory on system.
+       on_connect: Function that will be executed when connection to Controller is established
     """
 
     process_name: Optional[str] = field(default_factory=string_uuid)
@@ -53,6 +54,7 @@ class Global(metaclass=Singleton):
     host: Optional[str] = None
     port: Optional[int] = None
     unix_sock_path: Optional[os.PathLike] = None
+    on_connect: Optional[Callable[..., Any]] = None
 
     _inside_callback_context: Optional[bool] = field(repr=False, default=False)
 
@@ -95,6 +97,8 @@ class Global(metaclass=Singleton):
             self.stop()
             GlobalContextError("Unable to start daffi components.").fire()
         self.port = self.ipc.port
+        if self.on_connect and callable(self.on_connect):
+            self.on_connect()
 
     def __enter__(self):
         return self

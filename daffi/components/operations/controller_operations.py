@@ -4,7 +4,7 @@ from typing import Dict
 
 from anyio import sleep
 
-from daffi.utils.settings import WELL_KNOWN_CALLBACKS, DEBUG
+from daffi.settings import WELL_KNOWN_CALLBACKS, DEBUG
 from daffi.utils.custom_types import K, GlobalCallback
 from daffi.utils.misc import search_remote_callback_in_mapping, call_after
 from daffi.components.operations.streams_store import StreamPairStore

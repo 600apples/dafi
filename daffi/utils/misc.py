@@ -196,7 +196,7 @@ def search_remote_callback_in_mapping(
     func_name: str,
     exclude: Optional[Union[str, Sequence]] = None,
     take_all: Optional[bool] = False,
-) -> Optional[Union[Tuple[str, "RemoteCallback"], List[Tuple[str, "RemoteCallback"]]]]:
+) -> Optional[Union[Tuple[str, "CallbackExecutor"], List[Tuple[str, "CallbackExecutor"]]]]:
 
     if isinstance(exclude, str):
         exclude = [exclude]

@@ -1,7 +1,7 @@
 from inspect import signature, iscoroutinefunction
-from typing import Callable, Any, Union, Type, Optional
+from typing import Callable, Any, Union, Type, Optional, ClassVar
 from daffi.registry._base import BaseRegistry, logger
-from daffi.callback_types import RemoteClassCallback, RemoteCallback
+from daffi.method_executors import ClassCallbackExecutor, CallbackExecutor
 from daffi.utils.func_validation import (
     get_class_methods,
     func_info,
@@ -9,7 +9,7 @@ from daffi.utils.func_validation import (
 )
 from daffi.exceptions import InitializationError
 from daffi.utils.misc import is_lambda_function
-from daffi.utils.settings import LOCAL_CALLBACK_MAPPING, WELL_KNOWN_CALLBACKS, LOCAL_CLASS_CALLBACKS
+from daffi.settings import LOCAL_CALLBACK_MAPPING, WELL_KNOWN_CALLBACKS, LOCAL_CLASS_CALLBACKS
 
 
 __all__ = ["Callback"]
@@ -20,6 +20,9 @@ class Callback(BaseRegistry):
     Remote callback group representation. All public methods of class inherited from Callbacks become remote callbacks
     identified by they names.
     """
+
+    # If auto_init=True then class will be implicitly instantiated.
+    auto_init: ClassVar[bool] = True
 
     @classmethod
     def _init_class(cls, instance_or_type) -> Union[Type, "Callback"]:
@@ -50,7 +53,7 @@ class Callback(BaseRegistry):
                 klass = instance_or_type
             else:
                 klass = cls if is_static_or_class_method else None
-            cb = RemoteClassCallback(
+            cb = ClassCallbackExecutor(
                 klass=klass,
                 klass_name=cls.__name__,
                 origin_name=name,
@@ -71,7 +74,7 @@ class Callback(BaseRegistry):
         return instance_or_type
 
     @classmethod
-    def _init_function(cls, fn: Callable[..., Any], fn_name: Optional[str] = None) -> RemoteCallback:
+    def _init_function(cls, fn: Callable[..., Any], fn_name: Optional[str] = None) -> CallbackExecutor:
         """Register one function as remote callback (This method is used in `callback` decorator)."""
         if is_lambda_function(fn):
             InitializationError("Lambdas is not supported.").fire()
@@ -80,8 +83,8 @@ class Callback(BaseRegistry):
             name = fn_name
         else:
             _, name = func_info(fn)
-        _fn = RemoteCallback(
-            callback=fn,
+        _fn = CallbackExecutor(
+            wrapped=fn,
             origin_name=name,
             signature=signature(fn),
             is_async=iscoroutinefunction(fn),
@@ -94,35 +97,36 @@ class Callback(BaseRegistry):
         return _fn
 
     @classmethod
-    def _build_class_callback_instance(cls, klass, *args, **kwargs):
-        """
-        Initialize instance of Callback class on demand (If this class is not initialized implicitly yet).
-        Args:
-            klass: class type
-            args: positional arguments that class takes in __init__ method
-            kwargs: keyword arguments that class takes in __init__ method
-        """
-        if isinstance(klass, type):
-            class_name = klass.__name__
-        else:
-            class_name = klass.__class__.__name__
+    def _update_callbacks(cls):
+        if cls._ipc and cls._ipc.is_running:
+            # Update remote callbacks if ips is running. It means callback was not registered during handshake
+            # or callback was added dynamically.
+            cls._ipc.update_callbacks()
+
+    def _post_init(self):
+        """Initialize instance of Callback class on demand (If this class is not initialized implicitly yet)."""
+        class_name = self.__class__.__name__
         if class_name in LOCAL_CLASS_CALLBACKS:
-            InitializationError(f"Only one callback instance of {class_name!r} should be created.").fire()
+            msg = f"Only one callback instance of {class_name!r} should be created."
+            if self.auto_init:
+                msg += (
+                    " auto_init is enabled for this class. "
+                    "If you want to create instance explicitly "
+                    "then you need specify `auto_init=False` class attribute for this class"
+                )
+            InitializationError(msg).fire()
+        LOCAL_CLASS_CALLBACKS.add(class_name)
 
-        LOCAL_CLASS_CALLBACKS.add(klass.__name__)
-        klass = klass(*args, **kwargs)
+        if not self.auto_init:
+            method_initialized = False
+            for method in get_class_methods(self.__class__):
+                module, name = func_info(method)
+                if name.startswith("_"):
+                    continue
 
-        method_initialized = False
-        for method in get_class_methods(klass):
-            module, name = func_info(method)
-            if name.startswith("_"):
-                continue
+                if info := LOCAL_CALLBACK_MAPPING.get(name):
+                    method_initialized = True
+                    LOCAL_CALLBACK_MAPPING[name] = info._replace(klass=self)
 
-            info = LOCAL_CALLBACK_MAPPING.get(name)
-            if info:
-                method_initialized = True
-                LOCAL_CALLBACK_MAPPING[name] = info._replace(klass=klass)
-
-        if method_initialized:
-            cls._update_callbacks()
-        return klass
+            if method_initialized:
+                self._update_callbacks()
