@@ -105,9 +105,7 @@ class Fetcher(BaseRegistry):
         else:
             InitializationError(f"Type {type(fn)} is not supported.")
 
-        _fn = FetcherExecutor(
-            wrapped=fn, origin_name=name, is_async=is_async, proxy=proxy, exec_modifier=exec_modifier
-        )
+        _fn = FetcherExecutor(wrapped=fn, origin_name=name, is_async=is_async, proxy=proxy, exec_modifier=exec_modifier)
         LOCAL_FETCHER_MAPPING[f"{id(fn)}-{name}"] = _fn
         return _fn
 
@@ -126,6 +124,7 @@ class Fetcher(BaseRegistry):
 
 class Args:
     """Arguments aggregator for fetchers without proxy enabled"""
+
     def __init__(self, *args: P.args, **kwargs: P.kwargs):
         self.args = args
         self.kwargs = kwargs
@@ -142,5 +141,5 @@ class Args:
         if isinstance(args, cls):
             args, kwargs = args.args, args.kwargs
         elif not isinstance(args, tuple):
-            args = (args, )
+            args = (args,)
         return args, kwargs

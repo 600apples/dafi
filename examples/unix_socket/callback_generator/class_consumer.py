@@ -9,13 +9,9 @@ from daffi.registry import Fetcher
 logging.basicConfig(level=logging.INFO)
 
 
-class Calculator(Fetcher):
-    async def add(self, arg1: int, arg2: int) -> int:
+class Items(Fetcher):
+    def iterate_items(self):
         """Used by 'consumer.py' process."""
-        pass
-
-    def subtract(self, arg1: int, arg2: int) -> int:
-        """Not used. Just for example."""
         pass
 
 
@@ -24,13 +20,11 @@ async def main():
     with Global() as g:
 
         print("Wait for publisher process to be started...")
-        g.wait_function("add")
+        g.wait_function("iterate_items")
 
-        calculator = Calculator()
-
-        for _ in range(10):
-            res = await calculator.add(5, 15)
-            print(f"Calculated result = {res}")
+        items = Items()
+        for item in items.iterate_items():
+            print(item)
 
 
 if __name__ == "__main__":

@@ -11,7 +11,7 @@ from anyio.from_thread import start_blocking_portal
 
 from daffi.utils import colors
 from daffi.settings import DEBUG
-from daffi.async_result import get_result_type, AsyncResult, RetryPolicy
+from daffi.async_result import get_result_type, AsyncResult
 from daffi.components.controller import Controller
 from daffi.components.node import Node
 from daffi.components.operations.task_waiter import TaskWaiter
@@ -100,7 +100,6 @@ class Ipc(Thread):
         broadcast: Optional[bool] = False,
         inside_callback_context: Optional[bool] = False,
         stream: Optional[bool] = False,
-        retry_policy: Optional[RetryPolicy] = None,
     ):
         self._check_node()
         assert func_name is not None
@@ -132,6 +131,9 @@ class Ipc(Thread):
         remote_callback.validate_provided_arguments(*args, **kwargs)
         result = None
 
+        if remote_callback.is_generator and (broadcast or not return_result or func_period or async_):
+            InitializationError("Remote callback which are generators works only with FG execution modifier!")
+
         wait_in_task_waiter = async_ and not return_result and not func_period
 
         msg = RpcMessage(
@@ -144,10 +146,14 @@ class Ipc(Thread):
             period=func_period,
             timeout=timeout or 0,
         )
-        result_class = get_result_type(inside_callback_context=inside_callback_context, is_period=bool(func_period))
+        result_class = get_result_type(
+            inside_callback_context=inside_callback_context,
+            is_period=bool(func_period),
+            is_generator=remote_callback.is_generator,
+        )
 
         if return_result or func_period:
-            result = result_class(msg=msg, retry_policy=retry_policy)
+            result = result_class(msg=msg)
         if result:
             result._register()
 
@@ -263,6 +269,11 @@ class Ipc(Thread):
                 self.node.node_callback_mapping, func_name, exclude=self.process_name
             )
             _, remote_callback = data
+            if remote_callback.is_generator:
+                InitializationError(
+                    f"Stream don't work with remote callback which are generators."
+                    f" Check {remote_callback.origin_name} to fix this issue."
+                ).fire()
             remote_callback.validate_provided_arguments(first_item)
             stream_items = chain([first_item], stream_items)
 

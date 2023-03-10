@@ -169,6 +169,7 @@ class RpcMessage(ServiceMessage):
     func_name: Optional[str] = ""
     period: Optional[Period] = None
     timeout: Optional[int] = 0
+    completed: Optional[bool] = True
 
     # Byte content.
     func_args: Optional[Tuple] = field(default_factory=tuple)

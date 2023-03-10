@@ -178,7 +178,12 @@ class ControllerOperations:
         transmitter = None
 
         if msg.uuid in self.awaited_procs:
-            transmitter, _ = self.awaited_procs.pop(msg.uuid)
+            if msg.completed:
+                # One-off message. We can delete metadata from awaited procs
+                transmitter, _ = self.awaited_procs.pop(msg.uuid)
+            else:
+                # Message from remote generator. We expect to receive additional messages.
+                transmitter, _ = self.awaited_procs.get(msg.uuid)
 
         # ------------------------
         # Broadcast

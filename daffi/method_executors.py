@@ -23,6 +23,7 @@ class CallbackExecutor(NamedTuple):
     origin_name: str
     signature: Signature
     is_async: bool
+    is_generator: bool
 
     __call__ = c__call__
 
@@ -43,17 +44,17 @@ class CallbackExecutor(NamedTuple):
         try:
             exec(f"def _{self.signature}: pass\n_(*args, **kwargs)", {"args": args, "kwargs": kwargs, "daffi": daffi})
         except TypeError as e:
-            e.args += (f"Function signature: def {self.origin_name}{self.signature}",)
+            e.args += (f"Function signature: def {self.origin_name}{self.signature}: ...",)
             GlobalContextError("\n".join(e.args)).fire()
 
 
 class ClassCallbackExecutor(NamedTuple):
     klass: type
-    klass_name: str
     origin_name: str
     signature: Signature
     is_async: bool
     is_static: bool
+    is_generator: bool
 
     __call__ = c__call__
 
@@ -74,7 +75,7 @@ class ClassCallbackExecutor(NamedTuple):
     def wrapped(self) -> GlobalCallback:
         if not self.klass:
             GlobalContextError(
-                f"Instance of {self.klass_name!r} is not initialized yet."
+                f"Instance is not initialized yet."
                 f" Create instance or mark method {self.origin_name!r}"
                 f" as classmethod or staticmethod"
             ).fire()
@@ -87,11 +88,7 @@ class ClassCallbackExecutor(NamedTuple):
                 {"args": args, "kwargs": kwargs, "daffi": daffi},
             )
         except TypeError as e:
-            e.args += (
-                f"Function signature: def {self.origin_name}{self.signature}. "
-                f"Reminder: you should not provide arguments belonging"
-                f" to the class or to the instance of the class eg 'self', 'cls' etc.",
-            )
+            e.args += (f"Function signature: def {self.origin_name}{self.signature}: ...",)
             GlobalContextError("\n".join(e.args)).fire()
 
 
@@ -135,7 +132,7 @@ class ClassFetcherExecutor(NamedTuple):
     def wrapped(self) -> GlobalCallback:
         if not self.klass:
             GlobalContextError(
-                f"Instance of {self.klass_name!r} is not initialized yet."
+                f"Instance is not initialized yet."
                 f" Create instance or mark method {self.origin_name!r}"
                 f" as classmethod or staticmethod"
             ).fire()

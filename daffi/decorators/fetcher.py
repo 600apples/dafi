@@ -36,8 +36,9 @@ class fetcher(Decorator):
 
     def __new__(
         cls,
-        exec_modifier: Union[Callable[P, Any],
-                             Union[FG, BG, BROADCAST, STREAM, PERIOD]] = None, proxy: Optional[bool] = True, **kwargs,
+        exec_modifier: Union[Callable[P, Any], Union[FG, BG, BROADCAST, STREAM, PERIOD]] = None,
+        proxy: Optional[bool] = True,
+        **kwargs,
     ):
         if is_exec_modifier(exec_modifier) or proxy:
             return partial(cls, __options=(exec_modifier, proxy))

@@ -10,7 +10,21 @@ from datetime import datetime
 from queue import Queue
 from contextlib import contextmanager
 from collections.abc import Iterable
-from typing import Callable, Any, NamedTuple, NoReturn, Dict, DefaultDict, Optional, Tuple, Union, Sequence, List
+from typing import (
+    Callable,
+    Any,
+    NamedTuple,
+    NoReturn,
+    Dict,
+    DefaultDict,
+    Optional,
+    Tuple,
+    Union,
+    Sequence,
+    List,
+    Iterator,
+    AsyncIterator,
+)
 
 import sniffio
 from anyio import to_thread, run
@@ -189,6 +203,28 @@ async def call_after(eta: int, func: Callable[..., Any], *args, **kwargs) -> asy
             await result
 
     return asyncio.create_task(_dec())
+
+
+class _StopIteration(Exception):
+    pass
+
+
+def _next(iterator: Iterator[Any]) -> Any:
+    # We can't raise `StopIteration` from within the threadpool iterator
+    # and catch it outside that context, so we coerce them into a different
+    # exception type.
+    try:
+        return next(iterator)
+    except StopIteration:
+        raise _StopIteration
+
+
+async def iterate_in_threadpool(iterator: Iterator[Any]) -> AsyncIterator[Any]:
+    while True:
+        try:
+            yield await to_thread.run_sync(_next, iterator)
+        except _StopIteration:
+            break
 
 
 def search_remote_callback_in_mapping(

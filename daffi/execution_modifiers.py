@@ -2,7 +2,6 @@ from inspect import isclass
 from dataclasses import dataclass
 from typing import Optional, Union, List
 from daffi.utils.custom_types import TimeUnits
-from daffi.async_result import RetryPolicy
 
 
 __all__ = [
@@ -20,14 +19,12 @@ __all__ = [
 @dataclass
 class FG:
     timeout: Optional[TimeUnits] = None
-    retry_policy: Optional[RetryPolicy] = None
 
 
 @dataclass
 class BG:
     timeout: Optional[TimeUnits] = None
     eta: Optional[TimeUnits] = None
-    retry_policy: Optional[RetryPolicy] = None
     no_return: Optional[bool] = False
 
 
@@ -42,7 +39,6 @@ class BROADCAST:
     eta: Optional[TimeUnits] = None
     timeout: Optional[TimeUnits] = None  # Works only with return_result=True
     return_result: Optional[bool] = False
-    retry_policy: Optional[RetryPolicy] = None
 
 
 @dataclass

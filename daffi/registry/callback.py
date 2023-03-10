@@ -1,4 +1,4 @@
-from inspect import signature, iscoroutinefunction
+from inspect import signature, iscoroutinefunction, isgeneratorfunction
 from typing import Callable, Any, Union, Type, Optional, ClassVar
 from daffi.registry._base import BaseRegistry, logger
 from daffi.method_executors import ClassCallbackExecutor, CallbackExecutor
@@ -55,11 +55,11 @@ class Callback(BaseRegistry):
                 klass = cls if is_static_or_class_method else None
             cb = ClassCallbackExecutor(
                 klass=klass,
-                klass_name=cls.__name__,
                 origin_name=name,
                 signature=signature(method),
                 is_async=iscoroutinefunction(method),
                 is_static=str(is_static_or_class_method) == "static",
+                is_generator=isgeneratorfunction(method),
             )
             name_in_mapping = name in LOCAL_CALLBACK_MAPPING
             LOCAL_CALLBACK_MAPPING[name] = cb
@@ -88,6 +88,7 @@ class Callback(BaseRegistry):
             origin_name=name,
             signature=signature(fn),
             is_async=iscoroutinefunction(fn),
+            is_generator=isgeneratorfunction(fn),
         )
         LOCAL_CALLBACK_MAPPING[name] = _fn
         if name not in WELL_KNOWN_CALLBACKS:

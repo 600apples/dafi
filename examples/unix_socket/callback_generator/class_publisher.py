@@ -1,6 +1,7 @@
 """
 Publisher is the process that declares available remote functions
 """
+import time
 import logging
 from daffi import Global
 from daffi.registry import Callback
@@ -8,14 +9,15 @@ from daffi.registry import Callback
 logging.basicConfig(level=logging.INFO)
 
 
-class Calculator(Callback):
-    def add(self, arg1: int, arg2: int) -> int:
-        """Used by 'consumer.py' process."""
-        return arg1 + arg2
+class Items(Callback):
+    def __post_init__(self):
+        self.items = ["bread", "eggs", "orange", "chicken"]
 
-    def subtract(self, arg1: int, arg2: int) -> int:
-        """Not used. Just for example."""
-        return arg1 - arg2
+    def iterate_items(self):
+        """Used by 'consumer.py' process."""
+        for item in self.items:
+            yield item
+            time.sleep(2)
 
 
 def main():

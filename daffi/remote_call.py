@@ -18,7 +18,6 @@ from daffi.execution_modifiers import (
     PERIOD,
     BROADCAST,
     STREAM,
-    RetryPolicy,
     ALL_EXEC_MODIFIERS,
     is_exec_modifier,
     is_exec_modifier_type,
@@ -82,7 +81,7 @@ class RemoteCall:
             other = other()
 
         if is_exec_modifier_type(other, FG):
-            return self.fg(timeout=other.timeout, retry_policy=other.retry_policy)
+            return self.fg(timeout=other.timeout)
 
         elif is_exec_modifier_type(other, BG):
             return self.bg(timeout=other.timeout, eta=other.eta, no_return=other.no_return)
@@ -91,9 +90,7 @@ class RemoteCall:
             return self.period(at_time=other.at_time, interval=other.interval)
 
         elif is_exec_modifier_type(other, BROADCAST):
-            return self.broadcast(
-                eta=other.eta, return_result=other.return_result, timeout=other.timeout, retry_policy=other.retry_policy
-            )
+            return self.broadcast(eta=other.eta, return_result=other.return_result, timeout=other.timeout)
 
         elif is_exec_modifier_type(other, STREAM):
             return self.stream()
@@ -111,7 +108,7 @@ class RemoteCall:
     def exists(self) -> bool:
         return bool(self.info)
 
-    def fg(self, timeout: Optional[TimeUnits] = None, retry_policy: Optional[RetryPolicy] = None) -> RemoteResult:
+    def fg(self, timeout: Optional[TimeUnits] = None) -> RemoteResult:
         timeout = self._get_duration(timeout, "timeout")
         return self._ipc.call(
             self.func_name,
@@ -121,14 +118,12 @@ class RemoteCall:
             async_=False,
             return_result=True,
             inside_callback_context=self._inside_callback_context,
-            retry_policy=retry_policy,
         )
 
     def bg(
         self,
         timeout: Optional[TimeUnits] = None,
         eta: Optional[TimeUnits] = None,
-        retry_policy: Optional[RetryPolicy] = None,
         no_return: Optional[bool] = False,
     ) -> AsyncResult:
         timeout = self._get_duration(timeout, "timeout")
@@ -142,7 +137,6 @@ class RemoteCall:
             async_=True,
             return_result=not no_return,
             inside_callback_context=self._inside_callback_context,
-            retry_policy=retry_policy,
         )
 
     def broadcast(
@@ -150,7 +144,6 @@ class RemoteCall:
         eta: Optional[TimeUnits] = None,
         return_result: Optional[bool] = False,
         timeout: Optional[TimeUnits] = None,
-        retry_policy: Optional[RetryPolicy] = None,
     ) -> Optional[AsyncResult]:
         timeout = self._get_duration(timeout, "timeout")
         eta = self._get_duration(eta, "eta", 0)
@@ -164,7 +157,6 @@ class RemoteCall:
             return_result=return_result,
             broadcast=True,
             inside_callback_context=self._inside_callback_context,
-            retry_policy=retry_policy,
         )
 
     def period(
@@ -285,7 +277,7 @@ class LazyRemoteCall:
             return self._wait_async(condition_executable, interval)
         return self._wait(condition_executable, interval)
 
-    def __call__(__self__, *args,  **kwargs) -> [RemoteCall, Coroutine]:
+    def __call__(__self__, *args, **kwargs) -> [RemoteCall, Coroutine]:
         if not __self__._func_name:
             GlobalContextError(
                 "Invalid syntax. Use `Global.call.func_name(*args, **kwargs)` to build RemoteCall instance."
