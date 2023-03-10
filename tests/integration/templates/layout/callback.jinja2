@@ -1,5 +1,5 @@
 @callback
-def callback_func_{{ callback_index }}(*args, g: Global, path=None, text=None, **kwargs):
+def callback_func_{{ callback_index }}(*args, path=None, text=None, **kwargs):
 {%- if write_to_file %}
     try:
         with open(path, "a") as f: f.write(text)

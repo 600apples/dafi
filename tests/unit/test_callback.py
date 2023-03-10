@@ -1,8 +1,9 @@
 import pytest
 import asyncio
-from daffi import callback, Global
-from daffi.utils.settings import LOCAL_CALLBACK_MAPPING
-from daffi.decorators import RemoteCallback
+from daffi import Global
+from daffi.decorators import callback
+from daffi.settings import LOCAL_CALLBACK_MAPPING
+from daffi.method_executors import CallbackExecutor
 from daffi.exceptions import InitializationError, GlobalContextError
 
 
@@ -29,8 +30,8 @@ class TestCallbackSuite:
         assert isinstance(substract, callback)
         assert "add" in LOCAL_CALLBACK_MAPPING
         assert "substract" in LOCAL_CALLBACK_MAPPING
-        assert isinstance(add._fn, RemoteCallback)
-        assert isinstance(substract._fn, RemoteCallback)
+        assert isinstance(add._fn, CallbackExecutor)
+        assert isinstance(substract._fn, CallbackExecutor)
 
         with Global(init_controller=True) as g:
             with pytest.raises(TypeError):
@@ -83,24 +84,6 @@ class TestCallbackSuite:
             with pytest.raises(GlobalContextError):
                 validate_provided_arguments(1, 2, g)
 
-    async def test_local_callback_execution_with_g(self):
-        Global._instances.clear()
-
-        @callback
-        def func_with_g(g: Global) -> Global:
-            return g
-
-        with pytest.raises(InitializationError):
-            func_with_g()
-
-        with Global(init_node=False, init_controller=True, process_name="foo"):
-            g = func_with_g()
-
-        assert g.process_name == "foo"
-        assert g.init_controller == True
-        assert g.init_node == False
-        assert g.host is None
-        assert g.port is None
 
     async def test_local_class_callback_execution(self):
         Global._instances.clear()

@@ -1,7 +1,8 @@
 import pytest
 import sys
 import logging
-from daffi import STREAM, FG, fetcher, __body_unknown__
+from daffi import STREAM, FG
+from daffi.decorators import fetcher, __body_unknown__
 from subprocess import Popen
 
 logging.basicConfig(level=logging.DEBUG)

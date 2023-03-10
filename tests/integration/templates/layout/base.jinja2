@@ -1,6 +1,7 @@
 {%- import "layout/macros.jinja2" as macros -%}
 import time
 from daffi import *
+from daffi.decorators import callback, fetcher
 from anyio import sleep
 
 {% block content %}{% endblock %}
@@ -30,6 +31,3 @@ if __name__ == "__main__":
 {% block exec %}
     main()
 {% endblock %}
-
-
-
