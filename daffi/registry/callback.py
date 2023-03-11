@@ -79,6 +79,14 @@ class Callback(BaseRegistry):
         if is_lambda_function(fn):
             InitializationError("Lambdas is not supported.").fire()
 
+        elif isinstance(fn, type):
+            # Class wrapped
+            InitializationError(
+                "Classes are not supported."
+                " Use `Callback` base class from `daffi.registry` "
+                "package to initialize class as callback group"
+            ).fire()
+
         if fn_name:
             name = fn_name
         else:

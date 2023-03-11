@@ -64,8 +64,8 @@ class Fetcher(BaseRegistry):
                 origin_method=getattr(klass, name) if klass else None,
                 is_async=iscoroutinefunction(method),
                 is_static=str(is_static_or_class_method) == "static",
-                proxy=cls.proxy,
-                exec_modifier=cls.exec_modifier,
+                proxy_=cls.proxy,
+                exec_modifier_=cls.exec_modifier,
             )
             LOCAL_FETCHER_MAPPING[f"{cls.__name__}-{name}"] = cb
         return instance_or_type
@@ -75,12 +75,13 @@ class Fetcher(BaseRegistry):
         cls,
         fn: Callable[..., Any],
         fn_name: Optional[str] = None,
-        proxy: Optional[bool] = False,
+        proxy: Optional[bool] = True,
         exec_modifier: Union[FG, BG, BROADCAST, STREAM, PERIOD] = FG,
     ) -> FetcherExecutor:
         """Register one function as remote fetcher (This method is used in `fetcher` decorator)."""
         from daffi.decorators import callback
 
+        is_async = False
         if fn_name:
             name = fn_name
         else:
@@ -90,12 +91,17 @@ class Fetcher(BaseRegistry):
             InitializationError(f"Async generators are not supported yet.").fire()
 
         elif isinstance(fn, callback):
-            fn = fn._fn.wrapped
+            proxy = True
             is_async = fn._fn.is_async
+            fn = fn._fn.wrapped
 
         elif isinstance(fn, type):
             # Class wrapped
-            InitializationError("Classes are not supported.").fire()
+            InitializationError(
+                "Classes are not supported."
+                " Use `Fetcher` base class from `daffi.registry` "
+                "package to initialize class as fetcher group"
+            ).fire()
 
         elif callable(fn):
             if is_lambda_function(fn):
@@ -105,7 +111,9 @@ class Fetcher(BaseRegistry):
         else:
             InitializationError(f"Type {type(fn)} is not supported.")
 
-        _fn = FetcherExecutor(wrapped=fn, origin_name=name, is_async=is_async, proxy=proxy, exec_modifier=exec_modifier)
+        _fn = FetcherExecutor(
+            wrapped=fn, origin_name=name, is_async=is_async, proxy_=proxy, exec_modifier_=exec_modifier
+        )
         LOCAL_FETCHER_MAPPING[f"{id(fn)}-{name}"] = _fn
         return _fn
 

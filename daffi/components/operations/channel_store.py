@@ -8,7 +8,7 @@ from grpc._cython.cygrpc import UsageError
 from daffi.utils.misc import call_after
 from daffi.components.proto.message import Message, RpcMessage, ServiceMessage
 from daffi.components.operations.freezable_queue import FreezableQueue, QueueMixin
-from daffi.async_result import AsyncResult, RemoteError, ResultInf
+from daffi.async_result import RemoteError, ResultInf
 
 
 logger = logging.getLogger(__name__)
