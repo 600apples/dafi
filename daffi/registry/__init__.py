@@ -1,2 +1,2 @@
-from daffi.registry.callback import Callback
-from daffi.registry.fetcher import Fetcher, Args
+from daffi.registry._callback import Callback
+from daffi.registry._fetcher import Fetcher, Args

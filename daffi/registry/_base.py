@@ -63,3 +63,11 @@ class BaseRegistry(metaclass=RegistryMeta):
     @abstractmethod
     def _post_init(self):
         raise NotImplementedError()
+
+    @staticmethod
+    def _get_alias(self, wrapped) -> Optional[str]:
+        """Get custom executor alias"""
+        if hasattr(self, "alias"):
+            return self.alias
+        elif hasattr(wrapped, "alias"):
+            return wrapped.alias

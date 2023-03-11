@@ -60,7 +60,7 @@ class Fetcher(BaseRegistry):
                 klass = cls if is_static_or_class_method else None
             cb = ClassFetcherExecutor(
                 klass=klass,
-                origin_name=name,
+                origin_name_=name,
                 origin_method=getattr(klass, name) if klass else None,
                 is_async=iscoroutinefunction(method),
                 is_static=str(is_static_or_class_method) == "static",
@@ -82,10 +82,6 @@ class Fetcher(BaseRegistry):
         from daffi.decorators import callback
 
         is_async = False
-        if fn_name:
-            name = fn_name
-        else:
-            _, name = func_info(fn)
 
         if isasyncgenfunction(fn):
             InitializationError(f"Async generators are not supported yet.").fire()
@@ -111,8 +107,13 @@ class Fetcher(BaseRegistry):
         else:
             InitializationError(f"Type {type(fn)} is not supported.")
 
+        if fn_name:
+            name = fn_name
+        else:
+            _, name = func_info(fn)
+
         _fn = FetcherExecutor(
-            wrapped=fn, origin_name=name, is_async=is_async, proxy_=proxy, exec_modifier_=exec_modifier
+            wrapped=fn, origin_name_=name, is_async=is_async, proxy_=proxy, exec_modifier_=exec_modifier
         )
         LOCAL_FETCHER_MAPPING[f"{id(fn)}-{name}"] = _fn
         return _fn

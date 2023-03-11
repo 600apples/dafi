@@ -82,8 +82,8 @@ def func_info(func: Callable[P, Any]):
         name = func.func_name
     elif hasattr(func, "__name__"):
         name = func.__name__
-    elif hasattr(func, "origin_name"):
-        name = func.origin_name
+    elif hasattr(func, "origin_name_"):
+        name = func.origin_name_
     else:
         name = "unknown"
     # Hack to detect functions not defined at the module-level

@@ -272,7 +272,7 @@ class Ipc(Thread):
             if remote_callback.is_generator:
                 InitializationError(
                     f"Stream don't work with remote callback which are generators."
-                    f" Check {remote_callback.origin_name} to fix this issue."
+                    f" Check {remote_callback.alias} to fix this issue."
                 ).fire()
             remote_callback.validate_provided_arguments(first_item)
             stream_items = chain([first_item], stream_items)

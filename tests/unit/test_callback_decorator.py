@@ -1,6 +1,6 @@
 import pytest
 from daffi import Global, BROADCAST, FG
-from daffi.decorators import callback, fetcher
+from daffi.decorators import callback, fetcher, alias
 from daffi.settings import LOCAL_CALLBACK_MAPPING, LOCAL_FETCHER_MAPPING
 from daffi.method_executors import CallbackExecutor
 from daffi.exceptions import InitializationError
@@ -79,3 +79,21 @@ class TestCallbackSuite:
         assert my_func2.exec_modifier == FG
         my_func2.exec_modifier = BROADCAST
         assert my_func2.exec_modifier == BROADCAST
+
+    async def test_callback_alias(self):
+        Global._instances.clear()
+
+        @callback
+        @alias("custom1")
+        def my_func1():
+            pass
+
+        @alias("custom2")
+        @callback
+        def my_func2():
+            pass
+
+        assert my_func1.alias == "custom1"
+        assert my_func2.alias == "custom2"
+        assert "custom1" in LOCAL_CALLBACK_MAPPING
+        assert "custom2" in LOCAL_CALLBACK_MAPPING

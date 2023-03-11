@@ -55,7 +55,7 @@ class Callback(BaseRegistry):
                 klass = cls if is_static_or_class_method else None
             cb = ClassCallbackExecutor(
                 klass=klass,
-                origin_name=name,
+                origin_name_=name,
                 signature=signature(method),
                 is_async=iscoroutinefunction(method),
                 is_static=str(is_static_or_class_method) == "static",
@@ -93,7 +93,7 @@ class Callback(BaseRegistry):
             _, name = func_info(fn)
         _fn = CallbackExecutor(
             wrapped=fn,
-            origin_name=name,
+            origin_name_=name,
             signature=signature(fn),
             is_async=iscoroutinefunction(fn),
             is_generator=isgeneratorfunction(fn),

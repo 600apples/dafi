@@ -1,9 +1,9 @@
 from typing import Callable, Any
 from daffi.utils.custom_types import P
 from daffi.settings import LOCAL_CALLBACK_MAPPING
-from daffi.registry.callback import Callback
+from daffi.registry._callback import Callback
 from daffi.decorators._base import Decorator
-from daffi.decorators.fetcher import fetcher
+from daffi.decorators._fetcher import fetcher
 
 
 __all__ = ["callback"]
@@ -19,6 +19,8 @@ class callback(Decorator):
         >>> def my_func(*args, **kwargs):
                 ...
     """
+
+    _store = LOCAL_CALLBACK_MAPPING
 
     def __new__(cls, fn: Callable[P, Any]):
         """
@@ -39,13 +41,5 @@ class callback(Decorator):
             return super().__new__(cls)
 
     def __init__(self, fn: Callable[P, Any]):
-        self._fn = Callback._init_function(fn)
-
-    def __getattr__(self, item):
-        if self._fn:
-            return getattr(self._fn, item)
-        else:
-            try:
-                return LOCAL_CALLBACK_MAPPING[item]
-            except KeyError:
-                ...
+        alias = Callback._get_alias(self, fn)
+        self._fn = Callback._init_function(fn=fn, fn_name=alias)

@@ -7,7 +7,7 @@ from typing import (
 )
 from daffi.utils.custom_types import P
 from daffi.execution_modifiers import is_exec_modifier, FG, BG, BROADCAST, STREAM, PERIOD, ALL_EXEC_MODIFIERS
-from daffi.registry.fetcher import Fetcher
+from daffi.registry._fetcher import Fetcher
 from daffi.decorators._base import Decorator
 from daffi.exceptions import InitializationError
 from daffi.settings import LOCAL_FETCHER_MAPPING
@@ -35,6 +35,8 @@ class fetcher(Decorator):
         >>> result = my_awersome_function(1, 2, "abc")
     """
 
+    _store = LOCAL_FETCHER_MAPPING
+
     def __new__(
         cls,
         exec_modifier: Union[Callable[P, Any], Union[FG, BG, BROADCAST, STREAM, PERIOD]] = None,
@@ -55,7 +57,8 @@ class fetcher(Decorator):
         exec_modifier = exec_modifier or FG
         # First argument has name exec_modifier for compatibility between two types of decorator execution
         # @fetcher and @fetcher(exec_modifier=BG) but in fact `exec_modifier` here is always callable.
-        self._fn = Fetcher._init_function(fn=fn, proxy=proxy, exec_modifier=exec_modifier)
+        alias = Fetcher._get_alias(self, fn)
+        self._fn = Fetcher._init_function(fn=fn, proxy=proxy, exec_modifier=exec_modifier, fn_name=alias)
 
     @property
     def exec_modifier(self):
@@ -68,7 +71,7 @@ class fetcher(Decorator):
             raise InitializationError(f"Invalid execution modifiers. Valid modifiers = {ALL_EXEC_MODIFIERS}")
         self._fn.exec_modifier = val
         # Take updated namedtuple instance from LOCAL_FETCHER_MAPPING store
-        self._fn = LOCAL_FETCHER_MAPPING[f"{id(self.wrapped)}-{self.origin_name}"]
+        self._fn = self._store[f"{id(self.wrapped)}-{self.alias}"]
 
     @property
     def proxy(self):
@@ -79,7 +82,7 @@ class fetcher(Decorator):
         """Assign new value for proxy."""
         self._fn.proxy = val
         # Take updated namedtuple instance from LOCAL_FETCHER_MAPPING store
-        self._fn = LOCAL_FETCHER_MAPPING[f"{id(self.wrapped)}-{self.origin_name}"]
+        self._fn = LOCAL_FETCHER_MAPPING[f"{id(self.wrapped)}-{self.alias}"]
 
 
 class __body_unknown__:
