@@ -34,7 +34,14 @@ class ControllerOperations:
         while self.awaited_procs or self.awaited_broadcast_procs or self.awaited_stream_procs:
             await sleep(0.1)
 
+    async def on_controller_stopped(self, proc_name):
+        async for proc, chan in self.channel_store.iterate():
+            if proc != proc_name:
+                # Send updated self.controller_callback_mapping to all processes except transmitter process.
+                await chan.send(ServiceMessage(flag=MessageFlag.CONTROLLER_STOPPED_UNEXPECTEDLY, receiver=proc))
+
     async def on_channel_close(self, channel: ChannelPipe, process_identificator: str):
+        self.logger.debug(f"Channel {channel} (process={process_identificator}) is locked before closing")
         channel.lock()
         # Give 5 seconds to reconnect. If process unable to recconect within 5 seconds then channel will be
         # deleted and all other processes will be notified channel is not available anymore.
@@ -132,7 +139,7 @@ class ControllerOperations:
         await self.channel_store.add_channel(channel=channel, process_name=msg.transmitter)
         if not (on_close_chan_task := self.closed_procs.pop(process_identificator, None)):
             async for proc, chan in self.channel_store.iterate():
-                # Send updated self.controller_callback_mapping to all processes except transmitter process.
+                # Send updated self.controller_callback_mapping to all processes.
                 await chan.send(msg.copy(transmitter=msg.transmitter, receiver=proc))
         else:
             # Process re-connected within 5 seconds. Cancel on_channel_close task.
@@ -165,7 +172,13 @@ class ControllerOperations:
                     await trans_chan.send(
                         msg.copy(flag=MessageFlag.SCHEDULER_ACCEPT, transmitter=receiver, receiver=transmitter)
                     )
-
+            else:
+                msg.flag = MessageFlag.UNABLE_TO_FIND_CANDIDATE
+                info = f"Unable to execute {msg.func_name!r}. Remote channel is closed."
+                msg.set_error(RemoteError(info=info))
+                if trans_chan:
+                    await trans_chan.send(msg)
+                self.logger.error(info)
         else:
             msg.flag = MessageFlag.UNABLE_TO_FIND_CANDIDATE
             info = f"Unable to find remote process candidate to execute {msg.func_name!r}"
@@ -222,8 +235,7 @@ class ControllerOperations:
                     msg.func_args = (aggregated_result,)
 
         if not transmitter:
-            chan = await self.channel_store.get_chan(msg.transmitter)
-            if chan:
+            if chan := await self.channel_store.get_chan(msg.transmitter):
                 msg.flag = MessageFlag.UNABLE_TO_FIND_PROCESS
                 info = f"Unable to find process by message uuid."
                 if DEBUG:
@@ -247,8 +259,7 @@ class ControllerOperations:
         # Dont care about RpcMessage uuid. Scheduler tasks are long running processes. Sheduler can report about error
         # multiple times.
         self.awaited_procs.pop(msg.uuid, None)
-        chan = await self.channel_store.get_chan(msg.receiver)
-        if not chan:
+        if not (chan := await self.channel_store.get_chan(msg.receiver)):
             logging.error(f"Unable to send calculated result. Process {msg.receiver!r} is disconnected.")
         else:
             msg.flag = MessageFlag.SUCCESS
@@ -311,8 +322,7 @@ class ControllerOperations:
             self.controller_callback_mapping, msg.func_name, exclude=msg.transmitter, take_all=True
         ):
             for receiver, _ in data:
-                chan = await self.channel_store.get_chan(receiver)
-                if chan:
+                if chan := await self.channel_store.get_chan(receiver):
                     await chan.send(msg.copy(receiver=receiver))
                     aggregated[receiver] = RESULT_EMPTY
             await trans_chan.send(msg.copy(flag=MessageFlag.SUCCESS, func_args=(list(aggregated),), data=None))

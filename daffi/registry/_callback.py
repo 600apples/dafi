@@ -24,7 +24,7 @@ class Callback(BaseRegistry):
     # If auto_init=True then class will be implicitly instantiated.
     auto_init: ClassVar[bool] = True
 
-    @classmethod
+    @staticmethod
     def _init_class(cls, instance_or_type) -> Union[Type, "Callback"]:
         """
         Register all public methods of class as callbacks.
@@ -112,6 +112,7 @@ class Callback(BaseRegistry):
             # or callback was added dynamically.
             cls._ipc.update_callbacks()
 
+    @staticmethod
     def _post_init(self):
         """Initialize instance of Callback class on demand (If this class is not initialized implicitly yet)."""
         class_name = self.__class__.__name__

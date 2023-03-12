@@ -30,7 +30,7 @@ class Fetcher(BaseRegistry):
     def __getattribute__(self, item):
         return LOCAL_FETCHER_MAPPING.get(f"{id(self)}-{item}", super().__getattribute__(item))
 
-    @classmethod
+    @staticmethod
     def _init_class(cls, instance_or_type) -> Union[Type, "Callback"]:
         """
         Register all public methods of class as fetchers.
@@ -118,6 +118,7 @@ class Fetcher(BaseRegistry):
         LOCAL_FETCHER_MAPPING[f"{id(fn)}-{name}"] = _fn
         return _fn
 
+    @staticmethod
     def _post_init(self):
         """Initialize instance of Fetcher class on demand (If this class is not initialized implicitly yet)."""
 

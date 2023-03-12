@@ -84,6 +84,11 @@ class fetcher(Decorator):
         # Take updated namedtuple instance from LOCAL_FETCHER_MAPPING store
         self._fn = LOCAL_FETCHER_MAPPING[f"{id(self.wrapped)}-{self.alias}"]
 
+    @Decorator.alias.setter
+    def alias(self, val):
+        self._fn.alias = val
+        self._fn = self._store[f"{id(self.wrapped)}-{val}"] = self._store.pop(val)
+
 
 class __body_unknown__:
     def __init__(self, *args, **kwargs):

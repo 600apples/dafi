@@ -16,7 +16,11 @@ __all__ = ["CallbackExecutor", "ClassCallbackExecutor", "FetcherExecutor", "Clas
 
 
 def c__call__(self, *args, **kwargs) -> RemoteResult:
-    return self.wrapped(*args, **kwargs)
+    """Execute callback"""
+    if hasattr((executable := self.wrapped), "origin_method"):
+        # In case method is used by fetcher and callback
+        executable = executable.origin_method
+    return executable(*args, **kwargs)
 
 
 @property
@@ -193,7 +197,13 @@ def alias(self, val):
     Assign new origin_name value to executor.
     As namedtuple is immutable we need to replace current instance and update LOCAL_FETCHER_MAPPING reference.
     """
-    raise GlobalContextError("Not possible to modify alias after fetcher is created.")
+    for k, v in LOCAL_FETCHER_MAPPING.items():
+        if v is self:
+            break
+    else:
+        raise GlobalContextError(f"Instance of fetcher not found.")
+    LOCAL_FETCHER_MAPPING[val] = self._replace(origin_name_=val)
+    del LOCAL_FETCHER_MAPPING[k]
 
 
 class FetcherExecutor(NamedTuple):

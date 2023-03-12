@@ -44,6 +44,8 @@ class Controller(ComponentsBase):
     async def on_stop(self) -> NoReturn:
         await super().on_stop()
         self.logger.debug("On stop event triggered")
+        # Notify all nodes that controller has been terminated.
+        await self.operations.on_controller_stopped(self.process_name)
 
         async with create_task_group() as sg:
             with move_on_after(2):

@@ -51,13 +51,8 @@ class Node(ComponentsBase):
         self.logger.debug(f"On stop event triggered ({self.process_name})")
 
         await self.scheduler.on_scheduler_stop()
-        for msg_uuid, ares in AsyncResult._awaited_results.items():
-            if isinstance(ares, AsyncResult):
-                AsyncResult._awaited_results[msg_uuid] = RemoteError(
-                    info="Lost connection to Controller.",
-                    _awaited_error_type=RemoteStoppedUnexpectedly,
-                )
-                ares._set()
+        self.operations.on_remote_error()
+
         if self.channel:
             await self.channel.clear_queue()
             await self.channel.stop()
@@ -73,13 +68,7 @@ class Node(ComponentsBase):
     def on_error(self) -> NoReturn:
         if channel := getattr(self, "channel", None):
             channel.freeze(10)
-        for msg_uuid, ares in AsyncResult._awaited_results.items():
-            if isinstance(ares, AsyncResult):
-                AsyncResult._awaited_results[msg_uuid] = RemoteError(
-                    info="Lost connection to Controller.",
-                    _awaited_error_type=RemoteStoppedUnexpectedly,
-                )
-                ares._set()
+        self.operations.on_remote_error()
 
     # ------------------------------------------------------------------------------------------------------------------
     # Message operations
@@ -150,6 +139,9 @@ class Node(ComponentsBase):
 
             elif msg.flag == MessageFlag.STREAM_THROTTLE:
                 await self.operations.on_stream_throttle(msg)
+
+            elif msg.flag == MessageFlag.CONTROLLER_STOPPED_UNEXPECTEDLY:
+                self.operations.on_remote_error()
 
     def send_threadsave(self, msg: RpcMessage, eta: Union[int, float]):
         """Send message outside of node executor scope."""

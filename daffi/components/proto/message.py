@@ -32,6 +32,7 @@ class MessageFlag:
     STREAM_ERROR = 13
     STREAM_THROTTLE = 14
     RECEIVER_ERROR = 15
+    CONTROLLER_STOPPED_UNEXPECTEDLY = 16
 
 
 class Message(ABC):

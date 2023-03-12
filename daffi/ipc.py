@@ -105,23 +105,17 @@ class Ipc(Thread):
         assert func_name is not None
         data = search_remote_callback_in_mapping(self.node.node_callback_mapping, func_name, exclude=self.process_name)
         if not data:
-            if self.node.node_callback_mapping.get(self.process_name, {}).get(func_name):
-                GlobalContextError(
-                    f"function {func_name} not found on remote processes but found locally."
-                    f" Communication between local node and the controller is prohibited."
-                    f" You can always call the callback locally via regular python syntax as usual function."
-                ).fire()
-            else:
-                # Get all callbacks without local
-                available_callbacks = pretty_callbacks(
-                    mapping=self.node.node_callback_mapping, exclude_proc=self.process_name, format="string"
-                )
-                GlobalContextError(
-                    f"function {func_name!r} not found on remote.\n"
-                    + f"Available registered callbacks:\n {available_callbacks}"
-                    if available_callbacks
-                    else ""
-                ).fire()
+            # Get all callbacks without local
+            available_callbacks = pretty_callbacks(
+                mapping=self.node.node_callback_mapping, exclude_proc=self.process_name, format="string"
+            )
+            msg = (
+                f"function {func_name!r} not found on remote.\n Available registered callbacks:\n"
+                + f"{available_callbacks}"
+                if available_callbacks
+                else "No available callbacks found on remotes"
+            )
+            GlobalContextError(msg).fire()
 
         if stream:
             # Stream has special initialization and validation process.

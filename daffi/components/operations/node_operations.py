@@ -11,7 +11,7 @@ from anyio._backends._asyncio import TaskGroup
 from anyio.abc import TaskStatus, CancelScope
 from grpc.aio._call import AioRpcError
 
-from daffi.async_result import AsyncResult
+from daffi.async_result import ResultInf
 from daffi.utils.custom_types import GlobalCallback, K
 from daffi.components.proto.message import RpcMessage, ServiceMessage, MessageFlag, RemoteError, messager_pb2, Message
 
@@ -22,7 +22,7 @@ from daffi.settings import (
     LOCAL_CALLBACK_MAPPING,
 )
 from daffi.components.operations.channel_store import ChannelPipe
-from daffi.exceptions import StopComponentError, GlobalContextError
+from daffi.exceptions import StopComponentError, GlobalContextError, RemoteStoppedUnexpectedly
 from daffi.components.operations.streams_store import StreamPairStore
 
 import tblib.pickling_support
@@ -116,7 +116,7 @@ class NodeOperations:
         msg.loads()
         error = msg.error
         if msg.return_result:
-            ares = AsyncResult._awaited_results.get(msg.uuid)
+            ares = ResultInf._awaited_results.get(msg.uuid)
             if not ares and not error:
                 self.logger.warning(f"Result {msg.uuid} was deleted by timeout")
             elif not ares and error:
@@ -141,7 +141,7 @@ class NodeOperations:
 
     async def on_scheduler_accept(self, msg: RpcMessage, process_name: str):
         transmitter = msg.transmitter
-        if ares := AsyncResult._awaited_results.get(msg.uuid):
+        if ares := ResultInf._awaited_results.get(msg.uuid):
             ares._set_and_trigger(msg.uuid, transmitter)
         else:
             self.logger.error(
@@ -151,7 +151,7 @@ class NodeOperations:
     async def on_unable_to_find(self, msg: RpcMessage):
         msg.loads()
         if msg.return_result:
-            if ares := AsyncResult._awaited_results.get(msg.uuid):
+            if ares := ResultInf._awaited_results.get(msg.uuid):
                 ares._set_and_trigger(msg.uuid, msg.error, completed=True)
         else:
             self.logger.error(msg.error.info)
@@ -183,7 +183,7 @@ class NodeOperations:
     async def on_stream_error(self, msg: RpcMessage):
         msg.loads()
         error = msg.error
-        ares = AsyncResult._awaited_results.get(msg.uuid)
+        ares = ResultInf._awaited_results.get(msg.uuid)
         if not ares:
             self.logger.warning(f"Result {msg.uuid} was taken by timeout")
         elif not ares and error:
@@ -202,6 +202,14 @@ class NodeOperations:
         stream_pair_group = self.stream_store.stream_pair_group_store.get(str(msg.uuid))
         if stream_pair_group:
             stream_pair_group.throttle_time = msg.data
+
+    def on_remote_error(self):
+        err = RemoteError(
+            info="Lost connection to Controller.",
+            _awaited_error_type=RemoteStoppedUnexpectedly,
+        )
+        for msg_uuid, ares in ResultInf._awaited_results.items():
+            ResultInf._set_and_trigger(msg_uuid, err, competed=True)
 
     async def _remote_func_stream_executor(
         self,
