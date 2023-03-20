@@ -6,7 +6,7 @@ from typing import (
     Optional,
 )
 from daffi.utils.custom_types import P
-from daffi.execution_modifiers import is_exec_modifier, FG, BG, BROADCAST, STREAM, PERIOD, ALL_EXEC_MODIFIERS
+from daffi.execution_modifiers import is_exec_modifier, FG, BG, BROADCAST, PERIOD, ALL_EXEC_MODIFIERS
 from daffi.registry._fetcher import Fetcher
 from daffi.decorators._base import Decorator
 from daffi.exceptions import InitializationError
@@ -39,7 +39,7 @@ class fetcher(Decorator):
 
     def __new__(
         cls,
-        exec_modifier: Union[Callable[P, Any], Union[FG, BG, BROADCAST, STREAM, PERIOD]] = None,
+        exec_modifier: Union[Callable[P, Any], Union[FG, BG, BROADCAST, PERIOD]] = None,
         proxy: Optional[bool] = None,
         **kwargs,
     ):
@@ -48,7 +48,7 @@ class fetcher(Decorator):
         return super().__new__(cls)
 
     def __init__(
-        self, exec_modifier: Optional[Union[FG, BG, BROADCAST, STREAM, PERIOD]], proxy: Optional[bool] = True, **kwargs
+        self, exec_modifier: Optional[Union[FG, BG, BROADCAST, PERIOD]], proxy: Optional[bool] = True, **kwargs
     ):
         fn = exec_modifier
         exec_modifier, proxy = kwargs.get("__options", (None, proxy))

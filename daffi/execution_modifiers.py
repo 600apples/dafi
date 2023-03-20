@@ -9,7 +9,6 @@ __all__ = [
     "BG",
     "PERIOD",
     "BROADCAST",
-    "STREAM",
     "ALL_EXEC_MODIFIERS",
     "is_exec_modifier",
     "is_exec_modifier_type",
@@ -41,12 +40,7 @@ class BROADCAST:
     return_result: Optional[bool] = False
 
 
-@dataclass
-class STREAM:
-    ...
-
-
-ALL_EXEC_MODIFIERS = (FG, BG, PERIOD, BROADCAST, STREAM)
+ALL_EXEC_MODIFIERS = (FG, BG, PERIOD, BROADCAST)
 
 
 def is_exec_modifier(candidate: Union[object, type]) -> bool:

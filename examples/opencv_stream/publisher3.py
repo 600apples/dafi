@@ -3,7 +3,9 @@ Publisher is the process that declares available remote functions
 """
 import cv2
 import logging
-from daffi import Global, callback
+from daffi import Global
+from daffi.decorators import callback
+
 
 logging.basicConfig(level=logging.INFO)
 

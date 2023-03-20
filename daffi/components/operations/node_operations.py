@@ -234,7 +234,8 @@ class NodeOperations:
                     if item is _stop_marker:
                         break
 
-                    res = remote_callback(item)
+                    _args, _kwargs = item
+                    res = remote_callback(*_args, **_kwargs)
                     if remote_callback.is_async:
                         await res
 

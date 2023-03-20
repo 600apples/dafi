@@ -98,7 +98,6 @@ class Ipc(Thread):
         return_result: Optional[bool] = True,
         func_period: Optional[Period] = None,
         broadcast: Optional[bool] = False,
-        inside_callback_context: Optional[bool] = False,
         stream: Optional[bool] = False,
     ):
         self._check_node()
@@ -119,6 +118,11 @@ class Ipc(Thread):
 
         if stream:
             # Stream has special initialization and validation process.
+            if async_:
+                # Start stream process in background without blocking main process execution.
+                stream_thread = Thread(target=self.stream, args=(func_name, args), daemon=True)
+                return stream_thread.start()
+            # Block main process execution until stream is completed.
             return self.stream(func_name, args)
 
         _, remote_callback = data
@@ -141,7 +145,6 @@ class Ipc(Thread):
             timeout=timeout or 0,
         )
         result_class = get_result_type(
-            inside_callback_context=inside_callback_context,
             is_period=bool(func_period),
             is_generator=remote_callback.is_generator,
         )
@@ -236,6 +239,8 @@ class Ipc(Thread):
         clear_method_type_stores()
 
     def stream(self, func_name, args: Tuple) -> NoReturn:
+        from daffi.registry._fetcher import Args
+
         if self.is_running:
             self._check_node()
 
@@ -268,7 +273,9 @@ class Ipc(Thread):
                     f"Stream don't work with remote callback which are generators."
                     f" Check {remote_callback.alias} to fix this issue."
                 ).fire()
-            remote_callback.validate_provided_arguments(first_item)
+
+            args, kwargs = Args._aggregate_args(args=first_item)
+            remote_callback.validate_provided_arguments(*args, **kwargs)
             stream_items = chain([first_item], stream_items)
 
             msg = RpcMessage(
@@ -294,7 +301,9 @@ class Ipc(Thread):
                     if stream_pair_group.closed:
                         stream_pair_was_closed = True
                         break
-                    for msg in ServiceMessage.build_stream_message(data=stream_item):
+                    # Convert stream item to args, kwargs
+                    args, kwargs = Args._aggregate_args(args=stream_item)
+                    for msg in ServiceMessage.build_stream_message(data=(args, kwargs)):
                         stream_pair_group.send_threadsave(msg)
             # Wait all receivers to finish stream processing.
             self.logger.debug("Stream closed. Wait for confirmation from receivers...")

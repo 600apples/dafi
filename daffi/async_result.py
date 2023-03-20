@@ -8,7 +8,7 @@ from typing import ClassVar, Optional, Union, NoReturn, Type, Any, Tuple
 from anyio import sleep
 
 from daffi.components.proto.message import RpcMessage
-from daffi.exceptions import RemoteError, TimeoutError, GlobalContextError, InitializationError
+from daffi.exceptions import RemoteError, TimeoutError, InitializationError
 from daffi.utils.custom_types import RemoteResult, SchedulerTaskType
 from daffi.store import TttStore
 
@@ -230,13 +230,8 @@ class IterableAsyncResult(AsyncResult):
 
 
 def get_result_type(
-    inside_callback_context: bool, is_period: bool, is_generator: bool
+    is_period: bool, is_generator: bool
 ) -> Type[Union[AsyncResult, SchedulerTask, IterableAsyncResult]]:
     if is_generator:
         return IterableAsyncResult
-
-    if inside_callback_context and is_period:
-        GlobalContextError(
-            "Initialization of periodic tasks from the context of a remote callback is prohibited"
-        ).fire()
     return SchedulerTask if is_period else AsyncResult

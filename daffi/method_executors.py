@@ -5,7 +5,7 @@ import daffi
 from daffi.utils.misc import Singleton
 from daffi.exceptions import GlobalContextError
 from daffi.utils.custom_types import GlobalCallback, P, RemoteResult
-from daffi.execution_modifiers import FG, BG, STREAM, BROADCAST, PERIOD
+from daffi.execution_modifiers import FG, BG, BROADCAST, PERIOD
 from daffi.settings import LOCAL_FETCHER_MAPPING, LOCAL_CALLBACK_MAPPING
 
 __all__ = ["CallbackExecutor", "ClassCallbackExecutor", "FetcherExecutor", "ClassFetcherExecutor"]
@@ -132,15 +132,21 @@ class ClassCallbackExecutor(NamedTuple):
 
 def f__call__(self, *args, **kwargs) -> RemoteResult:
     """Trigger executor with assigned execution modifier."""
+    # Get remote call by name
     remote_call = getattr(_g().call, self.alias)
-    remote_call._set_fetcher_params(is_async=self.is_async, fetcher=self.wrapped, proxy=self.proxy)
+    # Set fetcher
+    remote_call._fetcher = self
+    # Execute remote call
     return (remote_call & self.exec_modifier)(*args, **kwargs)
 
 
-def call(self, *args, exec_modifier: Union[FG, BG, BROADCAST, STREAM, PERIOD] = None, **kwargs):
+def call(self, *args, exec_modifier: Union[FG, BG, BROADCAST, PERIOD] = None, **kwargs):
     """Trigger executor with execution modifier provided in arguments."""
+    # Get remote call by name
     remote_call = getattr(_g().call, self.alias)
-    remote_call._set_fetcher_params(is_async=self.is_async, fetcher=self.wrapped, proxy=self.proxy)
+    # Set fetcher
+    remote_call._fetcher = self
+    # Execute remote call
     return (remote_call & exec_modifier)(*args, **kwargs)
 
 
@@ -210,11 +216,12 @@ class FetcherExecutor(NamedTuple):
     # Immutable attributes
     wrapped: GlobalCallback
     is_async: bool
+    is_generator: bool
 
     # Mutable attributes (can be re-assigned via setter)
     origin_name_: str
     proxy_: bool
-    exec_modifier_: Union[FG, BG, BROADCAST, STREAM, PERIOD]
+    exec_modifier_: Union[FG, BG, BROADCAST, PERIOD]
 
     __call__ = f__call__
     call = call
@@ -229,11 +236,12 @@ class ClassFetcherExecutor(NamedTuple):
     origin_method: GlobalCallback
     is_async: bool
     is_static: bool
+    is_generator: bool
 
     # Mutable attributes (can be re-assigned via setter)
     origin_name_: str
     proxy_: bool
-    exec_modifier_: Union[FG, BG, BROADCAST, STREAM, PERIOD]
+    exec_modifier_: Union[FG, BG, BROADCAST, PERIOD]
 
     __call__ = f__call__
     call = call

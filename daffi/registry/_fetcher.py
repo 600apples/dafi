@@ -1,4 +1,4 @@
-from inspect import iscoroutinefunction, isasyncgenfunction
+from inspect import iscoroutinefunction, isasyncgenfunction, isgeneratorfunction
 from typing import Callable, Any, Union, Type, Optional, ClassVar, Tuple, Dict
 from daffi.registry._base import BaseRegistry
 from daffi.method_executors import FetcherExecutor, ClassFetcherExecutor
@@ -11,8 +11,7 @@ from daffi.utils.custom_types import P
 from daffi.exceptions import InitializationError
 from daffi.utils.misc import is_lambda_function
 from daffi.settings import LOCAL_FETCHER_MAPPING
-
-from daffi.execution_modifiers import FG, BG, BROADCAST, STREAM, PERIOD
+from daffi.execution_modifiers import FG, BG, BROADCAST, PERIOD
 
 
 __all__ = ["Fetcher", "Args"]
@@ -21,7 +20,7 @@ __all__ = ["Fetcher", "Args"]
 class Fetcher(BaseRegistry):
 
     # Default execution modifier for all Fetcher's methods
-    exec_modifier: ClassVar[Union[FG, BG, BROADCAST, STREAM, PERIOD]] = FG
+    exec_modifier: ClassVar[Union[FG, BG, BROADCAST, PERIOD]] = FG
     # Proxy flag indicates whether method body is used as source for remote args/kwargs.
     # If proxy=True then method works as proxy (without body execution).
     # IOW when proxy=True all provided arguments will be passed to remote callback as is.
@@ -38,6 +37,8 @@ class Fetcher(BaseRegistry):
             instance_or_type: class type or class instance. This argument depends on `auto_init` value of base class
                 if `auto_init` == True then class instance will be instantiated implicitly.
         """
+        from daffi.registry._callback import Callback
+
         # Iterate over all methods of class.
         for method in get_class_methods(cls):
             _, name = func_info(method)
@@ -53,6 +54,15 @@ class Fetcher(BaseRegistry):
             #           are not bounded to specific instance
             #    2. Instance of class is instantiated (`auto_init` == True). In this case all public methods
             #           become remote callbacks.
+            if isasyncgenfunction(method):
+                InitializationError(f"Method {method} has wrong type. Async generators are not supported yet.").fire()
+
+            # Ignore that method is generator if class inherited from Callback.
+            # Callback execution take precedence over Fetcher
+            # and both of them cannot be generators.
+            # IOW generators are using to initialize streams. Stream can be `to remote or `from remote`
+            # but not `bidirectional`
+            is_generator = isgeneratorfunction(method) and not Callback in cls.__daffi_mro__
             is_static_or_class_method = is_class_or_static_method(cls, name)
             if not isinstance(instance_or_type, type):
                 klass = instance_or_type
@@ -64,8 +74,11 @@ class Fetcher(BaseRegistry):
                 origin_method=getattr(klass, name) if klass else None,
                 is_async=iscoroutinefunction(method),
                 is_static=str(is_static_or_class_method) == "static",
-                proxy_=cls.proxy,
+                # Disable proxy for method implicitly. To initialize stream fetcher
+                # should have one or more yield statements and fetcher's body should be used to process this stream
+                proxy_=False if is_generator else cls.proxy,
                 exec_modifier_=cls.exec_modifier,
+                is_generator=is_generator,
             )
             LOCAL_FETCHER_MAPPING[f"{cls.__name__}-{name}"] = cb
         return instance_or_type
@@ -76,20 +89,18 @@ class Fetcher(BaseRegistry):
         fn: Callable[..., Any],
         fn_name: Optional[str] = None,
         proxy: Optional[bool] = True,
-        exec_modifier: Union[FG, BG, BROADCAST, STREAM, PERIOD] = FG,
+        exec_modifier: Union[FG, BG, BROADCAST, PERIOD] = FG,
     ) -> FetcherExecutor:
         """Register one function as remote fetcher (This method is used in `fetcher` decorator)."""
         from daffi.decorators import callback
 
-        is_async = False
+        is_async = is_generator = False
 
-        if isasyncgenfunction(fn):
-            InitializationError(f"Async generators are not supported yet.").fire()
-
-        elif isinstance(fn, callback):
+        if isinstance(fn, callback):
             proxy = True
             is_async = fn._fn.is_async
             fn = fn._fn.wrapped
+            is_generator = False
 
         elif isinstance(fn, type):
             # Class wrapped
@@ -103,9 +114,13 @@ class Fetcher(BaseRegistry):
             if is_lambda_function(fn):
                 InitializationError("Lambdas are not supported.").fire()
             is_async = iscoroutinefunction(fn)
+            is_generator = isgeneratorfunction(fn)
 
         else:
             InitializationError(f"Type {type(fn)} is not supported.")
+
+        if isasyncgenfunction(fn):
+            InitializationError(f"Function {fn} has wrong type. Async generators are not supported yet.").fire()
 
         if fn_name:
             name = fn_name
@@ -113,7 +128,14 @@ class Fetcher(BaseRegistry):
             _, name = func_info(fn)
 
         _fn = FetcherExecutor(
-            wrapped=fn, origin_name_=name, is_async=is_async, proxy_=proxy, exec_modifier_=exec_modifier
+            wrapped=fn,
+            origin_name_=name,
+            is_async=is_async,
+            # Disable proxy for function implicitly. To initialize stream fetcher
+            # should have one or more yield statements and fetcher's body should be used to process this stream
+            proxy_=False if is_generator else cls.proxy,
+            exec_modifier_=exec_modifier,
+            is_generator=is_generator,
         )
         LOCAL_FETCHER_MAPPING[f"{id(fn)}-{name}"] = _fn
         return _fn

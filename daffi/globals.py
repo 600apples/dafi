@@ -56,8 +56,6 @@ class Global(metaclass=Singleton):
     unix_sock_path: Optional[os.PathLike] = None
     on_connect: Optional[Callable[..., Any]] = None
 
-    _inside_callback_context: Optional[bool] = field(repr=False, default=False)
-
     def __post_init__(self):
         self.process_name = str(self.process_name)
 
@@ -114,7 +112,6 @@ class Global(metaclass=Singleton):
         return LazyRemoteCall(
             _ipc=self.ipc,
             _global_terminate_event=self._global_terminate_event,
-            _inside_callback_context=self._inside_callback_context,
         )
 
     @property
@@ -184,8 +181,6 @@ class Global(metaclass=Singleton):
             g = Global()
             g.transfer_and_call("node_name", get_remote_pid)
         """
-        if self._inside_callback_context:
-            return self.ipc.async_transfer_and_call(remote_process, func, *args, **kwargs)
         return self.ipc.transfer_and_call(remote_process, func, *args, **kwargs)
 
     def wait_function(self, func_name: str) -> NoReturn:

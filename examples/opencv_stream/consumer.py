@@ -4,7 +4,8 @@ Consumer is the process that consumes available remote functions.
 import asyncio
 import logging
 import cv2
-from daffi import Global, STREAM, fetcher
+from daffi import Global
+from daffi.decorators import fetcher
 
 logging.basicConfig(level=logging.INFO)
 
@@ -12,7 +13,7 @@ logging.basicConfig(level=logging.INFO)
 cap = cv2.VideoCapture(0)
 
 
-@fetcher(STREAM, args_from_body=True)
+@fetcher
 def show_stream():
     ret, frame = cap.read()
     while ret:
