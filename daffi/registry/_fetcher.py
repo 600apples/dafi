@@ -1,6 +1,6 @@
-from inspect import iscoroutinefunction, isasyncgenfunction, isgeneratorfunction
 from typing import Callable, Any, Union, Type, Optional, ClassVar, Tuple, Dict
-from daffi.registry._base import BaseRegistry
+from inspect import iscoroutinefunction, isasyncgenfunction, isgeneratorfunction
+from daffi.registry._base import BaseRegistry, logger
 from daffi.method_executors import FetcherExecutor, ClassFetcherExecutor
 from daffi.utils.func_validation import (
     get_class_methods,
@@ -9,7 +9,7 @@ from daffi.utils.func_validation import (
 )
 from daffi.utils.custom_types import P
 from daffi.exceptions import InitializationError
-from daffi.utils.misc import is_lambda_function
+from daffi.utils.misc import is_lambda_function, contains_explicit_return
 from daffi.settings import LOCAL_FETCHER_MAPPING
 from daffi.execution_modifiers import FG, BG, BROADCAST, PERIOD
 
@@ -21,10 +21,6 @@ class Fetcher(BaseRegistry):
 
     # Default execution modifier for all Fetcher's methods
     exec_modifier: ClassVar[Union[FG, BG, BROADCAST, PERIOD]] = FG
-    # Proxy flag indicates whether method body is used as source for remote args/kwargs.
-    # If proxy=True then method works as proxy (without body execution).
-    # IOW when proxy=True all provided arguments will be passed to remote callback as is.
-    proxy: ClassVar[bool] = True
 
     def __getattribute__(self, item):
         return LOCAL_FETCHER_MAPPING.get(f"{id(self)}-{item}", super().__getattribute__(item))
@@ -62,7 +58,12 @@ class Fetcher(BaseRegistry):
             # and both of them cannot be generators.
             # IOW generators are using to initialize streams. Stream can be `to remote or `from remote`
             # but not `bidirectional`
-            is_generator = isgeneratorfunction(method) and not Callback in cls.__daffi_mro__
+            has_callback_parent = Callback in cls.__daffi_mro__
+            is_generator = isgeneratorfunction(method) and not has_callback_parent
+            # Disable proxy for method implicitly. To initialize stream fetcher
+            # should have one or more yield statements and fetcher's body should be used to process this stream
+            is_proxy = True if has_callback_parent else not contains_explicit_return(method)
+
             is_static_or_class_method = is_class_or_static_method(cls, name)
             if not isinstance(instance_or_type, type):
                 klass = instance_or_type
@@ -74,13 +75,16 @@ class Fetcher(BaseRegistry):
                 origin_method=getattr(klass, name) if klass else None,
                 is_async=iscoroutinefunction(method),
                 is_static=str(is_static_or_class_method) == "static",
-                # Disable proxy for method implicitly. To initialize stream fetcher
-                # should have one or more yield statements and fetcher's body should be used to process this stream
-                proxy_=False if is_generator else cls.proxy,
+                # Proxy flag indicates whether method body is used as source for remote args/kwargs.
+                # If proxy=True then method works as proxy (without body execution).
+                # IOW when proxy=True all provided arguments will be passed to remote callback as is.
+                proxy_=is_proxy,
                 exec_modifier_=cls.exec_modifier,
                 is_generator=is_generator,
             )
             LOCAL_FETCHER_MAPPING[f"{cls.__name__}-{name}"] = cb
+            logger.info(f"fetcher {name!r} is registered. (proxy={is_proxy})")
+
         return instance_or_type
 
     @classmethod
@@ -88,19 +92,20 @@ class Fetcher(BaseRegistry):
         cls,
         fn: Callable[..., Any],
         fn_name: Optional[str] = None,
-        proxy: Optional[bool] = True,
         exec_modifier: Union[FG, BG, BROADCAST, PERIOD] = FG,
     ) -> FetcherExecutor:
         """Register one function as remote fetcher (This method is used in `fetcher` decorator)."""
         from daffi.decorators import callback
 
-        is_async = is_generator = False
+        is_async = is_generator = is_proxy = False
 
         if isinstance(fn, callback):
-            proxy = True
             is_async = fn._fn.is_async
             fn = fn._fn.wrapped
             is_generator = False
+            # Enable proxy forcibly if function is used as fetcher and callback at once.
+            # In this case function's body is used only by callback part
+            is_proxy = True
 
         elif isinstance(fn, type):
             # Class wrapped
@@ -115,6 +120,9 @@ class Fetcher(BaseRegistry):
                 InitializationError("Lambdas are not supported.").fire()
             is_async = iscoroutinefunction(fn)
             is_generator = isgeneratorfunction(fn)
+            # Disable proxy for function implicitly. To initialize stream fetcher
+            # should have one or more yield statements and fetcher's body should be used to process this stream
+            is_proxy = False if is_generator else not contains_explicit_return(fn)
 
         else:
             InitializationError(f"Type {type(fn)} is not supported.")
@@ -131,13 +139,15 @@ class Fetcher(BaseRegistry):
             wrapped=fn,
             origin_name_=name,
             is_async=is_async,
-            # Disable proxy for function implicitly. To initialize stream fetcher
-            # should have one or more yield statements and fetcher's body should be used to process this stream
-            proxy_=False if is_generator else cls.proxy,
+            # Proxy flag indicates whether method body is used as source for remote args/kwargs.
+            # If proxy=True then method works as proxy (without body execution).
+            # IOW when proxy=True all provided arguments will be passed to remote callback as is.
+            proxy_=is_proxy,
             exec_modifier_=exec_modifier,
             is_generator=is_generator,
         )
         LOCAL_FETCHER_MAPPING[f"{id(fn)}-{name}"] = _fn
+        logger.info(f"fetcher {name!r} is registered. (proxy={is_proxy})")
         return _fn
 
     @staticmethod

@@ -40,25 +40,20 @@ class fetcher(Decorator):
     def __new__(
         cls,
         exec_modifier: Union[Callable[P, Any], Union[FG, BG, BROADCAST, PERIOD]] = None,
-        proxy: Optional[bool] = None,
         **kwargs,
     ):
-        if is_exec_modifier(exec_modifier) or proxy is not None:
-            return partial(cls, __options=(exec_modifier, proxy))
+        if is_exec_modifier(exec_modifier):
+            return partial(cls, __options=(exec_modifier,))
         return super().__new__(cls)
 
-    def __init__(
-        self, exec_modifier: Optional[Union[FG, BG, BROADCAST, PERIOD]], proxy: Optional[bool] = True, **kwargs
-    ):
+    def __init__(self, exec_modifier: Optional[Union[FG, BG, BROADCAST, PERIOD]], **kwargs):
         fn = exec_modifier
-        exec_modifier, proxy = kwargs.get("__options", (None, proxy))
-        if proxy is None:
-            proxy = True
+        exec_modifier = kwargs.get("__options", (None,))[0]
         exec_modifier = exec_modifier or FG
         # First argument has name exec_modifier for compatibility between two types of decorator execution
         # @fetcher and @fetcher(exec_modifier=BG) but in fact `exec_modifier` here is always callable.
         alias = Fetcher._get_alias(self, fn)
-        self._fn = Fetcher._init_function(fn=fn, proxy=proxy, exec_modifier=exec_modifier, fn_name=alias)
+        self._fn = Fetcher._init_function(fn=fn, exec_modifier=exec_modifier, fn_name=alias)
 
     @property
     def exec_modifier(self):

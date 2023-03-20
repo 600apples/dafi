@@ -8,6 +8,7 @@ from random import choice
 from functools import partial
 from datetime import datetime
 from queue import Queue
+from inspect import getsourcelines
 from contextlib import contextmanager
 from collections.abc import Iterable
 from typing import (
@@ -250,3 +251,9 @@ def search_remote_callback_in_mapping(
         return choice(found)
     except IndexError:
         ...
+
+
+def contains_explicit_return(fn: Callable[..., Any]) -> bool:
+    """Return true if provided function has `return` statement (even in nested functions)"""
+    lines, _ = getsourcelines(fn)
+    return any("return" in line for line in lines)  # might give false positives, use regex for better checks

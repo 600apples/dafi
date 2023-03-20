@@ -33,9 +33,7 @@ class callback(Decorator):
             >>> def my_func(arg1, arg2, argN): ...
         """
         if isinstance(fn, fetcher):
-            # If callback and fetcher wraps the same function then fetcher's `proxy` property must be always True.
-            # It is requirement since function body belongs to `callback` in this case.
-            return fetcher(cls(fn.wrapped), __options=(fn.exec_modifier, True))
+            return fetcher(cls(fn.wrapped), __options=(fn.exec_modifier,))
         else:
             # Regular `callback` provisioning.
             return super().__new__(cls)

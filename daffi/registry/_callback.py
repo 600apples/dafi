@@ -64,7 +64,9 @@ class Callback(BaseRegistry):
             name_in_mapping = name in LOCAL_CALLBACK_MAPPING
             LOCAL_CALLBACK_MAPPING[name] = cb
             if not name_in_mapping:
-                logger.info(f"{name!r} registered" + ("" if klass else f" (required {cls.__name__} initialization)"))
+                logger.info(
+                    f"callback {name!r} is registered" + ("" if klass else f" (required {cls.__name__} initialization)")
+                )
 
             _updated = True
 
@@ -100,7 +102,7 @@ class Callback(BaseRegistry):
         )
         LOCAL_CALLBACK_MAPPING[name] = _fn
         if name not in WELL_KNOWN_CALLBACKS:
-            logger.info(f"{name!r} registered")
+            logger.info(f"callback {name!r} is registered")
 
         cls._update_callbacks()
         return _fn
