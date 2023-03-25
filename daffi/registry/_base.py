@@ -59,6 +59,11 @@ class BaseRegistry(metaclass=RegistryMeta):
     __slots__ = "__dict__"
     __doc__ = ""  # Null out the Representation docstring
 
+    def __str__(self):
+        return f"{self.__class__.__name__}<{', '.join([cl.__name__ for cl in getattr(self, '__daffi_mro__', [])])}>"
+
+    __repr__ = __str__
+
     _ipc: ClassVar[Ipc] = None
 
     def __init__(self):

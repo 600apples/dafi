@@ -39,9 +39,13 @@ class Fetcher(BaseRegistry):
         for method in get_class_methods(cls):
             _, name = func_info(method)
 
-            if name.startswith("_"):
-                # Ignore methods which starts with `_`.
+            if name.startswith("_") or hasattr(method, "local"):
+                # Ignore methods which starts with `_` and methods decorated with `local` decorator.
                 continue
+
+            if not hasattr(cls, name):
+                # If method has alias then add this method to class initialization by alias
+                setattr(cls, name, method)
 
             # Check if method is static or classmethod.
             # Remote fetcher is ready to use in 2 cases:
@@ -53,16 +57,27 @@ class Fetcher(BaseRegistry):
             if isasyncgenfunction(method):
                 InitializationError(f"Method {method} has wrong type. Async generators are not supported yet.").fire()
 
-            # Ignore that method is generator if class inherited from Callback.
-            # Callback execution take precedence over Fetcher
-            # and both of them cannot be generators.
-            # IOW generators are using to initialize streams. Stream can be `to remote or `from remote`
-            # but not `bidirectional`
             has_callback_parent = Callback in cls.__daffi_mro__
             is_generator = isgeneratorfunction(method) and not has_callback_parent
-            # Disable proxy for method implicitly. To initialize stream fetcher
-            # should have one or more yield statements and fetcher's body should be used to process this stream
-            is_proxy = True if has_callback_parent else not contains_explicit_return(method)
+
+            if has_callback_parent:
+                # If method is shared as callback and fetcher at once then for fetcher `proxy` must be True hence
+                # method's body is used by callback.
+                is_proxy = True
+            elif is_generator:
+                # Ignore that method is generator if class inherited from Callback.
+                # Callback execution take precedence over Fetcher
+                # and both of them cannot be generators.
+                # IOW generators are using to initialize streams. Stream can be `to remote or `from remote`
+                # but not `bidirectional`
+                #
+                # Disable proxy for method implicitly. To initialize stream fetcher
+                # should have one or more yield statements and fetcher's body should be used to process this stream
+                is_proxy = False
+            else:
+                # Infer if method is proxy based on method's body. If method contains `return` statement then
+                # proxy must be False
+                is_proxy = not contains_explicit_return(method)
 
             is_static_or_class_method = is_class_or_static_method(cls, name)
             if not isinstance(instance_or_type, type):

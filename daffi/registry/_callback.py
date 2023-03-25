@@ -37,9 +37,13 @@ class Callback(BaseRegistry):
         for method in get_class_methods(cls):
             _, name = func_info(method)
 
-            if name.startswith("_"):
-                # Ignore methods which starts with `_`.
+            if name.startswith("_") or hasattr(method, "local"):
+                # Ignore methods which starts with `_` and methods decorated with `local` decorator.
                 continue
+
+            if not hasattr(cls, name):
+                # If method has alias then add this method to class initialization by alias
+                setattr(cls, name, method)
 
             # Check if method is static or classmethod.
             # Remote callback is ready to use in 2 cases:

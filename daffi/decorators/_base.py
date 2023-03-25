@@ -20,6 +20,11 @@ class Decorator(Generic[GlobalCallback]):
     __call__: GlobalCallback
     __getattr__: Union[RemoteResult, Any]
 
+    def __str__(self):
+        return f"{self.alias}<{self.__class__.__name__.capitalize()}>"
+
+    __repr__ = __str__
+
     def __call__(self, *args, **kwargs) -> object:
         return self._fn(*args, **kwargs)
 

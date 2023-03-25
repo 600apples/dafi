@@ -1,6 +1,7 @@
 import os
 import logging
-from daffi import Global, FG
+from daffi import Global
+from daffi.decorators import fetcher, __body_unknown__
 
 from flask import (
     Flask,
@@ -18,6 +19,13 @@ DAFI_PROCESS_NAME = "web"
 DAFI_HOST = os.environ["DAFI_HOST"]
 DAFI_PORT = os.environ["DAFI_PORT"]
 DAFI_INIT_CONTROLLER = DAFI_HOST == DAFI_PROCESS_NAME
+
+
+@fetcher
+def colorize(title, content):
+    """Fetcher proxy to `colorizer`"""
+    __body_unknown__(title, content)
+
 
 g = Global(
     process_name=DAFI_PROCESS_NAME,
@@ -45,7 +53,8 @@ def index():
         else:
 
             logger.warning(f"Calling a remote callback to take message color...")
-            color = g.call.colorize(title=title, content=content) & FG
+            # Get color from `colorizer` process
+            color = colorize(title=title, content=content)
             logger.warning(f"Received {color!r} color from remote callback")
 
             messages.append({"title": title, "content": content, "color": color})
