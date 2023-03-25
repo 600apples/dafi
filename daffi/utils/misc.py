@@ -273,21 +273,7 @@ def walk_special(node):
 
 
 def contains_explicit_return(fn: Callable[..., Any]) -> bool:
-    """Return true if provided function has `return` statement (even in nested functions)"""
-    source = inspect.getsource(fn)
-    try:
-        parsed = ast.parse(source)
-    except IndentationError:
-        return contain_explicit_return_from_source_code(fn)
-
-    for node in walk_special(parsed):
-        if isinstance(node, ast.Return):
-            return True
-    return False
-
-
-def contain_explicit_return_from_source_code(fn: Callable[..., Any]) -> bool:
     """Return true if provided function has `return` statement based on source code (even in nested functions)"""
     source = inspect.getsource(fn)
     source = re.sub(f"{fn.__name__}\((.*)\)", "", source.replace(inspect.getdoc(fn) or "", ""))
-    return "return" in source
+    return any(exp == "return" for exp in source.split())

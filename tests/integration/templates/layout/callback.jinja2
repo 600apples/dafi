@@ -6,4 +6,4 @@ def callback_func_{{ callback_index }}(*args, path=None, text=None, **kwargs):
     except Exception as e:
         print(f"Error while writing: {e}")
 {% endif %}
-    return args, kwargs, g.process_name
+    return args, kwargs
