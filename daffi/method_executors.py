@@ -146,7 +146,7 @@ def f__call__(self, *args, **kwargs) -> RemoteResult:
     return (remote_call & self.exec_modifier)(*args, **kwargs)
 
 
-def call(self, *args, exec_modifier: Union[FG, BG, BROADCAST, PERIOD] = None, **kwargs):
+def call(self, *args, exec_modifier: Union[FG, BG, BROADCAST, PERIOD] = FG, **kwargs):
     """Trigger executor with execution modifier provided in arguments."""
     # Get remote call by name
     remote_call = getattr(_g().call, self.alias)

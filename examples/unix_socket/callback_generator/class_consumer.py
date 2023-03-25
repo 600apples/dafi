@@ -3,7 +3,7 @@ Consumer is the process that consumes available remote functions.
 """
 import asyncio
 import logging
-from daffi import Global
+from daffi import Global, BG
 from daffi.registry import Fetcher
 
 logging.basicConfig(level=logging.INFO)
@@ -23,6 +23,13 @@ async def main():
         g.wait_function("iterate_items")
 
         items = Items()
+
+        print("Iterate in background mode")
+        res = items.iterate_items.call(exec_modifier=BG)
+        for item in res:
+            print(item)
+
+        print("Iterate in foreground mode")
         for item in items.iterate_items():
             print(item)
 

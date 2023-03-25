@@ -5,5 +5,5 @@
 def get_process_name{{ callback_index }}(path = None):
     if path:
         with open(path, "a") as f: f.write(f"{get_g().process_name}\n")
-    return g.process_name
+    return get_g().process_name
 {% endblock %}

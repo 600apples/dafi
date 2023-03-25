@@ -6,8 +6,7 @@ def test_callback():
     print("test callback triggered")
 
 
-@callback
-class MyClass:
+class MyClass(Callback):
 
     def func1(self):
         print("func1 triggered")
@@ -17,6 +16,4 @@ class MyClass:
         time.sleep(2)
         print(f"calculated result = {a + b}")
 
-
-my_class_instance = MyClass()
 {% endblock %}

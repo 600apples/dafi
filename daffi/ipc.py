@@ -152,6 +152,7 @@ class Ipc(Thread):
         if return_result or func_period:
             result = result_class(msg=msg)
         if result:
+            result._timeout = timeout
             result._register()
 
         if wait_in_task_waiter:

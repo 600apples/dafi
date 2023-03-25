@@ -63,6 +63,7 @@ class AsyncResult(ResultInf):
 
     msg: RpcMessage
     result: Optional[RemoteResult] = None
+    _timeout: Optional[Union[int, float]] = None
 
     def __post_init__(self):
         super().__init__()
@@ -70,6 +71,8 @@ class AsyncResult(ResultInf):
 
     def __str__(self):
         return f"{self.__class__.__name__} (func_name={self.func_name}, uuid={self.uuid})"
+
+    __repr__ = __str__
 
     def __hash__(self):
         return hash(f"{self.func_name}{self.uuid}")
@@ -103,6 +106,9 @@ class AsyncResult(ResultInf):
             return res
 
     def get(self, timeout: Union[int, float] = None) -> RemoteResult:
+        # `timeout` from arguments take precedence over class attribute `_timeout`
+        timeout = timeout or self._timeout
+
         if self.result is None:
             self._ready.wait(timeout=timeout)
             self.result = self._awaited_results.pop(self.uuid)
@@ -116,6 +122,9 @@ class AsyncResult(ResultInf):
         return self.result
 
     async def get_async(self, timeout: Union[int, float] = None) -> RemoteResult:
+        # `timeout` from arguments take precedence over class attribute `_timeout`
+        timeout = timeout or self._timeout
+
         if self.result is None:
             if timeout is not None:
                 timeout = time.time() + timeout
@@ -147,7 +156,7 @@ class AsyncResult(ResultInf):
         return self
 
     def _clone_and_register(self):
-        result_copy = self.__class__(msg=self.msg)
+        result_copy = self.__class__(msg=self.msg, _timeout=self._timeout)
         result_copy._register()
         return result_copy
 
@@ -182,6 +191,10 @@ class IterableAsyncResult(AsyncResult):
     def __post_init__(self):
         self._queue = Queue()
 
+    def __iter__(self):
+        """Iterate over result items."""
+        yield from self.get()
+
     @property
     def ready(self):
         raise NotImplementedError()
@@ -191,6 +204,9 @@ class IterableAsyncResult(AsyncResult):
         raise NotImplementedError()
 
     def get(self, timeout: Union[int, float] = None) -> RemoteResult:
+        # `timeout` from arguments take precedence over class attribute `_timeout`
+        timeout = timeout or self._timeout
+
         if self.result:
             InitializationError("Generator has already been used").fire()
 
