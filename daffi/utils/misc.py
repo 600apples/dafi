@@ -1,14 +1,17 @@
 """
 A library of various helpers functions and classes
 """
+import re
+import ast
 import types
+import inspect
 import asyncio
 from uuid import uuid4
 from random import choice
 from functools import partial
 from datetime import datetime
+from collections import deque
 from queue import Queue
-from inspect import getsourcelines
 from contextlib import contextmanager
 from collections.abc import Iterable
 from typing import (
@@ -253,7 +256,38 @@ def search_remote_callback_in_mapping(
         ...
 
 
+def walk_special(node):
+
+    todo = deque([node])
+    top_level_node = node
+    while todo:
+        node = todo.popleft()
+
+        # Added this conditional
+        if isinstance(node, ast.FunctionDef):
+            if node not in ast.iter_child_nodes(top_level_node):
+                continue
+
+        todo.extend(ast.iter_child_nodes(node))
+        yield node
+
+
 def contains_explicit_return(fn: Callable[..., Any]) -> bool:
     """Return true if provided function has `return` statement (even in nested functions)"""
-    lines, _ = getsourcelines(fn)
-    return any("return" in line for line in lines)  # might give false positives, use regex for better checks
+    source = inspect.getsource(fn)
+    try:
+        parsed = ast.parse(source)
+    except IndentationError:
+        return contain_explicit_return_from_source_code(fn)
+
+    for node in walk_special(parsed):
+        if isinstance(node, ast.Return):
+            return True
+    return False
+
+
+def contain_explicit_return_from_source_code(fn: Callable[..., Any]) -> bool:
+    """Return true if provided function has `return` statement based on source code (even in nested functions)"""
+    source = inspect.getsource(fn)
+    source = re.sub(f"{fn.__name__}\((.*)\)", "", source.replace(inspect.getdoc(fn) or "", ""))
+    return "return" in source

@@ -2,17 +2,17 @@
 Publisher is the process that declares available remote functions
 """
 import logging
-from daffi import Global, callback
-
+import time
+from daffi import Global
+from daffi.registry import Callback
 
 logging.basicConfig(level=logging.INFO)
 
 
-@callback
-class Foo:
+class Foo(Callback):
     """All public methods (without '_') become callbacks."""
 
-    def __init__(self):
+    def __post_init__(self):
         self.internal_value = "my secret value"
 
     def method1(self):
@@ -31,13 +31,12 @@ class Foo:
 
 
 def main():
-    # Init instance of "Foo" in order to have access to instance methods
-    # (classmethods and staticmethods are available by default)
-    Foo()
 
     # Process name is not required argument and will be generated automatically if not provided.
     g = Global(init_controller=True)
-    g.join()
+    time.sleep(120)
+    print("Exit.")
+    g.stop()
 
 
 if __name__ == "__main__":

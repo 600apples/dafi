@@ -1,28 +1,31 @@
 """
 Consumer is the process that consumes available remote functions.
 """
-
 import time
 import logging
-import asyncio
-from daffi import Global, STREAM
+from daffi import Global
+from daffi.decorators import fetcher
 
 logging.basicConfig(level=logging.INFO)
 
 
-async def main():
+@fetcher
+def process_stream():
+    for i in range(1, 10000):
+        yield i
+        time.sleep(2)
+
+
+def main():
     # Process name is not required argument and will be generated automatically if not provided.
-    with Global() as g:
+    g = Global(init_controller=True)
 
-        print("Wait for publisher process to be started...")
-        g.wait_function("on_stream")
+    print("Wait for publisher process to be started...")
+    g.wait_function("process_stream")
 
-        start = time.time()
-        stream_items = range(int(1e5))
-
-        g.call.on_stream(stream_items) & STREAM
-        print(f"Stream finished in {time.time() - start}")
+    process_stream()
+    g.stop()
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    main()

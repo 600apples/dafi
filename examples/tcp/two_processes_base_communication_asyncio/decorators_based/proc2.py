@@ -1,24 +1,28 @@
 import time
+import asyncio
 import logging
-from daffi import Global, callback, RemoteStoppedUnexpectedly
+from daffi import Global, RemoteStoppedUnexpectedly
+from daffi.decorators import callback, fetcher
 
 logging.basicConfig(level=logging.INFO)
 
-PROC_NAME = "Brown Fox"
+PROC_NAME = "Async Brown Fox"
 
 
 @callback
-def cheers1(arg1, arg2):
+@fetcher
+async def greeting1(arg1, arg2):
     return f"Cheers from {PROC_NAME!r} process. You called function cheers1 with arguments: arg1={arg1}, arg2={arg2}"
 
 
 @callback
-def cheers2():
+@fetcher
+async def greeting2():
     return f"Cheers from {PROC_NAME!r} process. You called function cheers2"
 
 
-def main():
-    remote_proc = "White Rabbit"
+async def main():
+    remote_proc = "Async White Rabbit"
     g = Global(process_name=PROC_NAME, host="localhost", port=8888)
 
     print(f"wait for {remote_proc} process to be started...")
@@ -26,10 +30,10 @@ def main():
 
     for _ in range(10):
         try:
-            res = g.call.greeting1("foo", "bar").fg()
+            res = await greeting1("foo", "bar")
             print(res)
             time.sleep(2)
-            res = g.call.greeting2().fg()
+            res = await greeting2()
             print(res)
             time.sleep(2)
         except RemoteStoppedUnexpectedly as e:
@@ -42,4 +46,4 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    asyncio.run(main())

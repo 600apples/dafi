@@ -3,17 +3,14 @@ Consumer is the process that consumes available remote functions.
 """
 import time
 import logging
-from daffi import Global, STREAM, fetcher, __body_unknown__
+from daffi import Global
+from daffi.decorators import fetcher
 
 logging.basicConfig(level=logging.INFO)
 
 
 @fetcher
-async def process_stream(item) -> None:
-    __body_unknown__(item)
-
-
-def iterator():
+def process_stream():
     for i in range(1, 10000):
         yield i
         time.sleep(2)
@@ -26,8 +23,7 @@ def main():
     print("Wait for publisher process to be started...")
     g.wait_function("process_stream")
 
-    process_stream(iterator()) & STREAM
-
+    process_stream()
     g.stop()
 
 

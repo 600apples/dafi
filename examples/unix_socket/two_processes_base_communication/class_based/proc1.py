@@ -1,37 +1,35 @@
 import time
 import logging
-from daffi import Global, callback, RemoteStoppedUnexpectedly
+from daffi import Global, RemoteStoppedUnexpectedly
+from daffi.registry import Callback, Fetcher
 
 logging.basicConfig(level=logging.INFO)
 
 PROC_NAME = "White Rabbit"
 
 
-@callback
-def greeting1(arg1, arg2):
-    return (
-        f"Greeting from {PROC_NAME!r} process. You called function greeting1 with arguments: arg1={arg1}, arg2={arg2}"
-    )
+class Greetings(Callback, Fetcher):
+    def greeting1(self, arg1, arg2):
+        return f"Greeting from {PROC_NAME!r} process. You called function greeting1 with arguments: arg1={arg1}, arg2={arg2}"
 
-
-@callback
-def greeting2():
-    return f"Greeting from {PROC_NAME!r} process. You called function greeting2"
+    def greeting2(self):
+        return f"Greeting from {PROC_NAME!r} process. You called function greeting2"
 
 
 def main():
+    gret = Greetings()
     remote_proc = "Brown Fox"
     g = Global(process_name=PROC_NAME, init_controller=True)
 
     print(f"wait for {remote_proc} process to be started...")
     g.wait_process(remote_proc)
 
-    for _ in range(20):
+    for _ in range(10):
         try:
-            res = g.call.cheers1("foo", "bar").fg()
+            res = gret.greeting1("foo", "bar")
             print(res)
             time.sleep(2)
-            res = g.call.cheers2().fg()
+            res = gret.greeting2()
             print(res)
             time.sleep(2)
         except RemoteStoppedUnexpectedly as e:

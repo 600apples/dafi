@@ -73,7 +73,10 @@ class CallbackExecutor(NamedTuple):
         try:
             exec(f"def _{self.signature}: pass\n_(*args, **kwargs)", {"args": args, "kwargs": kwargs, "daffi": daffi})
         except TypeError as e:
-            e.args += (f"Function signature: def {self.alias}{self.signature}: ...",)
+            e.args += (
+                f"Function signature: def {self.alias}{self.signature}: ...,"
+                f" provided arguments: args={args}, kwargs={kwargs}",
+            )
             GlobalContextError("\n".join(e.args)).fire()
 
 
@@ -121,7 +124,10 @@ class ClassCallbackExecutor(NamedTuple):
                 {"args": args, "kwargs": kwargs, "daffi": daffi},
             )
         except TypeError as e:
-            e.args += (f"Function signature: def {self.alias}{self.signature}: ...",)
+            e.args += (
+                f"Function signature: def {self.alias}{self.signature}: ...,"
+                f" provided arguments: args={args}, kwargs={kwargs}",
+            )
             GlobalContextError("\n".join(e.args)).fire()
 
 
