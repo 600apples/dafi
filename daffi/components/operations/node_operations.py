@@ -209,7 +209,7 @@ class NodeOperations:
             _awaited_error_type=RemoteStoppedUnexpectedly,
         )
         for msg_uuid, ares in ResultInf._awaited_results.items():
-            ResultInf._set_and_trigger(msg_uuid, err, competed=True)
+            ResultInf._set_and_trigger(msg_uuid, err, completed=True)
 
     async def _remote_func_stream_executor(
         self,

@@ -1,0 +1,95 @@
+import pytest
+import sys
+import logging
+from subprocess import Popen
+from daffi import BG
+from daffi.registry import Fetcher
+
+logging.basicConfig(level=logging.DEBUG)
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="Unix sockets dont work on windows")
+async def test_stream_callback_to_fetcher_per_node_unix(remote_callbacks_path, g):
+    g = g()
+    start_range = 1
+    end_range = 6
+    range_ = list(range(start_range, end_range))
+
+    class StreamReceiver(Fetcher):
+        def process_stream(self, end: int):
+            return end
+
+        def process_class_stream(self, end: int):
+            return end
+
+    stream_receiver = StreamReceiver()
+
+    executable_files = [
+        remote_callbacks_path(
+            filename=f"{i}.py",
+            template_name="stream_from_callback.jinja2",
+            process_name=f"node-{i}",
+        )
+        for i in range_
+    ]
+
+    remotes = []
+    for exc in executable_files:
+        remotes.append(Popen([sys.executable, exc]))
+    for i in range_:
+        g.wait_process(f"node-{i}")
+
+    try:
+        res = stream_receiver.process_stream(1000)
+        assert set(res) == set(range(1000))
+
+        # Execute with different exec modifier
+        res = stream_receiver.process_class_stream.call(exec_modifier=BG(timeout=10, eta=2), end=2000)
+        assert set(res) == set(range(2000))
+
+    finally:
+        [p.terminate() for p in remotes]
+
+
+async def test_stream_callback_to_fetcher_per_node_tcp(remote_callbacks_path, g):
+    g = g(host="localhost")
+    start_range = 1
+    end_range = 6
+    range_ = list(range(start_range, end_range))
+
+    class StreamReceiver(Fetcher):
+        def process_stream(self, end: int):
+            return end
+
+        def process_class_stream(self, end: int):
+            return end
+
+    stream_receiver = StreamReceiver()
+
+    executable_files = [
+        remote_callbacks_path(
+            filename=f"{i}.py",
+            template_name="stream_from_callback.jinja2",
+            process_name=f"node-{i}",
+            host="localhost",
+            port=g.port,
+        )
+        for i in range_
+    ]
+
+    remotes = []
+    for exc in executable_files:
+        remotes.append(Popen([sys.executable, exc]))
+    for i in range_:
+        g.wait_process(f"node-{i}")
+
+    try:
+        res = stream_receiver.process_stream(1000)
+        assert set(res) == set(range(1000))
+
+        # Execute with different exec modifier
+        res = stream_receiver.process_class_stream.call(exec_modifier=BG(timeout=10, eta=2), end=2000)
+        assert set(res) == set(range(2000))
+
+    finally:
+        [p.terminate() for p in remotes]

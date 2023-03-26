@@ -2,7 +2,6 @@
 A library of various helpers functions and classes
 """
 import re
-import ast
 import types
 import inspect
 import asyncio
@@ -10,7 +9,6 @@ from uuid import uuid4
 from random import choice
 from functools import partial
 from datetime import datetime
-from collections import deque
 from queue import Queue
 from contextlib import contextmanager
 from collections.abc import Iterable
@@ -254,22 +252,6 @@ def search_remote_callback_in_mapping(
         return choice(found)
     except IndexError:
         ...
-
-
-def walk_special(node):
-
-    todo = deque([node])
-    top_level_node = node
-    while todo:
-        node = todo.popleft()
-
-        # Added this conditional
-        if isinstance(node, ast.FunctionDef):
-            if node not in ast.iter_child_nodes(top_level_node):
-                continue
-
-        todo.extend(ast.iter_child_nodes(node))
-        yield node
 
 
 def contains_explicit_return(fn: Callable[..., Any]) -> bool:

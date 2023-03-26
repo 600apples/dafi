@@ -46,7 +46,7 @@ def get_daffi_logger(name: str, color: Callable):
 
     cho.addFilter(lambda record: record.levelno <= logging.INFO)
     delim = color("|")
-    logger = DaffiLoggerAdapter(logger, {"app": f"{delim} {logger.name:10} {delim}"})
+    logger = DaffiLoggerAdapter(logger, {"app": f"{delim} {logger.name:^10} {delim}"})
 
     logger.setLevel(root_level)
     cho.setLevel(root_level)

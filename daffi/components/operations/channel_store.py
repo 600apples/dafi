@@ -34,7 +34,7 @@ class MessageIterator(QueueMixin):
                         yield chunk
                 except Exception as e:
                     if not ResultInf._set_and_trigger(
-                        message.uuid, RemoteError(info=str(e), _origin_traceback=e.__traceback__), competed=True
+                        message.uuid, RemoteError(info=str(e), _origin_traceback=e.__traceback__), completed=True
                     ):
                         traceback.print_exc()
 

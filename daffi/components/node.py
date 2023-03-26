@@ -16,7 +16,6 @@ from daffi.exceptions import (
     UnableToFindCandidate,
     RemoteStoppedUnexpectedly,
     InitializationError,
-    RemoteError,
 )
 from daffi.settings import LOCAL_CALLBACK_MAPPING, WELL_KNOWN_CALLBACKS
 from daffi.components.operations.node_operations import NodeOperations
@@ -42,14 +41,14 @@ class Node(ComponentsBase):
     # ------------------------------------------------------------------------------------------------------------------
 
     async def on_init(self) -> NoReturn:
-        self.logger = get_daffi_logger(self.__class__.__name__.lower(), colors.green)
+        process_ident = f"{self.__class__.__name__.lower()}[{self.process_name}]"
+        self.logger = get_daffi_logger(process_ident, colors.green)
         self.operations = NodeOperations(logger=self.logger, async_backend=self.async_backend)
         self.scheduler = Scheduler(process_name=self.process_name, async_backend=self.async_backend)
 
     async def on_stop(self) -> NoReturn:
         await super().on_stop()
-        self.logger.debug(f"On stop event triggered ({self.process_name})")
-
+        self.logger.debug(f"On stop event triggered")
         await self.scheduler.on_scheduler_stop()
         self.operations.on_remote_error()
 
@@ -57,7 +56,7 @@ class Node(ComponentsBase):
             await self.channel.clear_queue()
             await self.channel.stop()
         FreezableQueue.factory_remove(self.ident)
-        self.logger.info(f"{self.__class__.__name__} {self.process_name!r} stopped.")
+        self.logger.info(f"{self.__class__.__name__} stopped.")
         self._stopped = True
 
     async def before_connect(self) -> NoReturn:
