@@ -35,15 +35,16 @@ class Callback(BaseRegistry):
         _updated = False
         # Iterate over all methods of class.
         for method in get_class_methods(cls):
-            _, name = func_info(method)
+            _, method_alias = func_info(method)
+            origin_method_name = method.__name__
 
-            if name.startswith("_") or hasattr(method, "local"):
+            if origin_method_name.startswith("_") or hasattr(method, "local"):
                 # Ignore methods which starts with `_` and methods decorated with `local` decorator.
                 continue
 
-            if not hasattr(cls, name):
+            if not hasattr(cls, method_alias):
                 # If method has alias then add this method to class initialization by alias
-                setattr(cls, name, method)
+                setattr(cls, method_alias, method)
 
             # Check if method is static or classmethod.
             # Remote callback is ready to use in 2 cases:
@@ -52,24 +53,26 @@ class Callback(BaseRegistry):
             #           are not bounded to specific instance
             #    2. Instance of class is instantiated (`auto_init` == True). In this case all public methods
             #           become remote callbacks.
-            is_static_or_class_method = is_class_or_static_method(cls, name)
+            is_static_or_class_method = is_class_or_static_method(cls, origin_method_name)
             if not isinstance(instance_or_type, type):
                 klass = instance_or_type
             else:
                 klass = cls if is_static_or_class_method else None
             cb = ClassCallbackExecutor(
                 klass=klass,
-                origin_name_=name,
+                # Origin name is the name callback is visible for other remote processes
+                origin_name_=method_alias,
                 signature=signature(method),
                 is_async=iscoroutinefunction(method),
                 is_static=str(is_static_or_class_method) == "static",
                 is_generator=isgeneratorfunction(method),
             )
-            name_in_mapping = name in LOCAL_CALLBACK_MAPPING
-            LOCAL_CALLBACK_MAPPING[name] = cb
+            name_in_mapping = method_alias in LOCAL_CALLBACK_MAPPING
+            LOCAL_CALLBACK_MAPPING[method_alias] = cb
             if not name_in_mapping:
                 logger.info(
-                    f"callback {name!r} is registered" + ("" if klass else f" (required {cls.__name__} initialization)")
+                    f"callback {method_alias!r} is registered"
+                    + ("" if klass else f" (required {cls.__name__} initialization)")
                 )
 
             _updated = True

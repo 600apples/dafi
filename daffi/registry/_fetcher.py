@@ -37,15 +37,12 @@ class Fetcher(BaseRegistry):
 
         # Iterate over all methods of class.
         for method in get_class_methods(cls):
-            _, name = func_info(method)
+            _, method_alias = func_info(method)
+            origin_method_name = method.__name__
 
-            if name.startswith("_") or hasattr(method, "local"):
+            if origin_method_name.startswith("_") or hasattr(method, "local"):
                 # Ignore methods which starts with `_` and methods decorated with `local` decorator.
                 continue
-
-            if not hasattr(cls, name):
-                # If method has alias then add this method to class initialization by alias
-                setattr(cls, name, method)
 
             # Check if method is static or classmethod.
             # Remote fetcher is ready to use in 2 cases:
@@ -79,15 +76,17 @@ class Fetcher(BaseRegistry):
                 # proxy must be False
                 is_proxy = not contains_explicit_return(method)
 
-            is_static_or_class_method = is_class_or_static_method(cls, name)
+            is_static_or_class_method = is_class_or_static_method(cls, origin_method_name)
             if not isinstance(instance_or_type, type):
                 klass = instance_or_type
             else:
                 klass = cls if is_static_or_class_method else None
             cb = ClassFetcherExecutor(
                 klass=klass,
-                origin_name_=name,
-                origin_method=getattr(klass, name) if klass else None,
+                # Origin name is pointer to remote callback. If `alias` decorator is used then this value is
+                # different from `origin_method_name`
+                origin_name_=method_alias,
+                origin_method=getattr(klass, origin_method_name) if klass else None,
                 is_async=iscoroutinefunction(method),
                 is_static=str(is_static_or_class_method) == "static",
                 # Proxy flag indicates whether method body is used as source for remote args/kwargs.
@@ -97,8 +96,8 @@ class Fetcher(BaseRegistry):
                 exec_modifier_=cls.exec_modifier,
                 is_generator=is_generator,
             )
-            LOCAL_FETCHER_MAPPING[f"{cls.__name__}-{name}"] = cb
-            logger.info(f"fetcher {name!r} is registered. (proxy={is_proxy})")
+            LOCAL_FETCHER_MAPPING[f"{cls.__name__}-{origin_method_name}"] = cb
+            logger.info(f"fetcher {origin_method_name!r} is registered. (proxy={is_proxy})")
 
         return instance_or_type
 
@@ -170,13 +169,17 @@ class Fetcher(BaseRegistry):
         """Initialize instance of Fetcher class on demand (If this class is not initialized implicitly yet)."""
 
         for method in get_class_methods(self.__class__):
-            _, name = func_info(method)
-            if name.startswith("_"):
+            origin_method_name = method.__name__
+
+            if origin_method_name.startswith("_") or hasattr(method, "local"):
                 continue
 
-            if info := LOCAL_FETCHER_MAPPING.get(f"{self.__class__.__name__}-{name}"):
-                origin_method = getattr(self, name)
-                LOCAL_FETCHER_MAPPING[f"{id(self)}-{name}"] = info._replace(klass=self, origin_method=origin_method)
+            if info := LOCAL_FETCHER_MAPPING.get(f"{self.__class__.__name__}-{origin_method_name}"):
+                # Get origin method from super. Default getattr might return fetcher instance if method has alias.
+                origin_method = super().__getattribute__(origin_method_name)
+                LOCAL_FETCHER_MAPPING[f"{id(self)}-{origin_method_name}"] = info._replace(
+                    klass=self, origin_method=origin_method
+                )
 
 
 class Args:
