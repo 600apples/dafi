@@ -1,7 +1,13 @@
 import pytest
-from anyio import create_task_group, sleep
-from daffi.utils.misc import Period, async_library
+from daffi.utils.misc import Period, async_library, contains_explicit_return
 from daffi.exceptions import InitializationError
+
+
+def deco(return_val):
+    def __wrap(fn):
+        return fn
+
+    return __wrap
 
 
 class TestMiscSuite:
@@ -24,3 +30,46 @@ class TestMiscSuite:
 
     async def test_async_library(self):
         assert async_library() == "asyncio"
+
+    def test_function_has_return_statement(self):
+        def func1():
+            return 1
+
+        def func2():
+            pass
+
+        def func3():
+            """
+            return something
+            return None
+            """
+
+        def func4():
+            """No return"""
+            # This function donesn't contain return
+            # return
+
+        def func5():
+            """No return"""
+            # This function donesn't contain return
+            # return
+
+        def func6():
+            def dec():
+                return None
+
+        def func7(return_val1, return_val2=1):
+            pass
+
+        @deco(return_val=1)
+        def func8():
+            pass
+
+        assert contains_explicit_return(func1) is True
+        assert contains_explicit_return(func2) is False
+        assert contains_explicit_return(func3) is False
+        assert contains_explicit_return(func4) is False
+        assert contains_explicit_return(func5) is False
+        assert contains_explicit_return(func6) is True
+        assert contains_explicit_return(func7) is False
+        assert contains_explicit_return(func8) is False

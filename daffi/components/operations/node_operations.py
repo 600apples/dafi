@@ -211,6 +211,9 @@ class NodeOperations:
         for msg_uuid, ares in ResultInf._awaited_results.items():
             ResultInf._set_and_trigger(msg_uuid, err, completed=True)
 
+    # ------------------------------------------------------------------------------------------------------------------
+    # Callback executors
+    # ------------------------------------------------------------------------------------------------------------------
     async def _remote_func_stream_executor(
         self,
         remote_callback: "CallbackExecutor",

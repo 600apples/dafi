@@ -74,37 +74,6 @@ class Period(NamedTuple):
             return "interval"
 
 
-class Observer:
-    def __init__(self):
-        self._done_callbacks = []
-        self._fail_callbacks = []
-        self._callbacks = None
-
-    def register_done_callback(self, cb: Callable[..., Any], *args, **kwargs) -> NoReturn:
-        self._done_callbacks.append((cb, args, kwargs))
-
-    def register_fail_callback(self, cb: Callable[..., Any], *args, **kwargs) -> NoReturn:
-        self._fail_callbacks.append((cb, args, kwargs))
-
-    def _fire(self) -> NoReturn:
-        for cb, args, kwargs in self._callbacks:
-            cb(*args, **kwargs)
-
-    def mark_done(self) -> NoReturn:
-        self._callbacks = self._done_callbacks
-        self._fire()
-        self.clear()
-
-    def mark_fail(self) -> NoReturn:
-        self._callbacks = self._fail_callbacks
-        self._fire()
-        self.clear()
-
-    def clear(self) -> NoReturn:
-        self._fail_callbacks.clear()
-        self._done_callbacks.clear()
-
-
 class ConditionEvent:
     """Register Event objects and wait for release when any of them is set"""
 
@@ -256,6 +225,13 @@ def search_remote_callback_in_mapping(
 
 def contains_explicit_return(fn: Callable[..., Any]) -> bool:
     """Return true if provided function has `return` statement based on source code (even in nested functions)"""
+    # Get source code
     source = inspect.getsource(fn)
-    source = re.sub(f"{fn.__name__}\((.*)\)", "", source.replace(inspect.getdoc(fn) or "", ""))
-    return any(exp == "return" for exp in source.split())
+    # Get docstring part if exists
+    doc = [line.strip() for line in (inspect.getdoc(fn) or "").split("\n")]
+    # Remote function header from source code lines
+    source = re.sub(f"{fn.__name__}\((.*)\)", "", source, flags=re.DOTALL)
+    # Remove docstring part from source code and trim lines
+    refined_source = [trimmed for line in source.split("\n") if (trimmed := line.strip()) not in doc]
+    # Return True if any line in refined code starts with `return` statement`
+    return any(exp.startswith("return") for exp in refined_source)

@@ -56,7 +56,7 @@ class Ipc(Thread):
         self.daemon = True
         self.global_condition_event = ConditionEvent()
         self.controller = self.node = None
-        self.task_waiter = TaskWaiter()
+        self.task_waiter = TaskWaiter(process_name)
 
         AsyncResult._ipc = self
 
