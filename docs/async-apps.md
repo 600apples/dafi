@@ -1,19 +1,16 @@
-Most of daffi methods works fine with both sync and async applications but some of them blocks event loop. 
+The majority of Daffi's methods are compatible with both synchronous and asynchronous applications, but certain methods may impede the event loop. 
+In such cases, it is recommended to use the asynchronous counterparts of these blocking methods. 
 
-Blocking methods have async conterparts which should be used for asynchronous processes.
-
-For example [Global](code-reference/global.md) object has method `join` which is blocking method and cannot be used for applications 
-which leverage on event loop. 
-
-But `Global` also has `join_async` method which fits async non blocking model.
-
-Also there are two methods `get` and `get_async` to take result depending on application type.
+For instance, the Global object's `join` method is a blocking method that cannot be used with event loop-dependent applications. 
+However, the `join_async` method is an asynchronous, non-blocking alternative. 
+There are two methods available for retrieving results: `get` and `get_async`, depending on the application type.
 
 As example we can use `BG` execution modifier (run in background) which returns instance of `AsyncResult` instead of result itself:
 
 
 ```python
-from daffi import fetcher, BG
+from daffi import BG
+from daffi.decorators import fetcher
 
 @fetcher(BG)
 def my_callback():
@@ -34,7 +31,7 @@ For instance if in `process-1` we have callback with name `trigger_me`:
 
 process-1
 ```python
-from daffi import callback
+from daffi.decorators import callback
 
 @callback
 def trigger_me():
@@ -45,7 +42,8 @@ In `process-2` we can declare sync or async fetcher to trigger callback:
 
 process-2
 ```python
-from daffi import fetcher, FG
+from daffi import FG
+from daffi.decorators import fetcher
 
 @fetcher(FG)
 def trigger_me():
@@ -61,7 +59,8 @@ The more appropriate syntax for asynchronous applications will be:
 
 process-2
 ```python
-from daffi import fetcher, FG
+from daffi import FG
+from daffi.decorators import fetcher
 
 @fetcher(FG)
 async def trigger_me():

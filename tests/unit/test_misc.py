@@ -65,6 +65,13 @@ class TestMiscSuite:
         def func8():
             pass
 
+        def return_val():
+            pass
+
+        def return_val2():
+            """No return"""
+            pass
+
         assert contains_explicit_return(func1) is True
         assert contains_explicit_return(func2) is False
         assert contains_explicit_return(func3) is False
@@ -73,3 +80,5 @@ class TestMiscSuite:
         assert contains_explicit_return(func6) is True
         assert contains_explicit_return(func7) is False
         assert contains_explicit_return(func8) is False
+        assert contains_explicit_return(return_val) is False
+        assert contains_explicit_return(return_val2) is False

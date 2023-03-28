@@ -227,11 +227,8 @@ def contains_explicit_return(fn: Callable[..., Any]) -> bool:
     """Return true if provided function has `return` statement based on source code (even in nested functions)"""
     # Get source code
     source = inspect.getsource(fn)
-    # Get docstring part if exists
-    doc = [line.strip() for line in (inspect.getdoc(fn) or "").split("\n")]
-    # Remote function header from source code lines
-    source = re.sub(f"{fn.__name__}\((.*)\)", "", source, flags=re.DOTALL)
-    # Remove docstring part from source code and trim lines
-    refined_source = [trimmed for line in source.split("\n") if (trimmed := line.strip()) not in doc]
-    # Return True if any line in refined code starts with `return` statement`
+    if doc := fn.__doc__:
+        code = source.split(doc)
+        source = code[1]
+    refined_source = [line.strip() for line in source.split("\n")]
     return any(exp.startswith("return") for exp in refined_source)
