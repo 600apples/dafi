@@ -2,7 +2,8 @@
 
 {%- block content %}
 @callback
-async def {{ cb_name }}(g: Global):
+async def {{ cb_name }}():
+    g = get_g()
 {% if last %}
     return "My secret value"
 {% else %}

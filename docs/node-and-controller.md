@@ -1,19 +1,15 @@
 ## Controller
-In daffi terminology server is called `Controller`.
-
-The `Controller` behaves as a broker and cannot call remote callbacks on its own.
-`Controller` can be run in any of the processes where remote callbacks are registered, 
-but it can also work as stand-alone application. Both variants are fine depends on your requirements.
-Usually application infrastructure includes only one `Controller` but it is possible to have several 
-if you want to create several isolated systems.
+In Daffi's parlance, the server is referred to as the `Controller.` 
+This Controller operates as an intermediary and is not able to independently invoke remote callbacks. 
+It can be launched within any process in which remote callbacks are registered, or it can function as a standalone application. 
+The choice between these options depends on the user's specific needs. 
+Typically, an application infrastructure will feature only one Controller, although multiple Controllers can be used to create isolated systems if desired.
 
 
 ## Node
-`Node` is client that is running along with `Controller` or as stand-alone process.
-
-The application where the `Node` is running gets the opportunity to register callbacks and call the callbacks of other nodes.
-All serialization/deserialization process, remote callbacks executions etc is the `Node`'s responsibility.
-
+A `Node` in Daffi is a client that runs either alongside the Controller or as a separate process. 
+When a Node is running, its associated application can register callbacks and invoke the callbacks of other Nodes. 
+The Node is responsible for managing all aspects of serialization/deserialization, remote callback execution, and related processes.
 
 ### Typical architecture
 
@@ -37,7 +33,5 @@ But also can be considered as solution when one of the processes is the leader w
 
 
 !!! warning
-    Again. `Controller` is just broker for inter-node communication.
-
     If you want to initialize controller with the ability to make remote requests,
     you need to consider latter solution (`Controller shares process with one of nodes`)

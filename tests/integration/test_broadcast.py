@@ -1,6 +1,7 @@
 import pytest
 import sys
-from daffi import BROADCAST, __body_unknown__, fetcher
+from daffi import BROADCAST
+from daffi.decorators import __body_unknown__, fetcher
 from subprocess import Popen
 
 

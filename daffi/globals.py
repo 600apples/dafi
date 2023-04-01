@@ -24,6 +24,7 @@ from daffi.ipc import Ipc
 from daffi.remote_call import LazyRemoteCall
 from daffi.utils.misc import Singleton, string_uuid
 from daffi.utils.func_validation import pretty_callbacks
+from daffi.registry._base import BaseRegistry
 
 logger = get_daffi_logger("global", colors.blue)
 
@@ -44,6 +45,7 @@ class Global(metaclass=Singleton):
        port: Optional port to connect `Controller`/`Node` via tcp. If not provided random port will be chosen.
        unix_sock_path: Folder where UNIX socket will be created. If not provided default path is < tmp directory >/dafi/
           where `<tmp directory >` is default temporary directory on system.
+       on_connect: Function that will be executed when connection to Controller is established
     """
 
     process_name: Optional[str] = field(default_factory=string_uuid)
@@ -52,8 +54,7 @@ class Global(metaclass=Singleton):
     host: Optional[str] = None
     port: Optional[int] = None
     unix_sock_path: Optional[os.PathLike] = None
-
-    _inside_callback_context: Optional[bool] = field(repr=False, default=False)
+    on_connect: Optional[Callable[..., Any]] = None
 
     def __post_init__(self):
         self.process_name = str(self.process_name)
@@ -88,12 +89,14 @@ class Global(metaclass=Singleton):
             logger=logger,
         )
 
-        callback._ipc = self.ipc
+        BaseRegistry._ipc = self.ipc
         self.ipc.start()
         if not self.ipc.wait():
             self.stop()
             GlobalContextError("Unable to start daffi components.").fire()
         self.port = self.ipc.port
+        if self.on_connect and callable(self.on_connect):
+            self.on_connect()
 
     def __enter__(self):
         return self
@@ -109,7 +112,6 @@ class Global(metaclass=Singleton):
         return LazyRemoteCall(
             _ipc=self.ipc,
             _global_terminate_event=self._global_terminate_event,
-            _inside_callback_context=self._inside_callback_context,
         )
 
     @property
@@ -179,8 +181,6 @@ class Global(metaclass=Singleton):
             g = Global()
             g.transfer_and_call("node_name", get_remote_pid)
         """
-        if self._inside_callback_context:
-            return self.ipc.async_transfer_and_call(remote_process, func, *args, **kwargs)
         return self.ipc.transfer_and_call(remote_process, func, *args, **kwargs)
 
     def wait_function(self, func_name: str) -> NoReturn:

@@ -1,7 +1,7 @@
 [Global](code-reference/global.md) is the main initialization daffi entrypoint.
 
 
-#### Global initialization
+#### Global object initialization
 
 You can initialize [Global](code-reference/global.md) object using the following syntax:
 ```python
@@ -11,12 +11,12 @@ g = Global(process_name='my awersome process', init_controller=True, host='local
  
 where:
  
-`process_name` is optional `Node` identificator. Other nodes see initialized node by its `process_name`
- 
+The `process_name` argument serves as an optional identifier for the process, 
+allowing other processes to identify the initialized node by its given process_name.
 
-If `process_name` argument is omitted then randomly generated name will be used.
-But in some cases it is helpful to give nodes meaningful names. 
-For example one process can wait another process by its name:
+If the process_name argument is not provided, a randomly generated name will be used. 
+However, assigning meaningful names to nodes can be beneficial in certain scenarios. 
+For example, one process may need to wait for another process by its specified name.
 
 ```python
 g.wait_process('node name here')
@@ -56,7 +56,7 @@ You can also provide your own directory for UNIX socket:
 g = Global(process_name=process_name, init_controller=True, unix_sock_path="/foo/bar/biz")
 ```
 
-#### Execucution workflow
+#### Execution workflow
 
 After initialization [Global](code-reference/global.md) object starts `Controller`/`Node` or both in separate thread.
 
@@ -71,8 +71,9 @@ g.join()
 await g.join_async() 
 ```
 
-`Controller`/`Node` or both can be stopped using `.stop` method of Global. This method is suitable for short living jobs
- for example when you want to start daffi process, trigger couple of callbacks on other nodes and terminate process.
+`Controller`/`Node` or both can be terminated by calling the `stop` method. 
+This method is particularly useful for short-lived jobs, 
+such as starting a Daffi process, triggering a few callbacks on other nodes, and then terminating the process.
 
  
 ```python
@@ -82,7 +83,7 @@ g = Global(process_name=process_name, init_controller=True, init_node=False, hos
 g.stop() 
 ```
 
-For this reason [Global](code-reference/global.md) can be used as context manager. `.stop` method is executed explicitly
+For this reason [Global](code-reference/global.md) can be used as context manager. `stop` method is executed explicitly
 on exit from context manager scope.
 
 
@@ -102,7 +103,7 @@ Sometimes nodes start at different times and because of this, some remote callba
 
 [Global](code-reference/global.md) has several methods to control waiting for callbacks availability.
 
-The 2 examples below illustrate waiting for a remote node to be available:
+The 2 examples below illustrate waiting for a remote process to be available:
 
 ```python
 g.wait_process('name of remote node')
@@ -192,24 +193,8 @@ The result of function execution will be returned to process2.
 #### Working with scheduled tasks
 
 [Global](code-reference/global.md) has methods `get_scheduled_tasks` and `cancel_scheduled_task_by_uuid` 
-to works with scheduled tasks on remote Node. To know more about scheduled tasks go [here](scheduling-tasks.md) 
+to works with scheduled tasks (see [scheduling tasks](usage/scheduling-tasks.md)) on remote process.
 
-- `get_scheduled_tasks` get all scheduled tasks on remote Node by Node name. This method returns all task uuids that are currently scheduled on remote Node.
-- `cancel_scheduled_task_by_uuid` cancel one scheduled task on remote Node by its uuid. All uuids can be obtained using `get_scheduled_tasks` method.
+- `get_scheduled_tasks` get all scheduled tasks on remote process by process name.The method returns all task UUIDs that are currently scheduled on the remote process.
 
-
-#### remote callbacks execution with g object
-
-!!! warning
-    This syntax is appropriate for tiny microservices only. In general you should consider using 
-    [fetcher](./fetcher-decorator.md) decorator to trigger remote callback as it is more self explanatory syntax option.
-
-once you have the `g` object initialized you can call the remote callback. The general syntax is:
-
-```python
-...
-g.call.< remote callback name >(*args, **kwargs) & < execution modifier >
-```
-
-- `remote callback name` is the name of function registered as remote callback on different `Node`
-- `execution modifier` is modifier class name that determines how to execute remote callback and what to do with result. More details about execution modifiers [here](execution-modifiers.md)
+- `cancel_scheduled_task_by_uuid` cancel one scheduled task on remote process by its UUID. All UUIDs can be obtained using `get_scheduled_tasks` method.

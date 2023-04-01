@@ -4,7 +4,8 @@ Consumer is the process that consumes available remote functions.
 import logging
 import time
 import asyncio
-from daffi import Global, BG, fetcher
+from daffi import Global, BG
+from daffi.decorators import fetcher
 
 
 @fetcher(BG(eta=5))

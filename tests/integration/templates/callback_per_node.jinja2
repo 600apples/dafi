@@ -2,8 +2,8 @@
 
 {%- block content %}
 @callback
-def get_process_name{{ callback_index }}(g: Global, path = None):
+def get_process_name{{ callback_index }}(path = None):
     if path:
-        with open(path, "a") as f: f.write(f"{g.process_name}\n")
-    return g.process_name
+        with open(path, "a") as f: f.write(f"{get_g().process_name}\n")
+    return get_g().process_name
 {% endblock %}

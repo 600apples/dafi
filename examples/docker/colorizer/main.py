@@ -1,7 +1,8 @@
 import os
 import logging
 from itertools import cycle
-from daffi import Global, callback, BG
+from daffi import Global, BG
+from daffi.decorators import callback, fetcher, __body_unknown__
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
@@ -9,12 +10,18 @@ logger.setLevel(logging.DEBUG)
 colors = cycle(("red", "green", "blue"))
 
 
+@fetcher(BG(return_result=False))
+def send_email(title, content):
+    """Fetcher proxy to `email processor`"""
+    __body_unknown__(title, content)
+
+
 @callback
-async def colorize(title: str, content: str, g: Global):
+async def colorize(title: str, content: str):
     color = next(colors)
     logger.warning(f"Color {color!r} has been chosen.")
     logger.warning(f"Calling a remote callback to send an email...")
-    g.call.send_email(title=title, content=content) & BG(no_return=True)
+    send_email(title=title, content=content)
     return color
 
 

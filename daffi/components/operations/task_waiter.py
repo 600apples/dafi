@@ -18,6 +18,10 @@ class TaskWaiter(QueueMixin):
     about errors on remote side.
     """
 
+    def __init__(self, process_name: str):
+        super().__init__()
+        self.process_name = process_name
+
     async def __call__(self, task_status: TaskStatus = TASK_STATUS_IGNORED):
         """
         TaskWaiter entrypoint method.
@@ -25,7 +29,10 @@ class TaskWaiter(QueueMixin):
         """
         task_status.started("STARTED")
 
-        self.logger = get_daffi_logger(self.__class__.__name__.lower(), colors.cyan)
+        # Init logger on behalf of Node.
+        process_ident = f"{self.__class__.__name__.lower()}[{self.process_name}]"
+        self.logger = get_daffi_logger(process_ident, colors.green)
+
         self.awaited_results = dict()
         self.q = FreezableQueue()
 

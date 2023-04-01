@@ -8,7 +8,7 @@ from grpc._cython.cygrpc import UsageError
 from daffi.utils.misc import call_after
 from daffi.components.proto.message import Message, RpcMessage, ServiceMessage
 from daffi.components.operations.freezable_queue import FreezableQueue, QueueMixin
-from daffi.async_result import AsyncResult, RemoteError
+from daffi.async_result import RemoteError, ResultInf
 
 
 logger = logging.getLogger(__name__)
@@ -33,11 +33,9 @@ class MessageIterator(QueueMixin):
                     for chunk in message.dumps():
                         yield chunk
                 except Exception as e:
-                    if AsyncResult._awaited_results.get(message.uuid):
-                        AsyncResult._set_and_trigger(
-                            message.uuid, RemoteError(info=str(e), _origin_traceback=e.__traceback__)
-                        )
-                    else:
+                    if not ResultInf._set_and_trigger(
+                        message.uuid, RemoteError(info=str(e), _origin_traceback=e.__traceback__), completed=True
+                    ):
                         traceback.print_exc()
 
     def send_threadsave(self, message: Message, eta: Optional[Union[int, float]] = None) -> NoReturn:

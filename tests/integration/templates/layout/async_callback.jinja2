@@ -1,9 +1,9 @@
 @callback
-async def async_callback_func_{{ callback_index }}(*args, g: Global, path=None, text=None, **kwargs):
+async def async_callback_func_{{ callback_index }}(*args, path=None, text=None, **kwargs):
 {%- if write_to_file %}
     try:
         with open(path, "a") as f: f.write(text)
     except Exception as e:
         print(f"Error while writing: {e}")
 {% endif %}
-    return args, kwargs, g.process_name
+    return args, kwargs

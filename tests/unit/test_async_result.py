@@ -1,8 +1,8 @@
 import asyncio
 import pytest
 from anyio import to_thread
-from daffi.async_result import AsyncResult, SchedulerTask, get_result_type, RpcMessage
-from daffi.exceptions import TimeoutError, RemoteError, GlobalContextError, RemoteCallError
+from daffi.async_result import AsyncResult, SchedulerTask, get_result_type, RpcMessage, IterableAsyncResult
+from daffi.exceptions import TimeoutError, RemoteError, RemoteCallError
 
 
 async def set_result(wait: int, uuid, result):
@@ -56,8 +56,8 @@ class TestAsyncResultSuite:
         res = get_result_type(False, True)
         assert isinstance(res, type(SchedulerTask))
 
-        with pytest.raises(GlobalContextError):
-            get_result_type(True, True)
+        res = get_result_type(True, True)
+        assert isinstance(res, type(IterableAsyncResult))
 
 
 class TestScheduledTaskSuite:

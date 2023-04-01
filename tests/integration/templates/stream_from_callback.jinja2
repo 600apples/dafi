@@ -1,0 +1,18 @@
+{% extends "layout/base.jinja2" %}
+
+{%- block content %}
+
+
+@callback
+def process_stream(end: int):
+    for i in range(end):
+        yield i
+
+
+class Streamer(Callback):
+
+    def process_class_stream(self, end: int):
+        for i in range(end):
+            yield i
+
+{% endblock %}

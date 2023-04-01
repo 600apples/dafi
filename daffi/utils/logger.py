@@ -4,7 +4,7 @@ from typing import Callable
 from typing import Any
 
 from daffi.utils import colors
-from daffi.utils.settings import DEBUG
+from daffi.settings import DEBUG
 
 logging.getLogger("grpc._cython.cygrpc").setLevel(logging.ERROR)
 
@@ -46,7 +46,7 @@ def get_daffi_logger(name: str, color: Callable):
 
     cho.addFilter(lambda record: record.levelno <= logging.INFO)
     delim = color("|")
-    logger = DaffiLoggerAdapter(logger, {"app": f"{delim} {logger.name:10} {delim}"})
+    logger = DaffiLoggerAdapter(logger, {"app": f"{delim} {logger.name:^10} {delim}"})
 
     logger.setLevel(root_level)
     cho.setLevel(root_level)

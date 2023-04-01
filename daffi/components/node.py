@@ -16,9 +16,8 @@ from daffi.exceptions import (
     UnableToFindCandidate,
     RemoteStoppedUnexpectedly,
     InitializationError,
-    RemoteError,
 )
-from daffi.utils.settings import LOCAL_CALLBACK_MAPPING, WELL_KNOWN_CALLBACKS
+from daffi.settings import LOCAL_CALLBACK_MAPPING, WELL_KNOWN_CALLBACKS
 from daffi.components.operations.node_operations import NodeOperations
 from daffi.components.operations.channel_store import ChannelPipe, MessageIterator, FreezableQueue
 
@@ -42,27 +41,22 @@ class Node(ComponentsBase):
     # ------------------------------------------------------------------------------------------------------------------
 
     async def on_init(self) -> NoReturn:
-        self.logger = get_daffi_logger(self.__class__.__name__.lower(), colors.green)
+        process_ident = f"{self.__class__.__name__.lower()}[{self.process_name}]"
+        self.logger = get_daffi_logger(process_ident, colors.green)
         self.operations = NodeOperations(logger=self.logger, async_backend=self.async_backend)
         self.scheduler = Scheduler(process_name=self.process_name, async_backend=self.async_backend)
 
     async def on_stop(self) -> NoReturn:
         await super().on_stop()
-        self.logger.debug(f"On stop event triggered ({self.process_name})")
-
+        self.logger.debug(f"On stop event triggered")
         await self.scheduler.on_scheduler_stop()
-        for msg_uuid, ares in AsyncResult._awaited_results.items():
-            if isinstance(ares, AsyncResult):
-                AsyncResult._awaited_results[msg_uuid] = RemoteError(
-                    info="Lost connection to Controller.",
-                    _awaited_error_type=RemoteStoppedUnexpectedly,
-                )
-                ares._set()
+        self.operations.on_remote_error()
+
         if self.channel:
             await self.channel.clear_queue()
             await self.channel.stop()
         FreezableQueue.factory_remove(self.ident)
-        self.logger.info(f"{self.__class__.__name__} {self.process_name!r} stopped.")
+        self.logger.info(f"{self.__class__.__name__} stopped.")
         self._stopped = True
 
     async def before_connect(self) -> NoReturn:
@@ -73,13 +67,7 @@ class Node(ComponentsBase):
     def on_error(self) -> NoReturn:
         if channel := getattr(self, "channel", None):
             channel.freeze(10)
-        for msg_uuid, ares in AsyncResult._awaited_results.items():
-            if isinstance(ares, AsyncResult):
-                AsyncResult._awaited_results[msg_uuid] = RemoteError(
-                    info="Lost connection to Controller.",
-                    _awaited_error_type=RemoteStoppedUnexpectedly,
-                )
-                ares._set()
+        self.operations.on_remote_error()
 
     # ------------------------------------------------------------------------------------------------------------------
     # Message operations
@@ -150,6 +138,9 @@ class Node(ComponentsBase):
 
             elif msg.flag == MessageFlag.STREAM_THROTTLE:
                 await self.operations.on_stream_throttle(msg)
+
+            elif msg.flag == MessageFlag.CONTROLLER_STOPPED_UNEXPECTEDLY:
+                self.operations.on_remote_error()
 
     def send_threadsave(self, msg: RpcMessage, eta: Union[int, float]):
         """Send message outside of node executor scope."""

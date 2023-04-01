@@ -38,12 +38,16 @@ class Controller(ComponentsBase):
     # ------------------------------------------------------------------------------------------------------------------
 
     async def on_init(self) -> NoReturn:
-        self.logger = get_daffi_logger(self.__class__.__name__.lower(), colors.yellow)
+
+        process_ident = f"{self.__class__.__name__.lower()}[{self.process_name}]"
+        self.logger = get_daffi_logger(process_ident, colors.yellow)
         self.operations = ControllerOperations(logger=self.logger)
 
     async def on_stop(self) -> NoReturn:
         await super().on_stop()
         self.logger.debug("On stop event triggered")
+        # Notify all nodes that controller has been terminated.
+        await self.operations.on_controller_stopped(self.process_name)
 
         async with create_task_group() as sg:
             with move_on_after(2):
@@ -52,7 +56,7 @@ class Controller(ComponentsBase):
             with move_on_after(2):
                 if self.listener:
                     sg.start_soon(self.listener.stop, 2)
-        self.logger.info(f"{self.__class__.__name__} {self.process_name!r} stopped.")
+        self.logger.info(f"{self.__class__.__name__} stopped.")
         self._stopped = True
 
     async def before_connect(self) -> NoReturn:

@@ -1,7 +1,9 @@
 """
 A library of various helpers functions and classes
 """
+import re
 import types
+import inspect
 import asyncio
 from uuid import uuid4
 from random import choice
@@ -10,7 +12,21 @@ from datetime import datetime
 from queue import Queue
 from contextlib import contextmanager
 from collections.abc import Iterable
-from typing import Callable, Any, NamedTuple, NoReturn, Dict, DefaultDict, Optional, Tuple, Union, Sequence, List
+from typing import (
+    Callable,
+    Any,
+    NamedTuple,
+    NoReturn,
+    Dict,
+    DefaultDict,
+    Optional,
+    Tuple,
+    Union,
+    Sequence,
+    List,
+    Iterator,
+    AsyncIterator,
+)
 
 import sniffio
 from anyio import to_thread, run
@@ -56,37 +72,6 @@ class Period(NamedTuple):
             return "at_time"
         else:
             return "interval"
-
-
-class Observer:
-    def __init__(self):
-        self._done_callbacks = []
-        self._fail_callbacks = []
-        self._callbacks = None
-
-    def register_done_callback(self, cb: Callable[..., Any], *args, **kwargs) -> NoReturn:
-        self._done_callbacks.append((cb, args, kwargs))
-
-    def register_fail_callback(self, cb: Callable[..., Any], *args, **kwargs) -> NoReturn:
-        self._fail_callbacks.append((cb, args, kwargs))
-
-    def _fire(self) -> NoReturn:
-        for cb, args, kwargs in self._callbacks:
-            cb(*args, **kwargs)
-
-    def mark_done(self) -> NoReturn:
-        self._callbacks = self._done_callbacks
-        self._fire()
-        self.clear()
-
-    def mark_fail(self) -> NoReturn:
-        self._callbacks = self._fail_callbacks
-        self._fire()
-        self.clear()
-
-    def clear(self) -> NoReturn:
-        self._fail_callbacks.clear()
-        self._done_callbacks.clear()
 
 
 class ConditionEvent:
@@ -191,12 +176,34 @@ async def call_after(eta: int, func: Callable[..., Any], *args, **kwargs) -> asy
     return asyncio.create_task(_dec())
 
 
+class _StopIteration(Exception):
+    pass
+
+
+def _next(iterator: Iterator[Any]) -> Any:
+    # We can't raise `StopIteration` from within the threadpool iterator
+    # and catch it outside that context, so we coerce them into a different
+    # exception type.
+    try:
+        return next(iterator)
+    except StopIteration:
+        raise _StopIteration
+
+
+async def iterate_in_threadpool(iterator: Iterator[Any]) -> AsyncIterator[Any]:
+    while True:
+        try:
+            yield await to_thread.run_sync(_next, iterator)
+        except _StopIteration:
+            break
+
+
 def search_remote_callback_in_mapping(
     mapping: DefaultDict[K, Dict[K, GlobalCallback]],
     func_name: str,
     exclude: Optional[Union[str, Sequence]] = None,
     take_all: Optional[bool] = False,
-) -> Optional[Union[Tuple[str, "RemoteCallback"], List[Tuple[str, "RemoteCallback"]]]]:
+) -> Optional[Union[Tuple[str, "CallbackExecutor"], List[Tuple[str, "CallbackExecutor"]]]]:
 
     if isinstance(exclude, str):
         exclude = [exclude]
@@ -214,3 +221,14 @@ def search_remote_callback_in_mapping(
         return choice(found)
     except IndexError:
         ...
+
+
+def contains_explicit_return(fn: Callable[..., Any]) -> bool:
+    """Return true if provided function has `return` statement based on source code (even in nested functions)"""
+    # Get source code
+    source = inspect.getsource(fn)
+    if doc := fn.__doc__:
+        code = source.split(doc)
+        source = code[1]
+    refined_source = [line.strip() for line in source.split("\n")]
+    return any(exp.startswith("return") for exp in refined_source)

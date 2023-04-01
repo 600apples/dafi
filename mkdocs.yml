@@ -24,24 +24,24 @@ theme:
         name: Switch to light mode
 nav:
   - Overview: index.md
-  - Installtion: installation.md
   - Usage:
-    - Base objects: base-objects.md
-    - Global: global-object.md
-    - callback decorator: callback-decorator.md
-    - fetcher decorator: fetcher-decorator.md
-    - Execution modifiers: execution-modifiers.md
-    - Basic example: basic-example.md
-    - Example with bidirectional communication: example-bidirectional-com.md
+    - basic example: usage/basic-example.md
+    - fetchers with function body: usage/fetchers-with-body.md
+    - additional arguments for callback instantiation: usage/callback-additional-arguments.md
+    - private methods: usage/private-methods.md
+    - aliased methods: usage/aliased-methods.md
+    - named processes: usage/named-processes.md
+    - stream from fetcher to callback: usage/stream-fetcher-to-callback.md
+    - stream from callback to fetcher: usage/stream-callback-to-fetcher.md
+    - function transfer: usage/function-transfer.md
+    - bidirectional communication: usage/bidirectional-communication.md
+    - asynchronous execution: usage/asynchronous-execution.md
+    - broadcasting: usage/broadcasting.md
+    - task scheduling and butch delayed executon: usage/scheduling-tasks.md
   - Node and Controller: node-and-controller.md
+  - Global object: global-object.md
   - Asynchronous applications: async-apps.md
-  - Advanced:
-    - G object injection: g-object-injection.md
-    - Callback classes: callback-classes.md
-    - Broadcasting: broadcasting.md
-    - Pipeline and g object injection: pipeline.md
-    - Scheduling tasks: scheduling-tasks.md
-    - Streams: stream.md
+  - Execution modifiers: execution-modifiers.md
   - Code reference:
      - Global: code-reference/global.md
      - callback: code-reference/callback.md

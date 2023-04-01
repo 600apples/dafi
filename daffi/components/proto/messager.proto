@@ -28,7 +28,8 @@ message RpcRealm {
   bool return_result = 7;
   Period period = 8;
   uint64 timeout = 9;
-  bool complete_marker = 10;
+  bool completed = 10;
+  bool complete_marker = 11;
 }
 
 message ServiceRealm {
@@ -72,4 +73,5 @@ enum MessageFlag {
   STREAM_ERROR = 13;
   STREAM_THROTTLE = 14;
   RECEIVER_ERROR = 15;
+  CONTROLLER_STOPPED_UNEXPECTEDLY = 16;
 }

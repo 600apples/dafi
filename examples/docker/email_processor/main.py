@@ -1,6 +1,7 @@
 import os
 import logging
-from daffi import Global, callback
+from daffi import Global
+from daffi.decorators import callback
 
 
 logger = logging.getLogger(__name__)

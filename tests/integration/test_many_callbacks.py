@@ -26,7 +26,6 @@ async def call_remote(g, _range, exec_type):
             res = future & FG(timeout=20)
             assert func_args == res[0]
             assert {} == res[1]
-            assert res[2].startswith("test_node")
             timings.append(time.time() - start)
 
         elif exec_type == BG:
@@ -37,7 +36,6 @@ async def call_remote(g, _range, exec_type):
 
             assert func_args == res[0]
             assert {} == res[1]
-            assert res[2].startswith("test_node")
             timings.append(time.time() - start)
 
 
@@ -52,7 +50,7 @@ async def call_remote_no_return(g, num, exec_type, path):
             future & PERIOD(at_time=start + 2)
             await asyncio.sleep(3)
         elif exec_type == BG:
-            future & BG(no_return=True)
+            future & BG(return_result=False)
             await asyncio.sleep(3)
 
 

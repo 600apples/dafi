@@ -1,6 +1,7 @@
 import pytest
 import sys
-from daffi import FG, BG, fetcher, __body_unknown__, GlobalContextError
+from daffi import FG, BG, GlobalContextError
+from daffi.decorators import fetcher, __body_unknown__
 from subprocess import Popen
 
 
@@ -27,14 +28,14 @@ async def test_callback_per_node_unix(remote_callbacks_path, g):
     res = await test_callback()
     assert res == "Ok"
 
-    res = await test_callback(__exec_modifier__=BG(eta=2))
+    res = await test_callback.call(exec_modifier=BG(eta=2))
     res = await res.get_async()
     assert res == "Ok"
 
-    res = g.call.test_callback() & FG(timeout="7s")
+    res = await test_callback.call(exec_modifier=FG(timeout="7s"))
     assert res == "Ok"
 
-    res = g.call.test_callback() & BG(eta=2)
+    res = await test_callback.call(exec_modifier=BG(eta=2))
     res = await res.get_async()
     assert res == "Ok"
 
@@ -45,7 +46,7 @@ async def test_callback_per_node_unix(remote_callbacks_path, g):
 async def test_callback_per_node_unix_wrong_body_args(remote_callbacks_path, g):
     g = g()
 
-    @fetcher(FG(timeout="7s"), args_from_body=True)
+    @fetcher(FG(timeout="7s"))
     async def test_callback(a, b):
         return a, b
 
@@ -65,6 +66,6 @@ async def test_callback_per_node_unix_wrong_body_args(remote_callbacks_path, g):
         await test_callback(a="foo", b="bar")
 
     with pytest.raises(GlobalContextError):
-        await test_callback(a="foo", b="bar", __exec_modifier__=BG(eta=2))
+        await test_callback.call(a="foo", b="bar", exec_modifier=BG(eta=2))
 
     [p.terminate() for p in remotes]

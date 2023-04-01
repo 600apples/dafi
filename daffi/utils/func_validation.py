@@ -78,10 +78,14 @@ def func_info(func: Callable[P, Any]):
                 filename = filename[:-3]
             module = module + "-" + filename
     module = module.split(".")
-    if hasattr(func, "func_name"):
+    if hasattr(func, "alias") and func.alias is not None:
+        name = func.alias
+    elif hasattr(func, "func_name"):
         name = func.func_name
     elif hasattr(func, "__name__"):
         name = func.__name__
+    elif hasattr(func, "origin_name_"):
+        name = func.origin_name_
     else:
         name = "unknown"
     # Hack to detect functions not defined at the module-level

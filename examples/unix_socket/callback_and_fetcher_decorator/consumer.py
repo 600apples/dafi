@@ -4,18 +4,20 @@ Consumer is the process that consumes available remote functions.
 
 import logging
 import asyncio
-from daffi import Global, FG, callback_and_fetcher
+from daffi import Global
+from daffi.registry import Callback, Fetcher
+from daffi.decorators import callback, fetcher
 
 logging.basicConfig(level=logging.INFO)
 
 
-@callback_and_fetcher(FG)
-class RemoteGroup:
+class RemoteGroup(Callback, Fetcher):
     async def do_something(self, a: int):
         return f"Received number: {a}"
 
 
-@callback_and_fetcher(FG)
+@callback
+@fetcher
 async def my_func(a: int):
     return f"Received number: {a}"
 

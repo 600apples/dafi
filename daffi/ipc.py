@@ -10,8 +10,8 @@ from typing import NoReturn, Dict, Union, Optional, Callable, Any, Tuple, AsyncG
 from anyio.from_thread import start_blocking_portal
 
 from daffi.utils import colors
-from daffi.utils.settings import DEBUG
-from daffi.async_result import get_result_type, AsyncResult, RetryPolicy
+from daffi.settings import DEBUG
+from daffi.async_result import get_result_type, AsyncResult
 from daffi.components.controller import Controller
 from daffi.components.node import Node
 from daffi.components.operations.task_waiter import TaskWaiter
@@ -27,7 +27,7 @@ from daffi.utils.misc import (
     iterable,
 )
 from daffi.utils.func_validation import pretty_callbacks
-from daffi.utils.settings import LOCAL_CALLBACK_MAPPING, LOCAL_CLASS_CALLBACKS, WELL_KNOWN_CALLBACKS
+from daffi.settings import LOCAL_CALLBACK_MAPPING, WELL_KNOWN_CALLBACKS, clear_method_type_stores
 
 
 class Ipc(Thread):
@@ -56,7 +56,7 @@ class Ipc(Thread):
         self.daemon = True
         self.global_condition_event = ConditionEvent()
         self.controller = self.node = None
-        self.task_waiter = TaskWaiter()
+        self.task_waiter = TaskWaiter(process_name)
 
         AsyncResult._ipc = self
 
@@ -98,39 +98,39 @@ class Ipc(Thread):
         return_result: Optional[bool] = True,
         func_period: Optional[Period] = None,
         broadcast: Optional[bool] = False,
-        inside_callback_context: Optional[bool] = False,
         stream: Optional[bool] = False,
-        retry_policy: Optional[RetryPolicy] = None,
     ):
         self._check_node()
         assert func_name is not None
         data = search_remote_callback_in_mapping(self.node.node_callback_mapping, func_name, exclude=self.process_name)
         if not data:
-            if self.node.node_callback_mapping.get(self.process_name, {}).get(func_name):
-                GlobalContextError(
-                    f"function {func_name} not found on remote processes but found locally."
-                    f" Communication between local node and the controller is prohibited."
-                    f" You can always call the callback locally via regular python syntax as usual function."
-                ).fire()
-            else:
-                # Get all callbacks without local
-                available_callbacks = pretty_callbacks(
-                    mapping=self.node.node_callback_mapping, exclude_proc=self.process_name, format="string"
-                )
-                GlobalContextError(
-                    f"function {func_name!r} not found on remote.\n"
-                    + f"Available registered callbacks:\n {available_callbacks}"
-                    if available_callbacks
-                    else ""
-                ).fire()
+            # Get all callbacks without local
+            available_callbacks = pretty_callbacks(
+                mapping=self.node.node_callback_mapping, exclude_proc=self.process_name, format="string"
+            )
+            msg = (
+                f"function {func_name!r} not found on remote.\n Available registered callbacks:\n"
+                + f"{available_callbacks}"
+                if available_callbacks
+                else "No available callbacks found on remotes"
+            )
+            GlobalContextError(msg).fire()
 
         if stream:
             # Stream has special initialization and validation process.
+            if async_:
+                # Start stream process in background without blocking main process execution.
+                stream_thread = Thread(target=self.stream, args=(func_name, args), daemon=True)
+                return stream_thread.start()
+            # Block main process execution until stream is completed.
             return self.stream(func_name, args)
 
         _, remote_callback = data
         remote_callback.validate_provided_arguments(*args, **kwargs)
         result = None
+
+        if remote_callback.is_generator and (broadcast or not return_result or func_period or async_):
+            InitializationError("Remote callback which are generators works only with FG execution modifier!")
 
         wait_in_task_waiter = async_ and not return_result and not func_period
 
@@ -144,11 +144,15 @@ class Ipc(Thread):
             period=func_period,
             timeout=timeout or 0,
         )
-        result_class = get_result_type(inside_callback_context=inside_callback_context, is_period=bool(func_period))
+        result_class = get_result_type(
+            is_period=bool(func_period),
+            is_generator=remote_callback.is_generator,
+        )
 
         if return_result or func_period:
-            result = result_class(msg=msg, retry_policy=retry_policy)
+            result = result_class(msg=msg)
         if result:
+            result._timeout = timeout
             result._register()
 
         if wait_in_task_waiter:
@@ -233,10 +237,11 @@ class Ipc(Thread):
         if not self.global_condition_event.success:
             self.global_condition_event.mark_fail()
 
-        LOCAL_CALLBACK_MAPPING.clear()
-        LOCAL_CLASS_CALLBACKS.clear()
+        clear_method_type_stores()
 
     def stream(self, func_name, args: Tuple) -> NoReturn:
+        from daffi.registry._fetcher import Args
+
         if self.is_running:
             self._check_node()
 
@@ -264,7 +269,14 @@ class Ipc(Thread):
                 self.node.node_callback_mapping, func_name, exclude=self.process_name
             )
             _, remote_callback = data
-            remote_callback.validate_provided_arguments(first_item)
+            if remote_callback.is_generator:
+                InitializationError(
+                    f"Stream don't work with remote callback which are generators."
+                    f" Check {remote_callback.alias} to fix this issue."
+                ).fire()
+
+            args, kwargs = Args._aggregate_args(args=first_item)
+            remote_callback.validate_provided_arguments(*args, **kwargs)
             stream_items = chain([first_item], stream_items)
 
             msg = RpcMessage(
@@ -290,7 +302,9 @@ class Ipc(Thread):
                     if stream_pair_group.closed:
                         stream_pair_was_closed = True
                         break
-                    for msg in ServiceMessage.build_stream_message(data=stream_item):
+                    # Convert stream item to args, kwargs
+                    args, kwargs = Args._aggregate_args(args=stream_item)
+                    for msg in ServiceMessage.build_stream_message(data=(args, kwargs)):
                         stream_pair_group.send_threadsave(msg)
             # Wait all receivers to finish stream processing.
             self.logger.debug("Stream closed. Wait for confirmation from receivers...")

@@ -4,7 +4,7 @@ from cachetools import TTLCache
 from typing import Optional, Any
 
 from daffi.utils.misc import call_after
-from daffi.utils.settings import STORE_EXPIRATION_TTL
+from daffi.settings import STORE_EXPIRATION_TTL
 
 
 class TttStore(TTLCache):

@@ -3,7 +3,8 @@ import pytest
 import asyncio
 from random import choice
 from subprocess import Popen
-from daffi import FG, BG, BROADCAST, fetcher, __body_unknown__
+from daffi import FG, BG, BROADCAST
+from daffi.decorators import fetcher, __body_unknown__
 
 
 async def call_remote(g, _range, exec_type):

@@ -7,7 +7,7 @@ import dill
 
 from daffi.exceptions import RemoteError
 from daffi.utils.misc import uuid, Period
-from daffi.utils.settings import BYTES_CHUNK, BYTES_LIMIT
+from daffi.settings import BYTES_CHUNK, BYTES_LIMIT
 from daffi.components.proto import messager_pb2
 from daffi.exceptions import InitializationError
 
@@ -32,6 +32,7 @@ class MessageFlag:
     STREAM_ERROR = 13
     STREAM_THROTTLE = 14
     RECEIVER_ERROR = 15
+    CONTROLLER_STOPPED_UNEXPECTEDLY = 16
 
 
 class Message(ABC):
@@ -169,6 +170,7 @@ class RpcMessage(ServiceMessage):
     func_name: Optional[str] = ""
     period: Optional[Period] = None
     timeout: Optional[int] = 0
+    completed: Optional[bool] = True
 
     # Byte content.
     func_args: Optional[Tuple] = field(default_factory=tuple)

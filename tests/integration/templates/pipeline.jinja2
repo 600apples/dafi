@@ -2,7 +2,8 @@
 
 {%- block content %}
 @callback
-def {{ cb_name }}(g: Global):
+def {{ cb_name }}():
+    g = get_g()
 {% if last %}
     return "My secret value"
 {% else %}

@@ -4,8 +4,14 @@ Consumer is the process that consumes available remote functions.
 import logging
 import time
 from daffi import Global, GlobalContextError, BG
+from daffi.decorators import fetcher
 
 logging.basicConfig(level=logging.INFO)
+
+
+@fetcher(BG(return_result=False))
+def some_func():
+    pass
 
 
 def main():
@@ -19,7 +25,7 @@ def main():
         while True:
             # We dont expect any return value here.
             print("Call some_func on publisher")
-            g.call.some_func() & BG(no_return=True)  # another syntax: g.call.some_func().no_return()
+            some_func()
             time.sleep(5)
 
     except GlobalContextError as e:

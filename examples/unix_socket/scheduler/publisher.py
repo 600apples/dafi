@@ -2,7 +2,8 @@
 Publisher is the process that declares available remote functions
 """
 import logging
-from daffi import Global, callback
+from daffi import Global
+from daffi.decorators import callback
 
 logging.basicConfig(level=logging.INFO)
 
@@ -21,7 +22,7 @@ async def another_func(ts) -> None:
 
 def main():
     # Process name is not required argument and will be generated automatically if not provided.
-    Global(init_controller=True)
+    Global(init_controller=True).join()
 
     # Note:
     #   This process will be running infinitely.

@@ -5,6 +5,7 @@ import logging
 import asyncio
 import traceback
 from pathlib import Path
+from random import randint
 from abc import abstractmethod
 from itertools import count
 from cached_property import cached_property
@@ -97,8 +98,8 @@ class TcpBase(ComponentI, grpc_messager.MessagerServiceServicer):
             max_port : int, optional
                 The maximum port in the range of ports to try (exclusive).
         """
-        for port in range(min_port, max_port):
-            self.port = port
+        while True:
+            self.port = randint(min_port, max_port)
             if not await self.check_endpoint_is_busy():
                 break
 
