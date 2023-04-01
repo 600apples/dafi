@@ -34,8 +34,8 @@ __all__ = ["Global", "get_g"]
 @dataclass
 class Global(metaclass=Singleton):
     """
-    Main daffi entrypoint for all remote operations eg.
-    call remote callbacks, wait for remote processes, obtain additional information from remote etc.
+    The main entry point for all remote operations, such as calling remote callbacks,
+     waiting for remote processes, and obtaining additional information from remote sources.
     Args:
        process_name: Global process name. If specified it is used as reference key to Node process.
            By default randomly generated hash is used as reference.

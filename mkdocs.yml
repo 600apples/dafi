@@ -37,7 +37,7 @@ nav:
     - bidirectional communication: usage/bidirectional-communication.md
     - asynchronous execution: usage/asynchronous-execution.md
     - broadcasting: usage/broadcasting.md
-    - task scheduling and butch delayed executon: usage/scheduling-tasks.md
+    - task scheduling and batch delayed execution: usage/scheduling-tasks.md
   - Node and Controller: node-and-controller.md
   - Global object: global-object.md
   - Asynchronous applications: async-apps.md
