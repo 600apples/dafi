@@ -93,7 +93,7 @@ class RemoteCall:
             return self.fg(timeout=other.timeout)
 
         elif is_exec_modifier_type(other, BG):
-            return self.bg(timeout=other.timeout, eta=other.eta, no_return=other.no_return)
+            return self.bg(timeout=other.timeout, eta=other.eta, return_result=other.return_result)
 
         elif is_exec_modifier_type(other, PERIOD):
             return self.period(at_time=other.at_time, interval=other.interval)
@@ -129,7 +129,7 @@ class RemoteCall:
         self,
         timeout: Optional[TimeUnits] = None,
         eta: Optional[TimeUnits] = None,
-        no_return: Optional[bool] = False,
+        return_result: Optional[bool] = True,
     ) -> AsyncResult:
         timeout = self._get_duration(timeout, "timeout")
         eta = self._get_duration(eta, "eta", 0)
@@ -140,7 +140,7 @@ class RemoteCall:
             timeout=timeout,
             eta=eta,
             async_=True,
-            return_result=not no_return,
+            return_result=return_result,
         )
 
     def broadcast(

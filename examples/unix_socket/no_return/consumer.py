@@ -10,7 +10,7 @@ from daffi.decorators import fetcher
 logging.basicConfig(level=logging.INFO)
 
 
-@fetcher(BG(no_return=True))
+@fetcher(BG(return_result=False))
 def some_func():
     pass
 

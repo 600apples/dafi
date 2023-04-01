@@ -36,17 +36,12 @@ nav:
     - function transfer: usage/function-transfer.md
     - bidirectional communication: usage/bidirectional-communication.md
     - asynchronous execution: usage/asynchronous-execution.md
-    - Global: global-object.md
-    - callback decorator: callback-decorator.md
-    - fetcher decorator: fetcher-decorator.md
-    - Execution modifiers: execution-modifiers.md
-    - Example with bidirectional communication: example-bidirectional-com.md
+    - broadcasting: usage/broadcasting.md
+    - task scheduling and butch delayed executon: usage/scheduling-tasks.md
   - Node and Controller: node-and-controller.md
+  - Global object: global-object.md
   - Asynchronous applications: async-apps.md
-  - Advanced:
-    - Broadcasting: broadcasting.md
-    - Scheduling tasks: scheduling-tasks.md
-    - Streams: stream.md
+  - Execution modifiers: execution-modifiers.md
   - Code reference:
      - Global: code-reference/global.md
      - callback: code-reference/callback.md

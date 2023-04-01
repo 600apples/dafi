@@ -50,7 +50,7 @@ async def call_remote_no_return(g, num, exec_type, path):
             future & PERIOD(at_time=start + 2)
             await asyncio.sleep(3)
         elif exec_type == BG:
-            future & BG(no_return=True)
+            future & BG(return_result=False)
             await asyncio.sleep(3)
 
 

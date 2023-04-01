@@ -24,7 +24,7 @@ class FG:
 class BG:
     timeout: Optional[TimeUnits] = None
     eta: Optional[TimeUnits] = None
-    no_return: Optional[bool] = False
+    return_result: Optional[bool] = True
 
 
 @dataclass
@@ -37,7 +37,7 @@ class PERIOD:
 class BROADCAST:
     eta: Optional[TimeUnits] = None
     timeout: Optional[TimeUnits] = None  # Works only with return_result=True
-    return_result: Optional[bool] = False
+    return_result: Optional[bool] = True
 
 
 ALL_EXEC_MODIFIERS = (FG, BG, PERIOD, BROADCAST)

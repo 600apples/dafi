@@ -10,7 +10,7 @@ logger.setLevel(logging.DEBUG)
 colors = cycle(("red", "green", "blue"))
 
 
-@fetcher(BG(no_return=True))
+@fetcher(BG(return_result=False))
 def send_email(title, content):
     """Fetcher proxy to `email processor`"""
     __body_unknown__(title, content)

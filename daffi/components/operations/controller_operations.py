@@ -288,9 +288,6 @@ class ControllerOperations:
                 self.controller_callback_mapping, msg.func_name, exclude=transmitter, take_all=True
             ):
                 for receiver, _ in data:
-                    if receiver == process_name:
-                        # Do not send broadcast RpcMessage to itself!
-                        continue
                     # Take socket of destination process where function/method will be triggered.
                     if chan := await self.channel_store.get_chan(receiver):
                         if return_result:
