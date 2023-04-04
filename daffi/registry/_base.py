@@ -7,7 +7,6 @@ from daffi.utils.logger import get_daffi_logger
 
 logger = get_daffi_logger("registry", colors.blue)
 
-
 _base_class_defined = False
 
 
@@ -22,8 +21,14 @@ class RegistryMeta(ABCMeta):
                 from daffi.registry import Callback
                 from daffi.registry import Fetcher
 
-                for _cls in (Fetcher, Callback):
-                    if _cls in bases:
+                _registry_methods = (Fetcher, Callback)
+
+                for _cls in bases:
+                    if hasattr(_cls, "__daffi_mro__"):
+                        # Take `__daffi_mro__` from base class if exists.
+                        daffi_mro.extend(_cls.__daffi_mro__)
+
+                    if _cls in _registry_methods and _cls not in daffi_mro:
                         daffi_mro.append(_cls)
 
                 if (auto_init := namespace.get("auto_init", None)) is None:
