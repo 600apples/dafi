@@ -1,3 +1,5 @@
+import time
+import asyncio
 from typing import Union, NoReturn
 from anyio import create_task_group
 from anyio._backends._asyncio import TaskGroup
@@ -8,7 +10,7 @@ from daffi.utils import colors
 from daffi.utils.logger import get_daffi_logger
 from daffi.async_result import AsyncResult
 from daffi.components import ComponentsBase
-from daffi.components.proto.message import RpcMessage, ServiceMessage, MessageFlag
+from daffi.components.proto.message import RpcMessage, MessageFlag
 
 from daffi.components.scheduler import Scheduler
 from daffi.components.proto import messager_pb2_grpc as grpc_messager
@@ -16,8 +18,8 @@ from daffi.exceptions import (
     UnableToFindCandidate,
     RemoteStoppedUnexpectedly,
     InitializationError,
+    ControllerUnavailable,
 )
-from daffi.settings import LOCAL_CALLBACK_MAPPING, WELL_KNOWN_CALLBACKS
 from daffi.components.operations.node_operations import NodeOperations
 from daffi.components.operations.channel_store import ChannelPipe, MessageIterator, FreezableQueue
 
@@ -57,14 +59,20 @@ class Node(ComponentsBase):
             await self.channel.stop()
         FreezableQueue.factory_remove(self.ident)
         self.logger.info(f"{self.__class__.__name__} stopped.")
+        if ping := getattr(self, "ping", None):
+            ping.cancel()
         self._stopped = True
 
     async def before_connect(self) -> NoReturn:
         if not getattr(self, "channel", None):
             FreezableQueue.factory_remove(self.ident)
             self.channel = None
+        if getattr(self, "ping", None):
+            self.ping.cancel()
+        self.ping = None
 
-    def on_error(self) -> NoReturn:
+    def on_error(self, exception: Exception) -> NoReturn:
+        self.logger.debug(f"{self.__class__.__name__} experienced error: {exception}. {type(exception)}")
         if channel := getattr(self, "channel", None):
             channel.freeze(10)
         self.operations.on_remote_error()
@@ -89,22 +97,21 @@ class Node(ComponentsBase):
             async with create_task_group() as sg:
                 sg.start_soon(self.read_commands, task_status, sg, stub)
                 sg.start_soon(self.read_streams, sg, stub)
+                self.ping = asyncio.create_task(self.operations.ping_task(sg))
+            # To retry connecting to the controller after the task group scope was cancelled due to an error,
+            # we need to generate an error that can be handled by the upstream exception wrapper.
+            raise ControllerUnavailable()
 
     async def read_commands(self, task_status: TaskStatus, sg: TaskGroup, stub):
-        local_mapping_without_well_known_callbacks = {
-            k: v.simplified() for k, v in LOCAL_CALLBACK_MAPPING.items() if k not in WELL_KNOWN_CALLBACKS
-        }
-        await self.channel.send(
-            ServiceMessage(
-                flag=MessageFlag.HANDSHAKE,
-                transmitter=self.process_name,
-                data=local_mapping_without_well_known_callbacks,
-            )
-        )
+        self.operations.last_ping_ts = time.time()
 
+        # Send initial handshake message
+        await self.operations.send_handshake(process_name=self.process_name)
         async for msg in self.channel:
             if msg.flag in (MessageFlag.HANDSHAKE, MessageFlag.UPDATE_CALLBACKS):
-                await self.operations.on_handshake(msg, task_status, self.process_name, self.info)
+                await self.operations.on_handshake(
+                    msg, task_status, self.process_name, self.info, self.execute_on_connect
+                )
 
             elif msg.flag in (MessageFlag.REQUEST, MessageFlag.BROADCAST):
                 await self.operations.on_request(msg, sg, self.process_name, self.scheduler)
@@ -141,6 +148,9 @@ class Node(ComponentsBase):
 
             elif msg.flag == MessageFlag.CONTROLLER_STOPPED_UNEXPECTEDLY:
                 self.operations.on_remote_error()
+
+            elif msg.flag == MessageFlag.PING:
+                await self.operations.on_ping()
 
     def send_threadsave(self, msg: RpcMessage, eta: Union[int, float]):
         """Send message outside of node executor scope."""

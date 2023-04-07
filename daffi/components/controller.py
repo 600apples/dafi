@@ -1,7 +1,6 @@
 import asyncio
 from typing import NoReturn
 
-import grpc
 from anyio.abc import TaskStatus
 from anyio import create_task_group, move_on_after
 
@@ -48,23 +47,28 @@ class Controller(ComponentsBase):
         self.logger.debug("On stop event triggered")
         # Notify all nodes that controller has been terminated.
         await self.operations.on_controller_stopped(self.process_name)
-
         async with create_task_group() as sg:
-            with move_on_after(2):
-                sg.start_soon(FreezableQueue.clear_all)
-                await self.operations.wait_all_requests_done()
-            with move_on_after(2):
+            with move_on_after(0.5):
                 if self.listener:
-                    sg.start_soon(self.listener.stop, 2)
+                    sg.start_soon(self.listener.stop, 1)
+        await FreezableQueue.clear_all()
+        # Cancel all existing asyncio tasks in controller. Controller stops after Node so we are sure it doesnt
+        # break anything.
+        tasks = [task for task in asyncio.all_tasks(asyncio.get_running_loop()) if not task.done()]
+        for task in tasks:
+            task.cancel()
+
         self.logger.info(f"{self.__class__.__name__} stopped.")
         self._stopped = True
 
     async def before_connect(self) -> NoReturn:
         await FreezableQueue.clear_all()
         self.listener = None
+        if not getattr(self, "ping", None):
+            self.ping = asyncio.create_task(self.operations.on_ping())
 
-    def on_error(self) -> NoReturn:
-        pass
+    def on_error(self, exception: Exception) -> NoReturn:
+        self.logger.debug(f"{self.__class__.__name__} experienced error: {exception}. {type(exception)}")
 
     # ------------------------------------------------------------------------------------------------------------------
     # Message operations

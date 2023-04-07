@@ -44,6 +44,10 @@ class StopComponentError(Exception):
     ...
 
 
+class ControllerUnavailable(Exception):
+    ...
+
+
 @dataclass
 class RemoteError:
     """It is not Exception itself but container to transfer exceptions from remove executor to caller."""

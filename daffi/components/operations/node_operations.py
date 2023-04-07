@@ -3,7 +3,7 @@ import time
 import pickle
 import logging
 import asyncio
-from typing import NoReturn, Dict
+from typing import NoReturn, Dict, Callable, Any
 from queue import Queue as thQueue
 
 from anyio import run
@@ -20,6 +20,7 @@ from daffi.utils.misc import run_in_threadpool, run_from_working_thread, iterate
 
 from daffi.settings import (
     LOCAL_CALLBACK_MAPPING,
+    WELL_KNOWN_CALLBACKS,
 )
 from daffi.components.operations.channel_store import ChannelPipe
 from daffi.exceptions import StopComponentError, GlobalContextError, RemoteStoppedUnexpectedly
@@ -40,6 +41,7 @@ class NodeOperations:
         self.async_backend = async_backend
         self.node_callback_mapping: Dict[K, Dict[K, GlobalCallback]] = dict()
         self.init_ts = None  # Timestamp of handshake.
+        self.last_ping_ts = time.time()
 
     @property
     def channel(self) -> ChannelPipe:
@@ -50,7 +52,22 @@ class NodeOperations:
         self._channel = channel
         self._channel.proceed()
 
-    async def on_handshake(self, msg: ServiceMessage, task_status: TaskStatus, process_name: str, info: str):
+    async def send_handshake(self, process_name: str):
+        """Send initial handshake message"""
+        local_mapping_without_well_known_callbacks = {
+            k: v.simplified() for k, v in LOCAL_CALLBACK_MAPPING.items() if k not in WELL_KNOWN_CALLBACKS
+        }
+        await self.channel.send(
+            ServiceMessage(
+                flag=MessageFlag.HANDSHAKE,
+                transmitter=process_name,
+                data=local_mapping_without_well_known_callbacks,
+            )
+        )
+
+    async def on_handshake(
+        self, msg: ServiceMessage, task_status: TaskStatus, process_name: str, info: str, on_connect: Callable[[], Any]
+    ):
         try:
             msg.loads()
         except Exception as e:
@@ -60,15 +77,16 @@ class NodeOperations:
         else:
             self.node_callback_mapping = msg.data
             if msg.transmitter == process_name and msg.flag == MessageFlag.HANDSHAKE:
-                # Prevent flooding to terminal if re-connections are happen too ofter.
-                if not self.init_ts or (time.time() - self.init_ts) > 2:
-                    self.init_ts = time.time()
-                    self.logger.info(
-                        f"Node has been started successfully. Process identificator: {process_name!r}. Connection info: {info}"
-                    )
+                self.logger.info(
+                    f"Node has been started successfully. Process identificator: {process_name!r}. Connection info: {info}"
+                )
                 if task_status._future._state == "PENDING":
                     # Consider Node to be started only after handshake response is received.
                     task_status.started("STARTED")
+                # It is important to execute `on_connect` after receiving handshake response from Controller as
+                # `on_connect` internal logic might rely on data obtained from remote processes so current process
+                # should be aware of all available callbacks that exists in remote processes.
+                await on_connect()
 
     async def on_request(
         self,
@@ -118,7 +136,7 @@ class NodeOperations:
         if msg.return_result:
             ares = ResultInf._awaited_results.get(msg.uuid)
             if not ares and not error:
-                self.logger.warning(f"Result {msg.uuid} was deleted by timeout")
+                self.logger.debug(f"Result {msg.uuid} was deleted by timeout")
             elif not ares and error:
                 # Result already taken by timeout. No need to raise error but need to notify about
                 # finally remote call returned exception.
@@ -202,6 +220,24 @@ class NodeOperations:
         stream_pair_group = self.stream_store.stream_pair_group_store.get(str(msg.uuid))
         if stream_pair_group:
             stream_pair_group.throttle_time = msg.data
+
+    async def on_ping(self):
+        """Update the timestamp to reflect the most recent ping signal sent by the controller."""
+        self.logger.debug(f"Received `ping` signal from controller")
+        self.last_ping_ts = time.time()
+
+    async def ping_task(self, sg: TaskGroup):
+        """
+        Recurring task that monitors the timestamp of the last ping signal sent by the controller.
+        If this timestamp is deemed too old, the entire Node process will be restarted,
+        prompting new attempts to establish a connection with the controller.
+        """
+        while True:
+            await asyncio.sleep(5)
+            if (time.time() - self.last_ping_ts) > 15:
+                self.on_remote_error()
+                await sg.cancel_scope.cancel()
+                break
 
     def on_remote_error(self):
         err = RemoteError(

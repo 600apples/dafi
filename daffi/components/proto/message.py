@@ -33,6 +33,7 @@ class MessageFlag:
     STREAM_THROTTLE = 14
     RECEIVER_ERROR = 15
     CONTROLLER_STOPPED_UNEXPECTEDLY = 16
+    PING = 17
 
 
 class Message(ABC):

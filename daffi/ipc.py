@@ -40,6 +40,7 @@ class Ipc(Thread):
         host: Optional[str] = None,
         port: Optional[int] = None,
         unix_sock_path: Optional[os.PathLike] = None,
+        on_connect: Optional[Callable[["Global"], Any]] = None,
         logger: Logger = None,
     ):
         super().__init__()
@@ -50,6 +51,7 @@ class Ipc(Thread):
         self.host = host
         self.port = port
         self.unix_sock_path = unix_sock_path
+        self.on_connect = on_connect
         self.logger = logger
         self.async_backend = async_library()
 
@@ -62,6 +64,9 @@ class Ipc(Thread):
 
         if not (self.init_controller or self.init_node):
             InitializationError("At least one of 'init_controller' or 'init_node' must be True.").fire()
+
+        if self.on_connect and iscoroutinefunction(self.on_connect):
+            raise InitializationError("`on_connect` callback should not be an asynchronous function.")
 
         set_signal_handler(self.stop)
 
@@ -101,7 +106,6 @@ class Ipc(Thread):
         stream: Optional[bool] = False,
     ):
         self._check_node()
-        assert func_name is not None
         data = search_remote_callback_in_mapping(self.node.node_callback_mapping, func_name, exclude=self.process_name)
         if not data:
             # Get all callbacks without local
@@ -109,8 +113,11 @@ class Ipc(Thread):
                 mapping=self.node.node_callback_mapping, exclude_proc=self.process_name, format="string"
             )
             msg = (
-                f"function {func_name!r} not found on remote.\n Available registered callbacks:\n"
-                + f"{available_callbacks}"
+                f"function {func_name!r} not found on remote. "
+                f"If your goal is to run the fetcher immediately after initializing the process,"
+                f" consider using the `wait_function` or `wait_process` functions"
+                f" to ensure that the corresponding process is ready before proceeding."
+                f".\n Available registered callbacks:\n" + f"{available_callbacks}"
                 if available_callbacks
                 else "No available callbacks found on remotes"
             )
@@ -144,7 +151,7 @@ class Ipc(Thread):
             period=func_period,
             timeout=timeout or 0,
         )
-        result_class = get_result_type(
+        result_class, allow_compute = get_result_type(
             is_period=bool(func_period),
             is_generator=remote_callback.is_generator,
         )
@@ -167,7 +174,7 @@ class Ipc(Thread):
             result._scheduler_type = func_period.scheduler_type
             return result.get()
 
-        if not async_ and return_result:
+        if not async_ and return_result and allow_compute:
             result = result.get(timeout=timeout)
         return result
 
@@ -207,6 +214,7 @@ class Ipc(Thread):
                         port=self.port,
                         async_backend=self.async_backend,
                         global_terminate_event=self.global_terminate_event,
+                        on_connect=self.on_connect,
                     )
 
                     n_future, _ = portal.start_task(
@@ -394,23 +402,6 @@ class Ipc(Thread):
                 func_args=(self.process_name,),
             )
             return self.node.send_and_register_result(msg=msg).get()
-
-    def kill_all(self) -> NoReturn:
-        if self.is_running:
-            self._check_node()
-            func_name = "__kill_all"
-            msg = RpcMessage(
-                flag=MessageFlag.STOP_REQUEST, transmitter=self.process_name, func_name=func_name, return_result=False
-            )
-            self.node.send_threadsave(msg, 0)
-            for i in cycle(range(1, 51)):
-                if not (diff := {k for k in self.controller_callback_mapping} - {self.process_name}):
-                    break
-                if i == 25:
-                    self.node.send_threadsave(msg, 0)
-                elif i == 50:
-                    self.logger.error(f"Node(s): {diff} are still pending after after kill signal.")
-                time.sleep(0.5)
 
     def stop(self, *args, **kwargs):
         if args:

@@ -1,5 +1,6 @@
 import os
 import sys
+import time
 from dataclasses import dataclass, field
 from threading import Event
 from typing import (
@@ -18,7 +19,7 @@ from tenacity import retry, retry_if_exception_type, wait_fixed, stop_after_atte
 
 from daffi.utils import colors
 from daffi.utils.logger import get_daffi_logger
-from daffi.decorators import callback, __body_unknown__
+from daffi.decorators import callback
 from daffi.exceptions import InitializationError, GlobalContextError
 from daffi.ipc import Ipc
 from daffi.remote_call import LazyRemoteCall
@@ -44,8 +45,10 @@ class Global(metaclass=Singleton):
        host: host to connect `Controller`/`Node` via tcp. If not provided then Global consider UNIX socket connection to be used.
        port: Optional port to connect `Controller`/`Node` via tcp. If not provided random port will be chosen.
        unix_sock_path: Folder where UNIX socket will be created. If not provided default path is < tmp directory >/dafi/
-          where `<tmp directory >` is default temporary directory on system.
-       on_connect: Function that will be executed when connection to Controller is established
+           where `<tmp directory >` is default temporary directory on system.
+       on_init: Function that will be executed once when Global object is initialized. `on_init` takes Global object as first argument
+       on_connect: Function that will be executed each time when connection
+           to Controller is established (IOW it works only for Nodes). `on_connect` takes Global object as first argument
     """
 
     process_name: Optional[str] = field(default_factory=string_uuid)
@@ -54,7 +57,8 @@ class Global(metaclass=Singleton):
     host: Optional[str] = None
     port: Optional[int] = None
     unix_sock_path: Optional[os.PathLike] = None
-    on_connect: Optional[Callable[..., Any]] = None
+    on_init: Optional[Callable[["Global"], Any]] = None
+    on_connect: Optional[Callable[["Global"], Any]] = None
 
     def __post_init__(self):
         self.process_name = str(self.process_name)
@@ -86,6 +90,7 @@ class Global(metaclass=Singleton):
             host=self.host,
             port=self.port,
             unix_sock_path=self.unix_sock_path,
+            on_connect=self.on_connect,
             logger=logger,
         )
 
@@ -93,10 +98,13 @@ class Global(metaclass=Singleton):
         self.ipc.start()
         if not self.ipc.wait():
             self.stop()
-            GlobalContextError("Unable to start daffi components.").fire()
+            logger.error("Unable to start daffi components.")
+            return
         self.port = self.ipc.port
-        if self.on_connect and callable(self.on_connect):
-            self.on_connect()
+        if self.on_init and callable(self.on_init):
+            self.on_init(self)
+        # Give some extra time for nodes to connect before using fetchers.
+        time.sleep(2)
 
     def __enter__(self):
         return self
@@ -136,27 +144,10 @@ class Global(metaclass=Singleton):
         while self.ipc.is_alive():
             await sleep(0.5)
 
-    def stop(self, kill_all_connected_nodes: Optional[bool] = False):
+    def stop(self):
         """
-        Stop all components (Node/Controller) that is running are current process
-        Args:
-            kill_all_connected_nodes: Optional flag that indicated whether kill signal should be sent to all connected
-                nodes. This argument works only for those processes where controller is running.
-        """
-        res = None
-        if kill_all_connected_nodes:
-            if not self.is_controller:
-                logger.error("You can kill all nodes only from a process that has a controller")
-            else:
-                logger.debug(f"`Kill all` operation triggered ({self.process_name})")
-                res = self.kill_all()
+        Stop all components (Node/Controller) that is running are current process"""
         self.ipc.stop()
-        return res
-
-    def kill_all(self):
-        """Kill all connected nodes. This method works only for those processes where controller is running"""
-        res = self.ipc.kill_all()
-        return res
 
     def transfer_and_call(
         self, remote_process: str, func: Callable[..., Any], *args: Tuple[Any], **kwargs: Dict[Any, Any]
@@ -375,8 +366,3 @@ async def __get_all_period_tasks(process_name: str) -> List[Dict]:
                 }
             )
     return res
-
-
-@callback
-async def __kill_all() -> NoReturn:
-    __body_unknown__()

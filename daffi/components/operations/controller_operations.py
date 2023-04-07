@@ -2,8 +2,6 @@ import logging
 import asyncio
 from typing import Dict
 
-from anyio import sleep
-
 from daffi.settings import WELL_KNOWN_CALLBACKS, DEBUG
 from daffi.utils.custom_types import K, GlobalCallback
 from daffi.utils.misc import search_remote_callback_in_mapping, call_after
@@ -30,10 +28,6 @@ class ControllerOperations:
         self.awaited_broadcast_procs = OneToManyCallStore()
         self.awaited_stream_procs = OneToManyCallStore()
 
-    async def wait_all_requests_done(self):
-        while self.awaited_procs or self.awaited_broadcast_procs or self.awaited_stream_procs:
-            await sleep(0.1)
-
     async def on_controller_stopped(self, proc_name):
         async for proc, chan in self.channel_store.iterate():
             if proc != proc_name:
@@ -55,6 +49,7 @@ class ControllerOperations:
             await self._on_channel_close(chan, chan.ident)
 
     async def _on_channel_close(self, channel: ChannelPipe, process_identificator: str):
+        self.logger.debug(f"Lock expired. Channel {channel} (process={process_identificator}) is about to be deleted.")
         self.closed_procs.pop(process_identificator, None)
         del_proc = await self.channel_store.find_process_name_by_channel(channel)
         await self.channel_store.delete_channel(del_proc)
@@ -247,7 +242,7 @@ class ControllerOperations:
                     )
                 msg.set_error(RemoteError(info=info))
                 await chan.send(msg)
-                self.logger.error(info)
+                self.logger.debug(info)
 
         else:
             if chan := await self.channel_store.get_chan(transmitter):
@@ -337,6 +332,15 @@ class ControllerOperations:
     async def on_stream_throttle(self, msg: ServiceMessage):
         if chan := await self.channel_store.get_chan(msg.receiver):
             await chan.send(msg)
+
+    async def on_ping(self):
+        msg = ServiceMessage(flag=MessageFlag.PING)
+        while True:
+            # Send ping message every 12 seconds
+            async for _, chan in self.channel_store.iterate():
+                # Send ping message to all processes.
+                await chan.send(msg)
+            await asyncio.sleep(5)
 
     async def on_receiver_error(self, msg: ServiceMessage):
         """

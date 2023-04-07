@@ -9,8 +9,8 @@ from random import randint
 from abc import abstractmethod
 from itertools import count
 from cached_property import cached_property
-from threading import Event as thEvent
-from typing import Optional, NoReturn, Callable, ClassVar, List
+from threading import Event as thEvent, Thread
+from typing import Optional, NoReturn, Callable, ClassVar, List, Any
 from contextlib import asynccontextmanager
 from tempfile import gettempdir
 
@@ -20,7 +20,7 @@ from grpc.aio._call import AioRpcError
 from anyio import TASK_STATUS_IGNORED
 from tenacity import AsyncRetrying, wait_fixed, retry_if_exception_type, RetryCallState, wait_none
 
-from daffi.exceptions import StopComponentError
+from daffi.exceptions import StopComponentError, ControllerUnavailable, InitializationError
 from daffi.interface import ComponentI
 from daffi.components.proto import messager_pb2_grpc as grpc_messager
 from daffi.utils.misc import string_uuid
@@ -51,7 +51,7 @@ class UnixBase(ComponentI, grpc_messager.MessagerServiceServicer):
 
     @asynccontextmanager
     async def connect_listener(self):
-        async with aio.insecure_channel(self.unix_socket, options=self.client_options) as aio_channel:
+        async with aio.insecure_channel(self.unix_socket) as aio_channel:
             yield aio_channel
 
     async def create_listener(self) -> NoReturn:
@@ -74,7 +74,7 @@ class TcpBase(ComponentI, grpc_messager.MessagerServiceServicer):
 
     @asynccontextmanager
     async def connect_listener(self):
-        async with aio.insecure_channel(f"{self.host}:{self.port}", options=self.client_options) as aio_channel:
+        async with aio.insecure_channel(f"{self.host}:{self.port}") as aio_channel:
             yield aio_channel
 
     async def create_listener(self, task_status: TaskStatus = TASK_STATUS_IGNORED) -> NoReturn:
@@ -105,9 +105,9 @@ class TcpBase(ComponentI, grpc_messager.MessagerServiceServicer):
 
 
 class ComponentsBase(UnixBase, TcpBase):
-    RETRY_TIMEOUT = 2  # 2 sec
+    RETRY_TIMEOUT = 1  # 1 sec
     IMMEDIATE_ACTION_ERRORS = (AioRpcError,)
-    NON_IMMEDIATE_ACTION_ERRORS = (AioRpcError, RuntimeError)
+    NON_IMMEDIATE_ACTION_ERRORS = (AioRpcError, RuntimeError, ControllerUnavailable)
     STOP_ACTION_ERRORS = (StopComponentError,)
 
     logger: logging.Logger = None
@@ -121,6 +121,7 @@ class ComponentsBase(UnixBase, TcpBase):
         unix_sock_path: Optional[os.PathLike] = None,
         async_backend: Optional[str] = None,
         global_terminate_event: Optional[thEvent] = None,
+        on_connect: Optional[Callable[["Global"], Any]] = None,
     ):
         self._set_keyboard_interrupt_handler()
 
@@ -129,6 +130,7 @@ class ComponentsBase(UnixBase, TcpBase):
         self.operations = None
         self.ident = string_uuid()
         self.global_terminate_event = global_terminate_event
+        self.on_connect = on_connect
         self._stopped = self._connected = False
         self.stop_event: bool = False
         self.stop_callbacks: List[Callable] = []
@@ -156,21 +158,11 @@ class ComponentsBase(UnixBase, TcpBase):
 
     async def on_stop(self) -> NoReturn:
         while not self.stop_event:
-            await asyncio.sleep(0.1)
+            await asyncio.sleep(0.3)
 
     @abstractmethod
-    def on_error(self) -> NoReturn:
+    def on_error(self, exception: Exception) -> NoReturn:
         raise NotImplementedError
-
-    @cached_property
-    def client_options(self):
-        """Grpc client options"""
-        # GRPC_ARG_KEEPALIVE_TIME_MS   "grpc.keepalive_time_ms"
-        #   After a duration of this time the client/server pings its peer to see if the transport is still alive.
-        # GRPC_ARG_KEEPALIVE_TIMEOUT_MS   "grpc.keepalive_timeout_ms"
-        #   After waiting for a duration of this time, if the keepalive ping
-        #   sender does not receive the ping ack, it will close the transport.
-        return [("grpc.keepalive_timeout_ms", 1000), ("grpc.keepalive_time_ms", 360000)]
 
     @cached_property
     def info(self) -> str:
@@ -201,22 +193,37 @@ class ComponentsBase(UnixBase, TcpBase):
         self._connected = True
         return listener
 
+    async def execute_on_connect(self):
+        """Execute `on_connect` lifecycle handler in separate thread to prevent blocking main message handler."""
+        if self.on_connect:
+            # Execute `on_connect` lifecycle event in case such handler exists.
+            def _on_connect_wrapper():
+                from daffi import get_g
+
+                while True:
+                    try:
+                        g = get_g()
+                        break
+                    except InitializationError:
+                        time.sleep(0.1)
+                try:
+                    self.on_connect(g)
+                except Exception as e:
+                    self.logger.error(f"Exception occurred while execution `on_connect` handler: {e}, type: {type(e)}")
+
+            Thread(target=_on_connect_wrapper).start()
+
     def after_exception(self, retry_state: RetryCallState):
         """return the result of the last call attempt"""
 
-        self.on_error()
         retry_object = retry_state.retry_object
         attempt = retry_state.attempt_number
         exception = retry_state.outcome.exception()
+        self.on_error(exception)
 
         if type(exception) in self.IMMEDIATE_ACTION_ERRORS:
             if type(exception) == AioRpcError:
-                if "Cancelling all calls" in str(exception):
-                    self.logger.debug("Cancelling all tasks and stop.")
-                    self.stop()
-                    self.check_stopped_components()
-                    return
-                elif "Deadline Exceeded" in str(exception) or "Controller is down!" in str(exception):
+                if "Deadline Exceeded" in str(exception) or "Controller is down!" in str(exception):
                     retry_object.begin()
                     retry_object.wait = wait_none()
                     return
@@ -229,7 +236,7 @@ class ComponentsBase(UnixBase, TcpBase):
 
         if type(exception) in self.NON_IMMEDIATE_ACTION_ERRORS:
             retry_object.wait = wait_fixed(self.RETRY_TIMEOUT)
-            if attempt == 3 or not attempt % 5:
+            if attempt == 3 or not attempt % 6:
                 self.logger.error(
                     f"Unable to connect {self.__class__.__name__}"
                     f" {self.process_name!r}. Error = {type(exception)} {exception}. Retrying..."
@@ -257,7 +264,7 @@ class ComponentsBase(UnixBase, TcpBase):
             after=self.after_exception,
         ):
             with attempt:
-                if self.stop_event:
+                if self.stop_event or self.global_terminate_event.is_set():
                     return
 
                 await self.before_connect()
