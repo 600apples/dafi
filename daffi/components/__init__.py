@@ -10,7 +10,7 @@ from abc import abstractmethod
 from itertools import count
 from cached_property import cached_property
 from threading import Event as thEvent, Thread
-from typing import Optional, NoReturn, Callable, ClassVar, List, Any
+from typing import Optional, NoReturn, Callable, ClassVar, List, Any, Set
 from contextlib import asynccontextmanager
 from tempfile import gettempdir
 
@@ -111,7 +111,7 @@ class ComponentsBase(UnixBase, TcpBase):
     STOP_ACTION_ERRORS = (StopComponentError,)
 
     logger: logging.Logger = None
-    components: ClassVar[List[Callable]] = []
+    components: ClassVar[Set[Callable]] = set()
 
     def __init__(
         self,
@@ -121,7 +121,8 @@ class ComponentsBase(UnixBase, TcpBase):
         unix_sock_path: Optional[os.PathLike] = None,
         async_backend: Optional[str] = None,
         global_terminate_event: Optional[thEvent] = None,
-        on_connect: Optional[Callable[["Global"], Any]] = None,
+        on_node_connect: Optional[Callable[["Global", str], Any]] = None,
+        on_node_disconnect: Optional[Callable[["Global", str], Any]] = None,
     ):
         self._set_keyboard_interrupt_handler()
 
@@ -130,12 +131,13 @@ class ComponentsBase(UnixBase, TcpBase):
         self.operations = None
         self.ident = string_uuid()
         self.global_terminate_event = global_terminate_event
-        self.on_connect = on_connect
+        self.on_node_connect = on_node_connect
+        self.on_node_disconnect = on_node_disconnect
         self._stopped = self._connected = False
         self.stop_event: bool = False
         self.stop_callbacks: List[Callable] = []
 
-        self.components.append(self)
+        self.components.add(self)
 
         if host:  # Check only host. Full host/port validation already took place before.
             self._base = TcpBase
@@ -143,6 +145,9 @@ class ComponentsBase(UnixBase, TcpBase):
         else:
             self._base = UnixBase
             self._base.__init__(self, unix_sock_path)
+
+    def __hash__(self):
+        return hash(self.__class__.__name__)
 
     @abstractmethod
     async def on_init(self) -> NoReturn:
@@ -159,6 +164,18 @@ class ComponentsBase(UnixBase, TcpBase):
     async def on_stop(self) -> NoReturn:
         while not self.stop_event:
             await asyncio.sleep(0.3)
+
+    async def on_terminate(self):
+        self.logger.info(f"{self.__class__.__name__} stopped.")
+        self._stopped = True
+        self.components.discard(self)
+        if not self.components:
+            # Cancel all existing asyncio tasks if component is the last one in termination chain. Eg if controller
+            # is running along with node then controller will be in charge of cleaning.
+            self.logger.debug("Cleaning asyncio tasks...")
+            tasks = [task for task in asyncio.all_tasks(asyncio.get_running_loop()) if not task.done()]
+            for task in tasks:
+                task.cancel()
 
     @abstractmethod
     def on_error(self, exception: Exception) -> NoReturn:
@@ -195,7 +212,7 @@ class ComponentsBase(UnixBase, TcpBase):
 
     async def execute_on_connect(self):
         """Execute `on_connect` lifecycle handler in separate thread to prevent blocking main message handler."""
-        if self.on_connect:
+        if self.on_node_connect:
             # Execute `on_connect` lifecycle event in case such handler exists.
             def _on_connect_wrapper():
                 from daffi import get_g
@@ -207,11 +224,29 @@ class ComponentsBase(UnixBase, TcpBase):
                     except InitializationError:
                         time.sleep(0.1)
                 try:
-                    self.on_connect(g)
+                    self.on_node_connect(g, self.process_name)
                 except Exception as e:
-                    self.logger.error(f"Exception occurred while execution `on_connect` handler: {e}, type: {type(e)}")
+                    self.logger.error(
+                        f"Exception occurred while execution `on_node_connect` handler: {e}, type: {type(e)}"
+                    )
 
             Thread(target=_on_connect_wrapper).start()
+
+    async def execute_on_disconnect(self, process_name):
+        if self.on_node_disconnect:
+
+            def _on_disconnect_wrapper():
+                from daffi import get_g
+
+                g = get_g()
+                try:
+                    self.on_node_disconnect(g, process_name)
+                except Exception as e:
+                    self.logger.error(
+                        f"Exception occurred while execution `on_node_disconnect` handler: {e}, type: {type(e)}"
+                    )
+
+            Thread(target=_on_disconnect_wrapper).start()
 
     def after_exception(self, retry_state: RetryCallState):
         """return the result of the last call attempt"""
@@ -223,7 +258,7 @@ class ComponentsBase(UnixBase, TcpBase):
 
         if type(exception) in self.IMMEDIATE_ACTION_ERRORS:
             if type(exception) == AioRpcError:
-                if "Deadline Exceeded" in str(exception) or "Controller is down!" in str(exception):
+                if "Deadline Exceeded" in str(exception):
                     retry_object.begin()
                     retry_object.wait = wait_none()
                     return
@@ -254,8 +289,6 @@ class ComponentsBase(UnixBase, TcpBase):
             self.global_terminate_event.set()
 
     async def handle(self, task_status: TaskStatus = TASK_STATUS_IGNORED) -> NoReturn:
-        # Register on_stop actions
-        stop_task = asyncio.create_task(self.on_stop())
         await self.on_init()
 
         async for attempt in AsyncRetrying(
@@ -265,12 +298,17 @@ class ComponentsBase(UnixBase, TcpBase):
         ):
             with attempt:
                 if self.stop_event or self.global_terminate_event.is_set():
-                    return
+                    break
 
                 await self.before_connect()
-                await self.handle_operations(task_status)
 
-        await stop_task
+                stop_task = asyncio.create_task(self.on_stop())
+                try:
+                    await asyncio.gather(self.handle_operations(task_status), stop_task)
+                finally:
+                    stop_task.cancel()
+
+        await self.on_terminate()
 
     def _set_keyboard_interrupt_handler(self) -> NoReturn:
         # Creating a handler
@@ -283,9 +321,7 @@ class ComponentsBase(UnixBase, TcpBase):
             self.logger.error("Unhandled exception:", exc_info=(exc_type, exc_value, exc_traceback))
             for component in self.components:
                 component.stop()
-
-            if all(c.stop_event for c in self.components) and self.global_terminate_event:
-                self.global_terminate_event.set()
+            self.check_stopped_components()
 
         # Assign the excepthook to the handler
         sys.excepthook = handle_unhandled_exception

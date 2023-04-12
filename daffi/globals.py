@@ -47,8 +47,9 @@ class Global(metaclass=Singleton):
        unix_sock_path: Folder where UNIX socket will be created. If not provided default path is < tmp directory >/dafi/
            where `<tmp directory >` is default temporary directory on system.
        on_init: Function that will be executed once when Global object is initialized. `on_init` takes Global object as first argument
-       on_connect: Function that will be executed each time when connection
+       on_node_connect: Function that will be executed each time when connection
            to Controller is established (IOW it works only for Nodes). `on_connect` takes Global object as first argument
+       on_node_disconnect: Function that will be executed each time when connection to Controller is lost
     """
 
     process_name: Optional[str] = field(default_factory=string_uuid)
@@ -58,7 +59,8 @@ class Global(metaclass=Singleton):
     port: Optional[int] = None
     unix_sock_path: Optional[os.PathLike] = None
     on_init: Optional[Callable[["Global"], Any]] = None
-    on_connect: Optional[Callable[["Global"], Any]] = None
+    on_node_connect: Optional[Callable[["Global", str], Any]] = None
+    on_node_disconnect: Optional[Callable[["Global", str], Any]] = None
 
     def __post_init__(self):
         self.process_name = str(self.process_name)
@@ -90,7 +92,8 @@ class Global(metaclass=Singleton):
             host=self.host,
             port=self.port,
             unix_sock_path=self.unix_sock_path,
-            on_connect=self.on_connect,
+            on_node_connect=self.on_node_connect,
+            on_node_disconnect=self.on_node_disconnect,
             logger=logger,
         )
 

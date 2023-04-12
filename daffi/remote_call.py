@@ -48,11 +48,11 @@ class RemoteCall:
         args_kwargs = f"{args}{kwargs}".strip(",").strip()
         return f"<{self.__class__.__name__} {self.func_name}({args_kwargs})>"
 
-    def obtain_result_in_thread(self, next_operand: Union[FG, BG, BROADCAST, PERIOD]):
-        self._result = self & next_operand
+    def obtain_result_in_thread(self, exec_modifier: Union[FG, BG, BROADCAST, PERIOD]):
+        self._result = self & exec_modifier
 
     async def __process_await__(
-        self, next_operand: Union[FG, BG, BROADCAST, PERIOD], return_result: Optional[bool] = False
+        self, exec_modifier: Union[FG, BG, BROADCAST, PERIOD], return_result: Optional[bool] = False
     ):
         if self._fetcher and not self._fetcher.proxy:
             args = self._fetcher.wrapped(*self.args, **self.kwargs)
@@ -61,7 +61,7 @@ class RemoteCall:
             self.args, self.kwargs = Args._aggregate_args(args=args)
             self._fetcher = None
 
-        await to_thread.run_sync(self.obtain_result_in_thread, next_operand)
+        await to_thread.run_sync(self.obtain_result_in_thread, exec_modifier)
         if return_result:
             return self._result
         return self
@@ -79,9 +79,9 @@ class RemoteCall:
         if self._fetcher and self._fetcher.is_generator:
             # This is gonna be stream.
             if is_exec_modifier_type(other, FG):
-                return self.stream(async_=False)
+                return self.stream(async_=False, receiver=other.receiver)
             elif is_exec_modifier_type(other, BG):
-                return self.stream(async_=True)
+                return self.stream(async_=True, receiver=other.receiver)
             else:
                 InitializationError(
                     f"Invalid execution modifier: {other}. "
@@ -90,13 +90,15 @@ class RemoteCall:
                 )
 
         if is_exec_modifier_type(other, FG):
-            return self.fg(timeout=other.timeout)
+            return self.fg(timeout=other.timeout, receiver=other.receiver)
 
         elif is_exec_modifier_type(other, BG):
-            return self.bg(timeout=other.timeout, eta=other.eta, return_result=other.return_result)
+            return self.bg(
+                timeout=other.timeout, eta=other.eta, return_result=other.return_result, receiver=other.receiver
+            )
 
         elif is_exec_modifier_type(other, PERIOD):
-            return self.period(at_time=other.at_time, interval=other.interval)
+            return self.period(at_time=other.at_time, interval=other.interval, receiver=other.receiver)
 
         elif is_exec_modifier_type(other, BROADCAST):
             return self.broadcast(eta=other.eta, return_result=other.return_result, timeout=other.timeout)
@@ -114,7 +116,7 @@ class RemoteCall:
     def exists(self) -> bool:
         return bool(self.info)
 
-    def fg(self, timeout: Optional[TimeUnits] = None) -> RemoteResult:
+    def fg(self, timeout: Optional[TimeUnits] = None, receiver: Optional[str] = None) -> RemoteResult:
         timeout = self._get_duration(timeout, "timeout")
         return self._ipc.call(
             self.func_name,
@@ -123,6 +125,7 @@ class RemoteCall:
             timeout=timeout,
             async_=False,
             return_result=True,
+            receiver=receiver,
         )
 
     def bg(
@@ -130,6 +133,7 @@ class RemoteCall:
         timeout: Optional[TimeUnits] = None,
         eta: Optional[TimeUnits] = None,
         return_result: Optional[bool] = True,
+        receiver: Optional[str] = None,
     ) -> AsyncResult:
         timeout = self._get_duration(timeout, "timeout")
         eta = self._get_duration(eta, "eta", 0)
@@ -141,6 +145,7 @@ class RemoteCall:
             eta=eta,
             async_=True,
             return_result=return_result,
+            receiver=receiver,
         )
 
     def broadcast(
@@ -163,7 +168,10 @@ class RemoteCall:
         )
 
     def period(
-        self, at_time: Optional[Union[List[TimeUnits], TimeUnits]], interval: Optional[TimeUnits]
+        self,
+        at_time: Optional[Union[List[TimeUnits], TimeUnits]],
+        interval: Optional[TimeUnits],
+        receiver: Optional[str] = None,
     ) -> SchedulerTask:
         if at_time is not None:
             if isinstance(at_time, (int, float, str, timedelta, datetime)):
@@ -181,16 +189,19 @@ class RemoteCall:
             async_=True,
             return_result=False,
             func_period=func_period,
+            receiver=receiver,
         )
 
-    def stream(self, async_: bool) -> NoReturn:
+    def stream(self, async_: bool, receiver: Optional[str] = None) -> NoReturn:
         """
         Start stream to remote.
         This is implicit execution modifier when upstream fetcher is generator (contains `yield` statement(s))
         Args:
             async_: If True stream will be executed in background without blocking main process.
         """
-        return self._ipc.call(self.func_name, args=self.args, kwargs=None, stream=True, async_=async_)
+        return self._ipc.call(
+            self.func_name, args=self.args, kwargs=None, stream=True, async_=async_, receiver=receiver
+        )
 
     def _get_duration(self, val: TimeUnits, arg_name: str, default: Optional[int] = None) -> Union[int, float]:
         if val:
@@ -297,7 +308,7 @@ class LazyRemoteCall:
         )
         if __self__._exec_modifier:
             if __self__.is_async:
-                return remote_call.__process_await__(next_operand=__self__._exec_modifier, return_result=True)
+                return remote_call.__process_await__(exec_modifier=__self__._exec_modifier, return_result=True)
             return remote_call & __self__._exec_modifier
         return remote_call
 

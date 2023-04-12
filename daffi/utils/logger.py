@@ -20,11 +20,13 @@ class ColoredFormatter(logging.Formatter):
     """A logging.Formatter which prints colored WARNING and ERROR messages"""
 
     def get_level_message(self, record):
-        if record.levelno >= logging.ERROR:
-            return colors.red(record.levelname)
-        if record.levelno >= logging.WARNING:
-            return colors.yellow(record.levelname)
-        return record.levelname
+        if record.levelno <= logging.INFO:
+            levelname = f"{colors.green(record.levelname)}:"
+        elif record.levelno <= logging.WARNING:
+            levelname = f"{colors.yellow(record.levelname)}:"
+        else:
+            levelname = f"{colors.red(record.levelname)}:"
+        return f"{levelname: <17}"
 
     def format(self, record):
         if isinstance(record.msg, bytes):

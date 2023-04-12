@@ -19,6 +19,7 @@ from daffi.exceptions import (
     RemoteStoppedUnexpectedly,
     InitializationError,
     ControllerUnavailable,
+    StopComponentError,
 )
 from daffi.components.operations.node_operations import NodeOperations
 from daffi.components.operations.channel_store import ChannelPipe, MessageIterator, FreezableQueue
@@ -53,15 +54,11 @@ class Node(ComponentsBase):
         self.logger.debug(f"On stop event triggered")
         await self.scheduler.on_scheduler_stop()
         self.operations.on_remote_error()
-
         if self.channel:
             await self.channel.clear_queue()
             await self.channel.stop()
         FreezableQueue.factory_remove(self.ident)
-        self.logger.info(f"{self.__class__.__name__} stopped.")
-        if ping := getattr(self, "ping", None):
-            ping.cancel()
-        self._stopped = True
+        raise StopComponentError()
 
     async def before_connect(self) -> NoReturn:
         if not getattr(self, "channel", None):
@@ -72,6 +69,7 @@ class Node(ComponentsBase):
         self.ping = None
 
     def on_error(self, exception: Exception) -> NoReturn:
+        self.operations.handshake_ts = None
         self.logger.debug(f"{self.__class__.__name__} experienced error: {exception}. {type(exception)}")
         if channel := getattr(self, "channel", None):
             channel.freeze(10)
@@ -133,9 +131,6 @@ class Node(ComponentsBase):
                 else:
                     msg.error._awaited_error_type = UnableToFindCandidate
                 await self.operations.on_unable_to_find(msg)
-
-            elif msg.flag == MessageFlag.STOP_REQUEST:
-                await self.operations.on_stop_request()
 
             elif msg.flag == MessageFlag.INIT_STREAM:
                 await self.operations.on_stream_init(msg, stub, sg, self.process_name)

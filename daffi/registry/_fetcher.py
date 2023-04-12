@@ -113,6 +113,10 @@ class Fetcher(BaseRegistry):
 
         is_async = is_generator = is_proxy = False
 
+        if hasattr(fn, "__func__"):
+            # Bypass staticmethod/classmethod decorators
+            fn = fn.__func__
+
         if isinstance(fn, callback):
             is_async = fn._fn.is_async
             fn = fn._fn.wrapped

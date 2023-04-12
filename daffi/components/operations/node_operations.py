@@ -40,7 +40,7 @@ class NodeOperations:
         self.stream_store = StreamPairStore()
         self.async_backend = async_backend
         self.node_callback_mapping: Dict[K, Dict[K, GlobalCallback]] = dict()
-        self.init_ts = None  # Timestamp of handshake.
+        self.handshake_ts = None  # Timestamp of handshake.
         self.last_ping_ts = time.time()
 
     @property
@@ -76,7 +76,8 @@ class NodeOperations:
                 raise StopComponentError()
         else:
             self.node_callback_mapping = msg.data
-            if msg.transmitter == process_name and msg.flag == MessageFlag.HANDSHAKE:
+            if msg.transmitter == process_name and msg.flag == MessageFlag.HANDSHAKE and not self.handshake_ts:
+                self.handshake_ts = time.time()
                 self.logger.info(
                     f"Node has been started successfully. Process identificator: {process_name!r}. Connection info: {info}"
                 )
@@ -174,10 +175,6 @@ class NodeOperations:
         else:
             self.logger.error(msg.error.info)
 
-    async def on_stop_request(self):
-        self.logger.debug(f"Termination signal received.")
-        raise StopComponentError()
-
     async def on_stream_init(self, msg: RpcMessage, stub, sg, process_name):
         msg.loads()
         remote_callback = LOCAL_CALLBACK_MAPPING.get(msg.func_name)
@@ -234,7 +231,9 @@ class NodeOperations:
         """
         while True:
             await asyncio.sleep(5)
-            if (time.time() - self.last_ping_ts) > 15:
+            time_since_last_ping = time.time() - self.last_ping_ts
+            self.logger.debug(f"Time since last ping: {time_since_last_ping}")
+            if time_since_last_ping > 15:
                 self.on_remote_error()
                 await sg.cancel_scope.cancel()
                 break

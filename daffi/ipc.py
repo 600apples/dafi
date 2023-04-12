@@ -1,10 +1,10 @@
 import os
 import sys
-import time
-from itertools import chain, cycle
+from itertools import chain
 from logging import Logger
 from inspect import iscoroutinefunction
 from threading import Thread, Event
+from concurrent.futures import ThreadPoolExecutor
 from typing import NoReturn, Dict, Union, Optional, Callable, Any, Tuple, AsyncGenerator
 
 from anyio.from_thread import start_blocking_portal
@@ -40,7 +40,8 @@ class Ipc(Thread):
         host: Optional[str] = None,
         port: Optional[int] = None,
         unix_sock_path: Optional[os.PathLike] = None,
-        on_connect: Optional[Callable[["Global"], Any]] = None,
+        on_node_connect: Optional[Callable[["Global", str], Any]] = None,
+        on_node_disconnect: Optional[Callable[["Global", str], Any]] = None,
         logger: Logger = None,
     ):
         super().__init__()
@@ -51,7 +52,8 @@ class Ipc(Thread):
         self.host = host
         self.port = port
         self.unix_sock_path = unix_sock_path
-        self.on_connect = on_connect
+        self.on_node_connect = on_node_connect
+        self.on_node_disconnect = on_node_disconnect
         self.logger = logger
         self.async_backend = async_library()
 
@@ -65,8 +67,10 @@ class Ipc(Thread):
         if not (self.init_controller or self.init_node):
             InitializationError("At least one of 'init_controller' or 'init_node' must be True.").fire()
 
-        if self.on_connect and iscoroutinefunction(self.on_connect):
-            raise InitializationError("`on_connect` callback should not be an asynchronous function.")
+        if self.on_node_connect and iscoroutinefunction(self.on_node_connect):
+            raise InitializationError("`on_node_connect` callback should not be an asynchronous function.")
+        if self.on_node_disconnect and iscoroutinefunction(self.on_node_disconnect):
+            raise InitializationError("`on_node_disconnect` callback should not be an asynchronous function.")
 
         set_signal_handler(self.stop)
 
@@ -104,9 +108,11 @@ class Ipc(Thread):
         func_period: Optional[Period] = None,
         broadcast: Optional[bool] = False,
         stream: Optional[bool] = False,
+        receiver: Optional[str] = None,
     ):
         self._check_node()
         data = search_remote_callback_in_mapping(self.node.node_callback_mapping, func_name, exclude=self.process_name)
+
         if not data:
             # Get all callbacks without local
             available_callbacks = pretty_callbacks(
@@ -123,6 +129,14 @@ class Ipc(Thread):
             )
             GlobalContextError(msg).fire()
 
+        if receiver and receiver not in self.node.node_callback_mapping:
+            # Validate if provided receiver in the one that is registered
+
+            GlobalContextError(
+                f"Provided receiver {receiver} is not one that is registered."
+                f" Available receivers = {list(self.node.node_callback_mapping.keys())}"
+            ).fire()
+
         if stream:
             # Stream has special initialization and validation process.
             if async_:
@@ -130,7 +144,7 @@ class Ipc(Thread):
                 stream_thread = Thread(target=self.stream, args=(func_name, args), daemon=True)
                 return stream_thread.start()
             # Block main process execution until stream is completed.
-            return self.stream(func_name, args)
+            return self.stream(func_name, receiver, args)
 
         _, remote_callback = data
         remote_callback.validate_provided_arguments(*args, **kwargs)
@@ -150,6 +164,7 @@ class Ipc(Thread):
             return_result=return_result or wait_in_task_waiter,
             period=func_period,
             timeout=timeout or 0,
+            receiver=receiver,
         )
         result_class, allow_compute = get_result_type(
             is_period=bool(func_period),
@@ -198,6 +213,7 @@ class Ipc(Thread):
                         host=self.host,
                         port=self.port,
                         global_terminate_event=self.global_terminate_event,
+                        on_node_disconnect=self.on_node_disconnect,
                     )
 
                     c_future, _ = portal.start_task(
@@ -214,7 +230,7 @@ class Ipc(Thread):
                         port=self.port,
                         async_backend=self.async_backend,
                         global_terminate_event=self.global_terminate_event,
-                        on_connect=self.on_connect,
+                        on_node_connect=self.on_node_connect,
                     )
 
                     n_future, _ = portal.start_task(
@@ -231,12 +247,13 @@ class Ipc(Thread):
                 self.global_terminate_event.wait()
 
                 # Wait controller and node to finish 'on_stop' lifecycle callbacks.
-                if self.node:
-                    self.node.stop(wait=True)
-                    self.task_waiter.stop()
-                if self.controller:
-                    self.controller.stop(wait=True)
-
+                with ThreadPoolExecutor(max_workers=3) as executor:
+                    executor.submit(self.task_waiter.stop)
+                    if self.node:
+                        executor.submit(self.node.stop, True)
+                    if self.controller:
+                        executor.submit(self.controller.stop, True)
+                    executor.shutdown(wait=True)
                 # Wait pending futures to complete their tasks
                 for future in filter(None, (c_future, n_future, tw_future)):
                     if not future.done():
@@ -247,7 +264,7 @@ class Ipc(Thread):
 
         clear_method_type_stores()
 
-    def stream(self, func_name, args: Tuple) -> NoReturn:
+    def stream(self, func_name: str, receiver: Optional[str], args: Tuple) -> NoReturn:
         from daffi.registry._fetcher import Args
 
         if self.is_running:
@@ -299,6 +316,13 @@ class Ipc(Thread):
             receivers = result.get()
             if not receivers:
                 InitializationError("Unable to find receivers for stream.").fire()
+            elif receiver and receiver not in receivers:
+                InitializationError(
+                    f"Provided receiver is not in the list of available receivers for fuction {func_name}."
+                    f" Available receivers = {receivers}"
+                ).fire()
+            elif receiver:
+                receivers = [receiver]
 
             # Register the same result second time to track stream errors (If happened)
             result = result._clone_and_register()
