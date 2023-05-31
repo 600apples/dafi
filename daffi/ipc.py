@@ -40,6 +40,8 @@ class Ipc(Thread):
         host: Optional[str] = None,
         port: Optional[int] = None,
         unix_sock_path: Optional[os.PathLike] = None,
+        ssl_certificate: Optional[os.PathLike] = None,
+        ssl_key: Optional[os.PathLike] = None,
         on_node_connect: Optional[Callable[["Global", str], Any]] = None,
         on_node_disconnect: Optional[Callable[["Global", str], Any]] = None,
         logger: Logger = None,
@@ -52,6 +54,8 @@ class Ipc(Thread):
         self.host = host
         self.port = port
         self.unix_sock_path = unix_sock_path
+        self.ssl_certificate = ssl_certificate
+        self.ssl_key = ssl_key
         self.on_node_connect = on_node_connect
         self.on_node_disconnect = on_node_disconnect
         self.logger = logger
@@ -214,6 +218,8 @@ class Ipc(Thread):
                         port=self.port,
                         global_terminate_event=self.global_terminate_event,
                         on_node_disconnect=self.on_node_disconnect,
+                        ssl_certificate=self.ssl_certificate,
+                        ssl_key=self.ssl_key,
                     )
 
                     c_future, _ = portal.start_task(
@@ -231,6 +237,8 @@ class Ipc(Thread):
                         async_backend=self.async_backend,
                         global_terminate_event=self.global_terminate_event,
                         on_node_connect=self.on_node_connect,
+                        ssl_certificate=self.ssl_certificate,
+                        ssl_key=self.ssl_key,
                     )
 
                     n_future, _ = portal.start_task(

@@ -236,6 +236,7 @@ class NodeOperations:
             if time_since_last_ping > 15:
                 self.on_remote_error()
                 await sg.cancel_scope.cancel()
+                sg.cancel_scope.deadline = 1
                 break
 
     def on_remote_error(self):
@@ -326,7 +327,7 @@ class NodeOperations:
             self.logger.debug(f"Stop streaming process for function: {message.func_name}. Process = {process_name}")
         except Exception as e:
             err_msg = (
-                f"Exception while streaming to function {message.func_name!r} on remote executor {process_name!r}. {e}"
+                f"Exception while streaming to function {message.func_name!r} on remote executor [{process_name}]. {e}"
             )
             error = RemoteError(info=err_msg, traceback=pickle.dumps(sys.exc_info()))
             self.logger.error(err_msg)
@@ -370,10 +371,10 @@ class NodeOperations:
             if "were given" in str(e) or "got an unexpected" in str(e) or "missing" in str(e):
                 info = f"{e}. Function signature is: {message.func_name}{remote_callback.signature}: ..."
             else:
-                info = f"Exception while processing function {message.func_name!r} on remote executor. {e}"
+                info = f"Exception while processing function {message.func_name!r} on remote executor [{process_name}]. {e}"
             error = RemoteError(info=info, traceback=pickle.dumps(sys.exc_info()))
         except Exception as e:
-            info = f"Exception while processing function {message.func_name!r} on remote executor. {e}"
+            info = f"Exception while processing function {message.func_name!r} on remote executor [{process_name}]. {e}"
             self.logger.error(info)
             error = RemoteError(info=info, traceback=pickle.dumps(sys.exc_info()))
 
@@ -449,10 +450,10 @@ class NodeOperations:
             if "were given" in str(e) or "got an unexpected" in str(e) or "missing" in str(e):
                 info = f"{e}. Function signature is: {message.func_name}{remote_callback.signature}: ..."
             else:
-                info = f"Exception while processing function {message.func_name!r} on remote executor. {e}"
+                info = f"Exception while processing function {message.func_name!r} on remote executor [{process_name}]. {e}"
             error = RemoteError(info=info, traceback=pickle.dumps(sys.exc_info()))
         except Exception as e:
-            info = f"Exception while processing function {message.func_name!r} on remote executor. {e}"
+            info = f"Exception while processing function {message.func_name!r} on remote executor [{process_name}]. {e}"
             self.logger.error(info)
             error = RemoteError(info=info, traceback=pickle.dumps(sys.exc_info()))
 

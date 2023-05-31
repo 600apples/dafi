@@ -14,13 +14,14 @@ from typing import Optional, NoReturn, Callable, ClassVar, List, Any, Set
 from contextlib import asynccontextmanager
 from tempfile import gettempdir
 
-from grpc import aio, ChannelConnectivity
+
+from grpc import aio, ChannelConnectivity, ssl_channel_credentials, ssl_server_credentials
 from anyio.abc import TaskStatus
 from grpc.aio._call import AioRpcError
 from anyio import TASK_STATUS_IGNORED
 from tenacity import AsyncRetrying, wait_fixed, retry_if_exception_type, RetryCallState, wait_none
 
-from daffi.exceptions import StopComponentError, ControllerUnavailable, InitializationError
+from daffi.exceptions import StopComponentError, ControllerUnavailable, InitializationError, RemoteCallError
 from daffi.interface import ComponentI
 from daffi.components.proto import messager_pb2_grpc as grpc_messager
 from daffi.utils.misc import string_uuid
@@ -29,8 +30,15 @@ from daffi.utils.misc import string_uuid
 class UnixBase(ComponentI, grpc_messager.MessagerServiceServicer):
     SOCK_FILE = ".sock"
 
-    def __init__(self, unix_sock_path: Optional[os.PathLike]):
+    def __init__(
+        self,
+        unix_sock_path: Optional[os.PathLike],
+        ssl_certificate: Optional[os.PathLike],
+        ssl_key: Optional[os.PathLike],
+    ):
         self.unix_sock_path = unix_sock_path
+        self.ssl_certificate = ssl_certificate
+        self.ssl_key = ssl_key
 
     def info(self) -> str:
         return f"unix socket: [ {self.unix_socket!r} ]"
@@ -51,21 +59,41 @@ class UnixBase(ComponentI, grpc_messager.MessagerServiceServicer):
 
     @asynccontextmanager
     async def connect_listener(self):
-        async with aio.insecure_channel(self.unix_socket) as aio_channel:
-            yield aio_channel
+        """UNIX Client"""
+        if self.ssl_certificate and self.ssl_key:
+            with open(self.ssl_certificate, "rb") as f:
+                creds = ssl_channel_credentials(f.read())
+            async with aio.secure_channel(self.unix_socket, creds) as aio_channel:
+                yield aio_channel
+        else:
+            async with aio.insecure_channel(self.unix_socket) as aio_channel:
+                yield aio_channel
 
     async def create_listener(self) -> NoReturn:
+        """UNIX Server"""
         server = aio.server()
         grpc_messager.add_MessagerServiceServicer_to_server(self, server)
-        server.add_insecure_port(self.unix_socket)
+        if self.ssl_certificate and self.ssl_key:
+            with open(self.ssl_key, "rb") as f:
+                private_key = f.read()
+            with open(self.ssl_certificate, "rb") as f:
+                certificate_chain = f.read()
+            server_credentials = ssl_server_credentials(((private_key, certificate_chain),))
+            server.add_secure_port(self.unix_socket, server_credentials)
+        else:
+            server.add_insecure_port(self.unix_socket)
         await server.start()
         return server
 
 
 class TcpBase(ComponentI, grpc_messager.MessagerServiceServicer):
-    def __init__(self, host: str, port: Optional[int]):
+    def __init__(
+        self, host: str, port: Optional[int], ssl_certificate: Optional[os.PathLike], ssl_key: Optional[os.PathLike]
+    ):
         self.host = host
         self.port = port
+        self.ssl_certificate = ssl_certificate
+        self.ssl_key = ssl_key
         if self.host in ("localhost", "0.0.0.0", "127.0.0.1", "192.168.0.1"):
             self.host = "[::]"
 
@@ -74,18 +102,34 @@ class TcpBase(ComponentI, grpc_messager.MessagerServiceServicer):
 
     @asynccontextmanager
     async def connect_listener(self):
-        async with aio.insecure_channel(f"{self.host}:{self.port}") as aio_channel:
-            yield aio_channel
+        """TCP Client"""
+        listen_addr = f"{self.host}:{self.port}"
+        if self.ssl_certificate and self.ssl_key:
+            with open(self.ssl_certificate, "rb") as f:
+                creds = ssl_channel_credentials(f.read())
+            async with aio.secure_channel(listen_addr, creds) as aio_channel:
+                yield aio_channel
+        else:
+            async with aio.insecure_channel(listen_addr) as aio_channel:
+                yield aio_channel
 
-    async def create_listener(self, task_status: TaskStatus = TASK_STATUS_IGNORED) -> NoReturn:
+    async def create_listener(self) -> NoReturn:
+        """TCP Server"""
         if not self.port:
             await self.find_random_port()
         server = aio.server()
         grpc_messager.add_MessagerServiceServicer_to_server(self, server)
         listen_addr = f"{self.host}:{self.port}"
-        server.add_insecure_port(listen_addr)
+        if self.ssl_certificate and self.ssl_key:
+            with open(self.ssl_key, "rb") as f:
+                private_key = f.read()
+            with open(self.ssl_certificate, "rb") as f:
+                certificate_chain = f.read()
+            server_credentials = ssl_server_credentials(((private_key, certificate_chain),))
+            server.add_secure_port(listen_addr, server_credentials)
+        else:
+            server.add_insecure_port(listen_addr)
         await server.start()
-        task_status.started()
         return server
 
     async def find_random_port(self, min_port: Optional[int] = 49152, max_port: Optional[int] = 65536) -> NoReturn:
@@ -119,6 +163,8 @@ class ComponentsBase(UnixBase, TcpBase):
         host: Optional[str] = None,
         port: Optional[int] = None,
         unix_sock_path: Optional[os.PathLike] = None,
+        ssl_certificate: Optional[os.PathLike] = None,
+        ssl_key: Optional[os.PathLike] = None,
         async_backend: Optional[str] = None,
         global_terminate_event: Optional[thEvent] = None,
         on_node_connect: Optional[Callable[["Global", str], Any]] = None,
@@ -141,10 +187,10 @@ class ComponentsBase(UnixBase, TcpBase):
 
         if host:  # Check only host. Full host/port validation already took place before.
             self._base = TcpBase
-            self._base.__init__(self, host, port)
+            self._base.__init__(self, host, port, ssl_certificate, ssl_key)
         else:
             self._base = UnixBase
-            self._base.__init__(self, unix_sock_path)
+            self._base.__init__(self, unix_sock_path, ssl_certificate, ssl_key)
 
     def __hash__(self):
         return hash(self.__class__.__name__)
@@ -214,7 +260,7 @@ class ComponentsBase(UnixBase, TcpBase):
         """Execute `on_connect` lifecycle handler in separate thread to prevent blocking main message handler."""
         if self.on_node_connect:
             # Execute `on_connect` lifecycle event in case such handler exists.
-            def _on_connect_wrapper():
+            def _on_connect_wrapper(retry=True):
                 from daffi import get_g
 
                 while True:
@@ -226,6 +272,11 @@ class ComponentsBase(UnixBase, TcpBase):
                 try:
                     self.on_node_connect(g, self.process_name)
                 except Exception as e:
+                    if isinstance(e, RemoteCallError) and retry:
+                        # another attempt to run the callback is allowed
+                        # if the error is related to access to a remote process
+                        time.sleep(1)
+                        return _on_connect_wrapper(retry=False)
                     self.logger.error(
                         f"Exception occurred while execution `on_node_connect` handler: {e}, type: {type(e)}"
                     )

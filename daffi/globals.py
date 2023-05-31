@@ -58,11 +58,15 @@ class Global(metaclass=Singleton):
     host: Optional[str] = None
     port: Optional[int] = None
     unix_sock_path: Optional[os.PathLike] = None
+    ssl_certificate: Optional[os.PathLike] = None
+    ssl_key: Optional[os.PathLike] = None
     on_init: Optional[Callable[["Global"], Any]] = None
     on_node_connect: Optional[Callable[["Global", str], Any]] = None
     on_node_disconnect: Optional[Callable[["Global", str], Any]] = None
 
     def __post_init__(self):
+        if self.process_name is None:
+            self.process_name = string_uuid()
         self.process_name = str(self.process_name)
 
         if not (self.init_controller or self.init_node):
@@ -83,6 +87,12 @@ class Global(metaclass=Singleton):
                 "Windows platform doesn't support unix sockets. Provide host and port to use TCP"
             ).fire()
 
+        if self.ssl_certificate and not os.path.exists(self.ssl_certificate):
+            InitializationError("ssl_certificate: invalid path").fire()
+
+        if self.ssl_key and not os.path.exists(self.ssl_key):
+            InitializationError("ssl_key: invalid path").fire()
+
         self._global_terminate_event = Event()
         self.ipc = Ipc(
             process_name=self.process_name,
@@ -92,6 +102,8 @@ class Global(metaclass=Singleton):
             host=self.host,
             port=self.port,
             unix_sock_path=self.unix_sock_path,
+            ssl_certificate=self.ssl_certificate,
+            ssl_key=self.ssl_key,
             on_node_connect=self.on_node_connect,
             on_node_disconnect=self.on_node_disconnect,
             logger=logger,

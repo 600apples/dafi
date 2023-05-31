@@ -71,7 +71,7 @@ class Callback(BaseRegistry):
             LOCAL_CALLBACK_MAPPING[method_alias] = cb
             if not name_in_mapping:
                 logger.info(
-                    f"callback {method_alias!r} is registered"
+                    f"callback {method_alias!r} <class {cls.__name__}> is registered"
                     + ("" if klass else f" (required {cls.__name__} initialization)")
                 )
 
