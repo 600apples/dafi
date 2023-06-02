@@ -1,6 +1,7 @@
 import pytest
 import sys
-from daffi import FG, BG, GlobalContextError
+from daffi import FG, BG
+from daffi.exceptions import GlobalContextError
 from daffi.decorators import fetcher, __body_unknown__
 from subprocess import Popen
 

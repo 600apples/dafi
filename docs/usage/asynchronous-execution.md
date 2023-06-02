@@ -21,6 +21,7 @@ making it appropriate for long-running tasks or tasks in which the result is not
     
     
     class CalculatorService(Callback):
+        auto_init = True
     
         def calculate_fibonacci(self, n):
             # Check if n is 0

@@ -22,7 +22,7 @@ class Callback(BaseRegistry):
     """
 
     # If auto_init=True then class will be implicitly instantiated.
-    auto_init: ClassVar[bool] = True
+    auto_init: ClassVar[bool] = False
 
     @staticmethod
     def _init_class(cls, instance_or_type) -> Union[Type, "Callback"]:

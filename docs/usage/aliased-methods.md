@@ -14,6 +14,7 @@ This is particularly useful for fetchers, as it allows multiple fetchers with di
     
     
     class CalculatorService(Callback):
+        auto_init = True
     
         def calculate_sum(self, num1, num2):
             return num1 + num2

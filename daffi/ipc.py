@@ -265,7 +265,10 @@ class Ipc(Thread):
                 # Wait pending futures to complete their tasks
                 for future in filter(None, (c_future, n_future, tw_future)):
                     if not future.done():
-                        future.cancel()
+                        try:
+                            future.cancel()
+                        except:
+                            ...
 
         if not self.global_condition_event.success:
             self.global_condition_event.mark_fail()

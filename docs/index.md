@@ -21,6 +21,11 @@ It supports many-to-many relationships between endpoints, allowing for seamless 
 The library abstracts the complexities of remote computing and provides a user-friendly interface for initiating and managing remote procedure calls.
 It also offers various features such as fault tolerance, load balancing, streaming and security, to ensure reliable and secure communication between endpoints.
 
+Each daffi application comprises three primary classes:
+
+- *Global* - Initialization entrypoint. Once *Global* object is initialized application can respond on remote requests and trigger remote callbacks itself.
+- *Callback* - Represents a collection of methods encapsulated in a class inherited from *Callback* or a standalone function decorated with the *callback* decorator. These functions/methods can be triggered from another process.
+- *Fetcher* - Represents a collection of methods encapsulated in a class inherited from *Fetcher* or a standalone function decorated with the *fetcher* decorator. These functions/methods serve as triggers for the corresponding callbacks defined in another process.
 
 ## Basic example
 
@@ -28,7 +33,7 @@ You need to create two files `shopping_service.py` and `shopper.py`
 
 `shopping_service.py` - represents a set of remote callbacks that can be triggered by a client application.
 
-`shopper.py` - represents shopping_service client
+`shopper.py` - represents shopping_service client (fetcher)
 
 #### Class based approach
 
@@ -43,6 +48,7 @@ logging.basicConfig(level=logging.INFO)
 
 
 class ShoppingService(Callback):
+    auto_init = True # class is automatically initialized, eliminating the need to manually create an object.
 
     def __post_init__(self):
         self.shopping_list = []

@@ -35,6 +35,7 @@ nav:
     - stream from callback to fetcher: usage/stream-callback-to-fetcher.md
     - function transfer: usage/function-transfer.md
     - bidirectional communication: usage/bidirectional-communication.md
+    - SSL certificates: usage/ssl-certificates.md
     - asynchronous execution: usage/asynchronous-execution.md
     - broadcasting: usage/broadcasting.md
     - task scheduling and batch delayed execution: usage/scheduling-tasks.md

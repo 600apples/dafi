@@ -17,6 +17,7 @@ logging.basicConfig(level=logging.INFO)
 
 
 class CalculatorService(Callback):
+    auto_init = True
 
     def calculate_sum(self, num1, num2):
         return self.get_sum(num1, num2)

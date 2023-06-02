@@ -42,7 +42,7 @@ async def test_stream_per_node_unix(remote_callbacks_path, g):
         for i in range_:
             processed_arr = getattr(g.call, f"stream_result_{i}")() & FG(timeout=10)
             assert set(stream_values) == set(processed_arr)
-        g.stop(True)
+        g.stop()
 
     finally:
         [p.terminate() for p in remotes]
@@ -83,7 +83,7 @@ async def test_stream_per_node_unix_using_remote_decorator(remote_callbacks_path
             processed_arr = getattr(g.call, f"stream_result_{i}")() & FG(timeout=10)
             assert set(stream_values) == set(processed_arr)
 
-        g.stop(True)
+        g.stop()
     finally:
         [p.terminate() for p in remotes]
 
@@ -124,6 +124,6 @@ async def test_stream_per_node_tcp(remote_callbacks_path, g):
             processed_arr = getattr(g.call, f"stream_result_{i}")() & FG(timeout=10)
             assert set(stream_values) == set(processed_arr)
 
-        g.stop(True)
+        g.stop()
     finally:
         [p.terminate() for p in remotes]

@@ -47,7 +47,7 @@ async def test_callback_per_node_unix(remote_callbacks_path, g):
     result = broadcast_callback(value="broadcast_test")
     assert result == expected
 
-    g.stop(True)
+    g.stop()
     [p.terminate() for p in remotes]
 
 
@@ -80,5 +80,5 @@ async def test_callback_per_node_tcp(remote_callbacks_path, g):
 
     result = broadcast_callback(value="broadcast_test")
     assert result == expected
-    g.stop(True)
+    g.stop()
     [p.terminate() for p in remotes]

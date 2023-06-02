@@ -33,7 +33,7 @@ class RegistryMeta(ABCMeta):
 
                 if (auto_init := namespace.get("auto_init", None)) is None:
                     for base in bases:
-                        if auto_init := getattr(base, "auto_init", None) is not None:
+                        if (auto_init := getattr(base, "auto_init", None)) is not None:
                             namespace.update(auto_init=auto_init)
                             break
             if len(daffi_mro) == 2:
@@ -45,7 +45,6 @@ class RegistryMeta(ABCMeta):
             cls = _type = super().__new__(mcs, cls_name, bases, namespace, **kwargs)  # type: ignore
 
             if not is_registry_class:
-
                 if auto_init:
                     _type = _type()
 

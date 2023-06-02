@@ -19,6 +19,7 @@ Arguments can be returned as tuple or using special `Args` class.
     
     
     class CalculatorService(Callback):
+        auto_init = True
     
         def calculate_sum(self, num1, num2):
             return num1 + num2

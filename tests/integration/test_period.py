@@ -1,7 +1,8 @@
 import pytest
 import sys
 from datetime import datetime
-from daffi import PERIOD, GlobalContextError, RemoteCallError
+from daffi import PERIOD
+from daffi.exceptions import GlobalContextError, RemoteCallError
 from subprocess import Popen
 
 
@@ -48,5 +49,5 @@ async def test_callback_per_node_unix(remote_callbacks_path, g):
     registered_tasks = g.get_scheduled_tasks(remote_process="test-node")
     assert registered_tasks == []
 
-    g.stop(True)
+    g.stop()
     [p.terminate() for p in remotes]

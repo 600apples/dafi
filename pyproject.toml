@@ -6,7 +6,7 @@ build-backend = "hatchling.build"
 name = "daffi"
 description = "Daffi is fast, simple and lightweight library for inter process communication"
 readme = "README.md"
-requires-python = ">=3.7"
+requires-python = ">=3.8"
 license = "MIT"
 keywords = ["rpc", "task", "queue", "job", "async", "python", "distributed", "stream", "grpc"]
 authors = [

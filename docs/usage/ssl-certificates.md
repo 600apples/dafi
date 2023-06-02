@@ -1,4 +1,34 @@
-Example provides a basic and fundamental understanding of client-server communication
+Communication between daffi applications can be protected with SSL certificate and key.
+
+For this example consider to use following script in order to generate self signed certificates for localhost IPV6
+
+```bash
+#!/bin/bash
+# Generate self-signed certificates
+
+set -e
+
+IP="::"
+
+cat << EOF > domains.ext
+authorityKeyIdentifier=keyid,issuer
+basicConstraints=CA:FALSE
+keyUsage = digitalSignature, nonRepudiation, keyEncipherment, dataEncipherment
+subjectAltName = IP:$IP
+EOF
+
+# Root CA certificate and key
+openssl req -x509 -nodes -new -sha256 -days 3650 -newkey rsa:2048 -keyout root_key.pem -out root_ca.pem -subj "/CN=Root-CA"
+# Generate private key and CSR
+openssl req -new -nodes -newkey rsa:2048 -keyout key.pem -out sign.csr -subj "/C=NA/ST=NA/L=NA/O=ORG/CN=example.com"
+# Generate domain certificate
+openssl x509 -req -in sign.csr -CA root_ca.pem -CAkey root_key.pem -CAcreateserial -out cert.pem -days 3650 -sha256 -extfile domains.ext
+
+rm -f domains.ext root_ca.pem root_key.pem sign.csr
+```
+
+As the result you should see `cert.pem` and `key.pem` files created in directory where script was executed.
+
 
 === "class based approach"
 
@@ -19,7 +49,7 @@ Example provides a basic and fundamental understanding of client-server communic
     
     
     if __name__ == '__main__':
-        Global(init_controller=True, host="localhost", port=8888).join()
+        Global(init_controller=True, host="localhost", port=8888, ssl_certificate="cert.pem", ssl_key="key.pem").join()
     ```
     
     `calculator_client.py` content:
@@ -42,7 +72,7 @@ Example provides a basic and fundamental understanding of client-server communic
     
     
     if __name__ == '__main__':
-        g = Global(host="localhost", port=8888)
+        g = Global(host="localhost", port=8888, ssl_certificate="cert.pem", ssl_key="key.pem")
     
         calc_client = CalculatorClient()
         result = calc_client.calculate_sum(1, 2)
@@ -77,7 +107,7 @@ Example provides a basic and fundamental understanding of client-server communic
     
     
     if __name__ == '__main__':
-        Global(init_controller=True, host="localhost", port=8888).join()
+        Global(init_controller=True, host="localhost", port=8888, ssl_certificate="cert.pem", ssl_key="key.pem").join()
     ```
     
     `calculator_client.py` content:
@@ -99,7 +129,7 @@ Example provides a basic and fundamental understanding of client-server communic
     
     
     if __name__ == '__main__':
-        g = Global(host="localhost", port=8888)
+        g = Global(host="localhost", port=8888, ssl_certificate="cert.pem", ssl_key="key.pem")
     
         result = calculate_sum(1, 2)
         print(result)

@@ -17,6 +17,7 @@ Streams can also be utilized like events to wait for specific conditions on a re
     
     
     class StreamerService(Callback):
+        auto_init = True
     
         def __post_init__(self):
             self.items = []

@@ -76,7 +76,7 @@ async def test_many_callbacks_unix(remote_callbacks_path, exec_type, g):
         assert max_time < 1
 
     finally:
-        g.stop(True)
+        g.stop()
         [p.terminate() for p in remotes]
 
 
@@ -116,7 +116,7 @@ async def test_many_callbacks_unix_no_return(remote_callbacks_path, exec_type, g
         print(f"Exeption while execution : {type(e)}, {e}")
 
     finally:
-        g.stop(True)
+        g.stop()
         [p.terminate() for p in remotes]
 
 
@@ -143,7 +143,7 @@ async def test_many_callbacks_tcp(remote_callbacks_path, exec_type, g):
         max_time = max(timings)
         assert max_time < 1
     finally:
-        g.stop(True)
+        g.stop()
         [p.terminate() for p in remotes]
 
 
@@ -179,5 +179,5 @@ async def test_many_callbacks_tcp_no_return(remote_callbacks_path, exec_type, g)
         for file in all_files:
             assert set(file.read_text()) == set("01234")
     finally:
-        g.stop(True)
+        g.stop()
         [p.terminate() for p in remotes]
