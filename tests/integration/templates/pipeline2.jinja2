@@ -3,7 +3,7 @@
 {%- block content %}
 @callback
 async def {{ cb_name }}():
-    g = get_g()
+    g = {{ cb_name }}.g
 {% if last %}
     return "My secret value"
 {% else %}

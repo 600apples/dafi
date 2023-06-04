@@ -27,12 +27,12 @@ class TestConsoleWarningFormatter:
     @pytest.mark.parametrize(
         "record, expected_result",
         [
-            (MockLevelRecord(logging.ERROR, "error"), f"{colors.red('error')}"),
+            (MockLevelRecord(logging.ERROR, "error"), f"{colors.red('error')}:"),
             (
                 MockLevelRecord(logging.WARNING, "warning"),
-                f"{colors.yellow('warning')}",
+                f"{colors.yellow('warning')}:",
             ),
-            (MockLevelRecord(logging.INFO, "info"), "info"),
+            (MockLevelRecord(logging.INFO, "info"), f"{colors.green('info')}:"),
         ],
     )
     async def test_get_level_message(self, record, expected_result):
@@ -43,18 +43,18 @@ class TestConsoleWarningFormatter:
         result = formatter.get_level_message(record)
 
         # Assertion
-        assert result == expected_result
+        assert result.strip() == expected_result
 
     @pytest.mark.parametrize(
         "record, expected_result",
         [
             (
                 MockLevelRecord(logging.ERROR, "error", "error"),
-                f"{colors.red('error')} error",
+                f"{colors.red('error')}:   error",
             ),
             (
                 MockLevelRecord(logging.WARNING, "warning", b"warning"),
-                f"{colors.yellow('warning')} warning",
+                f"{colors.yellow('warning')}: warning",
             ),
         ],
     )

@@ -6,7 +6,7 @@ from subprocess import Popen
 
 @pytest.mark.parametrize("exec_type", [FG, BG])
 @pytest.mark.skipif(sys.platform == "win32", reason="Unix sockets dont work on windows")
-async def test_callback_per_node_unix(remote_callbacks_path, exec_type, g):
+async def test_callback_per_node_unix(remote_callbacks_path, exec_type, g, stop_components):
     g = g()
     start_range = 1
     end_range = 10
@@ -19,7 +19,7 @@ async def test_callback_per_node_unix(remote_callbacks_path, exec_type, g):
             next_cb_name=f"cb{i + 1}",
             last=len(range_) == i,
             template_name="pipeline.jinja2",
-            process_name=f"node-{i}",
+            process_name=f"pl-node-{i}",
             exec_type=exec_type.__name__,
         )
         for i in range_
@@ -29,17 +29,16 @@ async def test_callback_per_node_unix(remote_callbacks_path, exec_type, g):
     for exc in executable_files:
         remotes.append(Popen([sys.executable, exc]))
     for i in range_:
-        g.wait_process(f"node-{i}")
-
-    value = g.call.cb1() & FG
-    assert value == "My secret value"
-
-    g.stop()
-    [p.terminate() for p in remotes]
+        g.wait_process(f"pl-node-{i}")
+    try:
+        value = g.call.cb1() & FG
+        assert value == "My secret value"
+    finally:
+        await stop_components(remotes, g)
 
 
 @pytest.mark.parametrize("exec_type", [FG, BG])
-async def test_callback_per_node_tcp(remote_callbacks_path, exec_type, g):
+async def test_callback_per_node_tcp(remote_callbacks_path, exec_type, g, stop_components):
     g = g(host="localhost")
     start_range = 1
     end_range = 10
@@ -52,7 +51,7 @@ async def test_callback_per_node_tcp(remote_callbacks_path, exec_type, g):
             next_cb_name=f"cb{i + 1}",
             last=len(range_) == i,
             template_name="pipeline.jinja2",
-            process_name=f"node-{i}",
+            process_name=f"pl-node-{i}",
             exec_type=exec_type.__name__,
             host="localhost",
             port=g.port,
@@ -64,18 +63,18 @@ async def test_callback_per_node_tcp(remote_callbacks_path, exec_type, g):
     for exc in executable_files:
         remotes.append(Popen([sys.executable, exc]))
     for i in range_:
-        g.wait_process(f"node-{i}")
+        g.wait_process(f"pl-node-{i}")
 
-    value = g.call.cb1() & FG
-    assert value == "My secret value"
-
-    g.stop()
-    [p.terminate() for p in remotes]
+    try:
+        value = g.call.cb1() & FG
+        assert value == "My secret value"
+    finally:
+        await stop_components(remotes, g)
 
 
 @pytest.mark.parametrize("exec_type", [FG, BG])
 @pytest.mark.skipif(sys.platform == "win32", reason="Unix sockets dont work on windows")
-async def test_callback_per_node_unix_async(remote_callbacks_path, exec_type, g):
+async def test_callback_per_node_unix_async(remote_callbacks_path, exec_type, g, stop_components):
     g = g()
     start_range = 1
     end_range = 10
@@ -88,7 +87,7 @@ async def test_callback_per_node_unix_async(remote_callbacks_path, exec_type, g)
             next_cb_name=f"cb{i + 1}",
             last=len(range_) == i,
             template_name="pipeline2.jinja2",
-            process_name=f"node-{i}",
+            process_name=f"pl-node-{i}",
             exec_type=exec_type.__name__,
         )
         for i in range_
@@ -98,17 +97,16 @@ async def test_callback_per_node_unix_async(remote_callbacks_path, exec_type, g)
     for exc in executable_files:
         remotes.append(Popen([sys.executable, exc]))
     for i in range_:
-        g.wait_process(f"node-{i}")
-
-    value = g.call.cb1() & FG
-    assert value == "My secret value"
-
-    g.stop()
-    [p.terminate() for p in remotes]
+        g.wait_process(f"pl-node-{i}")
+    try:
+        value = g.call.cb1() & FG
+        assert value == "My secret value"
+    finally:
+        await stop_components(remotes, g)
 
 
 @pytest.mark.parametrize("exec_type", [FG, BG])
-async def test_callback_per_node_tcp_async(remote_callbacks_path, exec_type, g):
+async def test_callback_per_node_tcp_async(remote_callbacks_path, exec_type, g, stop_components):
     g = g(host="localhost")
     start_range = 1
     end_range = 10
@@ -121,7 +119,7 @@ async def test_callback_per_node_tcp_async(remote_callbacks_path, exec_type, g):
             next_cb_name=f"cb{i + 1}",
             last=len(range_) == i,
             template_name="pipeline2.jinja2",
-            process_name=f"node-{i}",
+            process_name=f"pl-node-{i}",
             exec_type=exec_type.__name__,
             host="localhost",
             port=g.port,
@@ -133,10 +131,9 @@ async def test_callback_per_node_tcp_async(remote_callbacks_path, exec_type, g):
     for exc in executable_files:
         remotes.append(Popen([sys.executable, exc]))
     for i in range_:
-        g.wait_process(f"node-{i}")
-
-    value = g.call.cb1() & FG
-    assert value == "My secret value"
-
-    g.stop()
-    [p.terminate() for p in remotes]
+        g.wait_process(f"pl-node-{i}")
+    try:
+        value = g.call.cb1() & FG
+        assert value == "My secret value"
+    finally:
+        await stop_components(remotes, g)

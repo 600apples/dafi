@@ -3,7 +3,7 @@ import logging
 from daffi import Global
 from pathlib import Path
 from daffi.exceptions import RemoteStoppedUnexpectedly
-from daffi.registry import Callback, Fetcher
+from daffi.registry import Callback, Fetcher, __body_unknown__
 
 logging.basicConfig(level=logging.INFO)
 
@@ -13,8 +13,9 @@ SSL_CERT = ROOT / "certs" / "cert.pem"
 SSL_KEY = ROOT / "certs" / "key.pem"
 
 
+class GreetingsCallback(Callback):
+    auto_init = True
 
-class Greetings(Callback, Fetcher):
     def greeting1(self, arg1, arg2):
         return f"Greeting from {PROC_NAME!r} process. You called function greeting1 with arguments: arg1={arg1}, arg2={arg2}"
 
@@ -22,10 +23,25 @@ class Greetings(Callback, Fetcher):
         return f"Greeting from {PROC_NAME!r} process. You called function greeting2"
 
 
+class Greetings(Fetcher):
+    def greeting1(self, arg1, arg2):
+        __body_unknown__(arg1, arg2)
+
+    def greeting2(self):
+        __body_unknown__()
+
+
 def main():
     gret = Greetings()
     remote_proc = "Brown Fox"
-    g = Global(process_name=PROC_NAME, init_controller=True, host="localhost", port=8888, ssl_certificate=SSL_CERT, ssl_key=SSL_KEY)
+    g = Global(
+        process_name=PROC_NAME,
+        init_controller=True,
+        host="localhost",
+        port=8888,
+        ssl_certificate=SSL_CERT,
+        ssl_key=SSL_KEY,
+    )
 
     print(f"wait for {remote_proc} process to be started...")
     g.wait_process(remote_proc)

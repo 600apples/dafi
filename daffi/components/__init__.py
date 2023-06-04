@@ -21,7 +21,7 @@ from grpc.aio._call import AioRpcError
 from anyio import TASK_STATUS_IGNORED
 from tenacity import AsyncRetrying, wait_fixed, retry_if_exception_type, RetryCallState, wait_none
 
-from daffi.exceptions import StopComponentError, ControllerUnavailable, InitializationError, RemoteCallError
+from daffi.exceptions import StopComponentError, ControllerUnavailable, RemoteCallError
 from daffi.interface import ComponentI
 from daffi.components.proto import messager_pb2_grpc as grpc_messager
 from daffi.utils.misc import string_uuid
@@ -159,6 +159,7 @@ class ComponentsBase(UnixBase, TcpBase):
 
     def __init__(
         self,
+        g: "Global",
         process_name: str,
         host: Optional[str] = None,
         port: Optional[int] = None,
@@ -172,13 +173,14 @@ class ComponentsBase(UnixBase, TcpBase):
     ):
         self._set_keyboard_interrupt_handler()
 
+        self.g = g
         self.process_name = process_name
         self.async_backend = async_backend or "asyncio"
         self.operations = None
         self.ident = string_uuid()
         self.global_terminate_event = global_terminate_event
-        self.on_node_connect = on_node_connect
-        self.on_node_disconnect = on_node_disconnect
+        self.on_node_connect_cbs = [self.on_node_connect, on_node_connect]
+        self.on_node_disconnect_cbs = [self.on_node_disconnect, on_node_disconnect]
         self._stopped = self._connected = False
         self.stop_event: bool = False
         self.stop_callbacks: List[Callable] = []
@@ -210,6 +212,20 @@ class ComponentsBase(UnixBase, TcpBase):
     async def on_stop(self) -> NoReturn:
         while not self.stop_event:
             await asyncio.sleep(0.3)
+
+    def on_node_connect(self, _, process_name: str):
+        """
+        Default on node connect event handler.
+        executed each time when connection to Controller is established
+        """
+        self.logger.info(f"Node {process_name!r} has been connected to Controller")
+
+    def on_node_disconnect(self, _, process_name: str):
+        """
+        Default on node disconnect event handler.
+        executed each time when connection to Controller is lost
+        """
+        self.logger.info(f"Node {process_name!r} has been disconnected")
 
     async def on_terminate(self):
         self.logger.info(f"{self.__class__.__name__} stopped.")
@@ -258,46 +274,31 @@ class ComponentsBase(UnixBase, TcpBase):
 
     async def execute_on_connect(self):
         """Execute `on_connect` lifecycle handler in separate thread to prevent blocking main message handler."""
-        if self.on_node_connect:
-            # Execute `on_connect` lifecycle event in case such handler exists.
-            def _on_connect_wrapper(retry=True):
-                from daffi import get_g
 
-                while True:
-                    try:
-                        g = get_g()
-                        break
-                    except InitializationError:
-                        time.sleep(0.1)
+        def _on_connect_wrapper():
+            # In case IPC is not ready yet.
+            self.g.ipc.global_condition_event.wait_any_status()
+            for cb in filter(None, self.on_node_connect_cbs):
                 try:
-                    self.on_node_connect(g, self.process_name)
+                    cb(self.g, self.process_name)
                 except Exception as e:
-                    if isinstance(e, RemoteCallError) and retry:
-                        # another attempt to run the callback is allowed
-                        # if the error is related to access to a remote process
-                        time.sleep(1)
-                        return _on_connect_wrapper(retry=False)
                     self.logger.error(
                         f"Exception occurred while execution `on_node_connect` handler: {e}, type: {type(e)}"
                     )
 
-            Thread(target=_on_connect_wrapper).start()
+        Thread(target=_on_connect_wrapper).start()
 
     async def execute_on_disconnect(self, process_name):
-        if self.on_node_disconnect:
-
-            def _on_disconnect_wrapper():
-                from daffi import get_g
-
-                g = get_g()
+        def _on_disconnect_wrapper():
+            for cb in filter(None, self.on_node_disconnect_cbs):
                 try:
-                    self.on_node_disconnect(g, process_name)
+                    cb(self.g, process_name)
                 except Exception as e:
                     self.logger.error(
                         f"Exception occurred while execution `on_node_disconnect` handler: {e}, type: {type(e)}"
                     )
 
-            Thread(target=_on_disconnect_wrapper).start()
+        Thread(target=_on_disconnect_wrapper).start()
 
     def after_exception(self, retry_state: RetryCallState):
         """return the result of the last call attempt"""

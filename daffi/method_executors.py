@@ -1,11 +1,9 @@
-import time
-import logging
 from inspect import Signature
 from typing import NamedTuple, Union
 
 import daffi
 from daffi.utils.misc import Singleton
-from daffi.exceptions import GlobalContextError, InitializationError
+from daffi.exceptions import GlobalContextError
 from daffi.utils.custom_types import GlobalCallback, P, RemoteResult
 from daffi.execution_modifiers import FG, BG, BROADCAST, PERIOD
 from daffi.settings import LOCAL_FETCHER_MAPPING, LOCAL_CALLBACK_MAPPING
@@ -140,21 +138,7 @@ class ClassCallbackExecutor(NamedTuple):
 
 def f__call__(self, *args, **kwargs) -> RemoteResult:
     """Trigger executor with assigned execution modifier."""
-    # Get remote call by name
-    for attempt in range(5):
-        try:
-            # In case fetcher is using too early after application start.
-            # `Global` object might be not initialized at this moment.
-            g = _g()
-            break
-        except InitializationError:
-            # Keep fist attempt silent
-            if attempt > 1:
-                logging.error("Global object is not initialized. Awaiting...")
-            time.sleep(2)
-    else:
-        raise InitializationError("Global object initialization is missing!")
-
+    g = Singleton._get_self("Global")
     remote_call = getattr(g.call, self.alias)
     # Set fetcher
     remote_call._fetcher = self
@@ -165,15 +149,12 @@ def f__call__(self, *args, **kwargs) -> RemoteResult:
 def call(self, *args, exec_modifier: Union[FG, BG, BROADCAST, PERIOD] = FG, **kwargs):
     """Trigger executor with execution modifier provided in arguments."""
     # Get remote call by name
-    remote_call = getattr(_g().call, self.alias)
+    g = Singleton._get_self("Global")
+    remote_call = getattr(g.call, self.alias)
     # Set fetcher
     remote_call._fetcher = self
     # Execute remote call
     return (remote_call & exec_modifier)(*args, **kwargs)
-
-
-def _g() -> "Global":
-    return Singleton._get_self("Global")
 
 
 @property

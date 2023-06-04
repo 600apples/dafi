@@ -36,6 +36,7 @@ nav:
     - function transfer: usage/function-transfer.md
     - bidirectional communication: usage/bidirectional-communication.md
     - SSL certificates: usage/ssl-certificates.md
+    - lifecycle events: usage/lifecycle-events.md
     - asynchronous execution: usage/asynchronous-execution.md
     - broadcasting: usage/broadcasting.md
     - task scheduling and batch delayed execution: usage/scheduling-tasks.md

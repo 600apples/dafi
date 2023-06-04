@@ -3,7 +3,7 @@ import logging
 from daffi import Global
 from pathlib import Path
 from daffi.exceptions import RemoteStoppedUnexpectedly
-from daffi.registry import Callback, Fetcher
+from daffi.registry import Callback, Fetcher, __body_unknown__
 
 logging.basicConfig(level=logging.INFO)
 
@@ -12,7 +12,10 @@ ROOT = Path(__file__).parents[3]
 SSL_CERT = ROOT / "certs" / "cert.pem"
 SSL_KEY = ROOT / "certs" / "key.pem"
 
-class Greetings(Callback, Fetcher):
+
+class GreetingsCallback(Callback):
+    auto_init = True
+
     def greeting1(self, arg1, arg2):
         return (
             f"Cheers from {PROC_NAME!r} process. You called function cheers1 with arguments: arg1={arg1}, arg2={arg2}"
@@ -20,6 +23,14 @@ class Greetings(Callback, Fetcher):
 
     def greeting2(self):
         return f"Cheers from {PROC_NAME!r} process. You called function cheers2"
+
+
+class Greetings(Fetcher):
+    def greeting1(self, arg1, arg2):
+        __body_unknown__(arg1, arg2)
+
+    def greeting2(self):
+        __body_unknown__()
 
 
 def main():

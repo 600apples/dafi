@@ -234,6 +234,7 @@ class NodeOperations:
             time_since_last_ping = time.time() - self.last_ping_ts
             self.logger.debug(f"Time since last ping: {time_since_last_ping}")
             if time_since_last_ping > 15:
+                self.logger.error("No ping from Controller received during 15 seconds.")
                 self.on_remote_error()
                 await sg.cancel_scope.cancel()
                 sg.cancel_scope.deadline = 1

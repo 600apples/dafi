@@ -11,7 +11,7 @@ async def call_remote(g, _range, exec_type):
     for _ in range(5):
         node_num = choice(_range)
         callback_name = f"get_process_name{node_num}"
-        expected_process_name = f"node-{node_num}"
+        expected_process_name = f"mn-node-{node_num}"
         future = getattr(g.call, callback_name)()
 
         if exec_type == FG:
@@ -31,15 +31,15 @@ async def call_remote_broadcast(path):
     for i in range(5):
         res = await get_process_name1(path=path / str(i))
         assert set(res) == {
-            "node-1",
-            "node-4",
-            "node-3",
-            "node-6",
-            "node-7",
-            "node-5",
-            "node-8",
-            "node-2",
-            "node-9",
+            "mn-node-1",
+            "mn-node-4",
+            "mn-node-3",
+            "mn-node-6",
+            "mn-node-7",
+            "mn-node-5",
+            "mn-node-8",
+            "mn-node-2",
+            "mn-node-9",
         }
 
 
@@ -53,7 +53,7 @@ async def test_callback_per_node_unix(remote_callbacks_path, exec_type, g):
 
     executable_files = [
         remote_callbacks_path(
-            filename=f"{i}.py", callback_index=i, template_name="callback_per_node.jinja2", process_name=f"node-{i}"
+            filename=f"{i}.py", callback_index=i, template_name="callback_per_node.jinja2", process_name=f"mn-node-{i}"
         )
         for i in range_
     ]
@@ -62,7 +62,7 @@ async def test_callback_per_node_unix(remote_callbacks_path, exec_type, g):
     for exc in executable_files:
         remotes.append(Popen([sys.executable, exc]))
     for i in range_:
-        g.wait_process(f"node-{i}")
+        g.wait_process(f"mn-node-{i}")
 
     await asyncio.gather(*[call_remote(g, range_, exec_type) for _ in range(500)])
     g.stop()
@@ -81,7 +81,7 @@ async def test_callback_per_node_tcp(remote_callbacks_path, exec_type, g):
             filename=f"{i}.py",
             callback_index=i,
             template_name="callback_per_node.jinja2",
-            process_name=f"node-{i}",
+            process_name=f"mn-node-{i}",
             host="localhost",
             port=g.port,
         )
@@ -92,7 +92,7 @@ async def test_callback_per_node_tcp(remote_callbacks_path, exec_type, g):
     for exc in executable_files:
         remotes.append(Popen([sys.executable, exc]))
     for i in range_:
-        g.wait_process(f"node-{i}")
+        g.wait_process(f"mn-node-{i}")
 
     await asyncio.gather(*[call_remote(g, range_, exec_type) for _ in range(500)])
     g.stop()
@@ -100,7 +100,7 @@ async def test_callback_per_node_tcp(remote_callbacks_path, exec_type, g):
 
 
 @pytest.mark.skipif(sys.platform == "win32", reason="Unix sockets dont work on windows")
-async def test_callback_per_node_broadcast_unix(remote_callbacks_path, g):
+async def test_callback_per_node_broadcast_unix(remote_callbacks_path, g, stop_components):
     g = g()
     start_range = 1
     end_range = 10
@@ -108,7 +108,7 @@ async def test_callback_per_node_broadcast_unix(remote_callbacks_path, g):
 
     executable_files = [
         remote_callbacks_path(
-            filename=f"{i}.py", callback_index=1, template_name="callback_per_node.jinja2", process_name=f"node-{i}"
+            filename=f"{i}.py", callback_index=1, template_name="callback_per_node.jinja2", process_name=f"mn-node-{i}"
         )
         for i in range_
     ]
@@ -120,24 +120,24 @@ async def test_callback_per_node_broadcast_unix(remote_callbacks_path, g):
     for exc in executable_files:
         remotes.append(Popen([sys.executable, exc]))
     for i in range_:
-        g.wait_process(f"node-{i}")
+        g.wait_process(f"mn-node-{i}")
 
-    await asyncio.gather(*[call_remote_broadcast(path=path) for _ in range(500)])
+    try:
+        await asyncio.gather(*[call_remote_broadcast(path=path) for _ in range(500)])
 
-    all_files = list(path.iterdir())
-    assert len(all_files) == 5
+        all_files = list(path.iterdir())
+        assert len(all_files) == 5
 
-    all_processes = [f"node-{i}" for i in range_]
-    for file in all_files:
-        file_text = file.read_text()
-        for proc_name in all_processes:
-            assert proc_name in file_text
+        all_processes = [f"mn-node-{i}" for i in range_]
+        for file in all_files:
+            file_text = file.read_text()
+            for proc_name in all_processes:
+                assert proc_name in file_text
+    finally:
+        await stop_components(remotes, g)
 
-    g.stop()
-    [p.terminate() for p in remotes]
 
-
-async def test_callback_per_node_broadcast_tcp(remote_callbacks_path, g):
+async def test_callback_per_node_broadcast_tcp(remote_callbacks_path, g, stop_components):
     g = g(host="localhost")
     start_range = 1
     end_range = 10
@@ -148,7 +148,7 @@ async def test_callback_per_node_broadcast_tcp(remote_callbacks_path, g):
             filename=f"{i}.py",
             callback_index=1,
             template_name="callback_per_node.jinja2",
-            process_name=f"node-{i}",
+            process_name=f"mn-node-{i}",
             host="localhost",
             port=g.port,
         )
@@ -162,18 +162,18 @@ async def test_callback_per_node_broadcast_tcp(remote_callbacks_path, g):
     for exc in executable_files:
         remotes.append(Popen([sys.executable, exc]))
     for i in range_:
-        g.wait_process(f"node-{i}")
+        g.wait_process(f"mn-node-{i}")
 
-    await asyncio.gather(*[call_remote_broadcast(path=path) for _ in range(500)])
+    try:
+        await asyncio.gather(*[call_remote_broadcast(path=path) for _ in range(500)])
 
-    all_files = list(path.iterdir())
-    assert len(all_files) == 5
+        all_files = list(path.iterdir())
+        assert len(all_files) == 5
 
-    all_processes = [f"node-{i}" for i in range_]
-    for file in all_files:
-        file_text = file.read_text()
-        for proc_name in all_processes:
-            assert proc_name in file_text
-
-    g.stop()
-    [p.terminate() for p in remotes]
+        all_processes = [f"mn-node-{i}" for i in range_]
+        for file in all_files:
+            file_text = file.read_text()
+            for proc_name in all_processes:
+                assert proc_name in file_text
+    finally:
+        await stop_components(remotes, g)

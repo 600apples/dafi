@@ -1,19 +1,30 @@
 import logging
 from trio import run, sleep
-from daffi import Global, RemoteStoppedUnexpectedly
-from daffi.registry import Callback, Fetcher
+from daffi import Global
+from daffi.exceptions import RemoteStoppedUnexpectedly
+from daffi.registry import Callback, Fetcher, __body_unknown__
 
 logging.basicConfig(level=logging.INFO)
 
 PROC_NAME = "Trio White Rabbit"
 
 
-class Greetings(Callback, Fetcher):
+class GreetingsCallback(Callback):
+    auto_init = True
+
     async def greeting1(self, arg1, arg2):
         return f"Greeting from {PROC_NAME!r} process. You called function greeting1 with arguments: arg1={arg1}, arg2={arg2}"
 
     async def greeting2(self):
         return f"Greeting from {PROC_NAME!r} process. You called function greeting2"
+
+
+class Greetings(Fetcher):
+    async def greeting1(self, arg1, arg2):
+        __body_unknown__(arg1, arg2)
+
+    async def greeting2(self):
+        __body_unknown__()
 
 
 async def main():

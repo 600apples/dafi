@@ -50,14 +50,17 @@ class TestAsyncResultSuite:
         assert ares.get() == "test"
 
     async def test_get_result_type(self):
-        res = get_result_type(False, False)
+        res, allow_compute = get_result_type(False, False)
         assert isinstance(res, type(AsyncResult))
+        assert allow_compute is True
 
-        res = get_result_type(False, True)
+        res, allow_compute = get_result_type(False, True)
         assert isinstance(res, type(SchedulerTask))
+        assert allow_compute is False
 
-        res = get_result_type(True, True)
+        res, allow_compute = get_result_type(True, True)
         assert isinstance(res, type(IterableAsyncResult))
+        assert allow_compute is False
 
 
 class TestScheduledTaskSuite:

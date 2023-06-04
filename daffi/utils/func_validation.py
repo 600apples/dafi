@@ -89,16 +89,7 @@ def func_info(func: Callable[P, Any]):
         name = func.origin_name_
     else:
         raise InitializationError(
-            "Unable to retrieve fetcher name. If you have applied additional decorators"
+            "Unable to retrieve fetcher/callback name. If you have applied additional decorators"
             " to the decorated function consider modifying the order of the decorators."
         )
-    # Hack to detect functions not defined at the module-level
-    if hasattr(func, "func_globals") and name in func.func_globals:
-        if func.func_globals[name] is not func:
-            name = "%s-alias" % name
-    if inspect.ismethod(func):
-        # We need to add the name of the class
-        if hasattr(func, "im_class"):
-            klass = func.im_class
-            module.append(klass.__name__)
     return module, name

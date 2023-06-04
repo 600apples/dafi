@@ -4,8 +4,9 @@ Consumer is the process that consumes available remote functions.
 
 import time
 import logging
-from daffi import Global, GlobalContextError, BG
+from daffi import Global, BG
 from daffi.decorators import fetcher
+from daffi.exceptions import GlobalContextError
 
 logging.basicConfig(level=logging.INFO)
 

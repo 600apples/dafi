@@ -11,7 +11,7 @@ logging.basicConfig(level=logging.DEBUG)
 
 
 @pytest.mark.skipif(sys.platform == "win32", reason="Unix sockets dont work on windows")
-async def test_stream_callback_to_fetcher_per_node_unix(remote_callbacks_path, g):
+async def test_stream_callback_to_fetcher_per_node_unix(remote_callbacks_path, g, stop_components):
     g = g()
     start_range = 1
     end_range = 6
@@ -34,25 +34,7 @@ async def test_stream_callback_to_fetcher_per_node_unix(remote_callbacks_path, g
             end = end * 2
             return Args(end=end)
 
-    class StreamReceiverWithCallback(Fetcher, Callback):
-        def process_stream(self, end: int):
-            return end
-
-        def process_class_stream(self, end: int):
-            return end
-
-        @alias("process_stream")
-        def process_stream_with_alias(self, end: int):
-            end = end * 2
-            return Args(end=end)
-
-        @alias("process_class_stream")
-        def process_class_stream_with_alias(self, end: int):
-            end = end * 2
-            return Args(end=end)
-
     stream_receiver = StreamReceiver()
-    stream_with_callback_receiver = StreamReceiverWithCallback()
 
     executable_files = [
         remote_callbacks_path(
@@ -71,43 +53,24 @@ async def test_stream_callback_to_fetcher_per_node_unix(remote_callbacks_path, g
 
     try:
         res = stream_receiver.process_stream(1000)
-
-        assert set(res) == set(range(1000))
+        assert set(res.get()) == set(range(1000))
 
         # Execute with different exec modifier
         res = stream_receiver.process_class_stream.call(exec_modifier=BG(timeout=10, eta=2), end=2000)
-        assert set(res) == set(range(2000))
+        assert set(res.get()) == set(range(2000))
 
         res = stream_receiver.process_stream_with_alias(1000)
-        assert set(res) == set(range(2000))
+        assert set(res.get()) == set(range(2000))
 
         # Execute with different exec modifier
         res = stream_receiver.process_class_stream_with_alias.call(exec_modifier=BG(timeout=10, eta=2), end=2000)
-        assert set(res) == set(range(4000))
-
-        # Test Fetcher and Callback parents. Fetcher method must be proxy in this case
-        res = stream_with_callback_receiver.process_stream(1000)
-
-        assert set(res) == set(range(1000))
-
-        # Execute with different exec modifier
-        res = stream_with_callback_receiver.process_class_stream.call(exec_modifier=BG(timeout=10, eta=2), end=2000)
-        assert set(res) == set(range(2000))
-
-        res = stream_with_callback_receiver.process_stream_with_alias(1000)
-        assert set(res) == set(range(1000))
-
-        # Execute with different exec modifier
-        res = stream_with_callback_receiver.process_class_stream_with_alias.call(
-            exec_modifier=BG(timeout=10, eta=2), end=2000
-        )
-        assert set(res) == set(range(2000))
+        assert set(res.get()) == set(range(4000))
 
     finally:
-        [p.terminate() for p in remotes]
+        await stop_components(remotes, g)
 
 
-async def test_stream_callback_to_fetcher_per_node_tcp(remote_callbacks_path, g):
+async def test_stream_callback_to_fetcher_per_node_tcp(remote_callbacks_path, g, stop_components):
     g = g(host="localhost")
     start_range = 1
     end_range = 6
@@ -149,18 +112,18 @@ async def test_stream_callback_to_fetcher_per_node_tcp(remote_callbacks_path, g)
 
     try:
         res = stream_receiver.process_stream(1000)
-        assert set(res) == set(range(1000))
+        assert set(res.get()) == set(range(1000))
 
         # Execute with different exec modifier
         res = stream_receiver.process_class_stream.call(exec_modifier=BG(timeout=10, eta=2), end=2000)
-        assert set(res) == set(range(2000))
+        assert set(res.get()) == set(range(2000))
 
         res = stream_receiver.process_stream_with_alias(1000)
-        assert set(res) == set(range(1000))
+        assert set(res.get()) == set(range(1000))
 
         # Execute with different exec modifier
         res = stream_receiver.process_class_stream_with_alias.call(exec_modifier=BG(timeout=10, eta=2), end=2000)
-        assert set(res) == set(range(2000))
+        assert set(res.get()) == set(range(2000))
 
     finally:
-        [p.terminate() for p in remotes]
+        await stop_components(remotes, g)

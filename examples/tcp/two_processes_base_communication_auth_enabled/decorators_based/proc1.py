@@ -30,7 +30,14 @@ def greeting2():
 
 def main():
     remote_proc = "Brown Fox"
-    g = Global(process_name=PROC_NAME, init_controller=True, host="localhost", port=8888, ssl_certificate=SSL_CERT, ssl_key=SSL_KEY)
+    g = Global(
+        process_name=PROC_NAME,
+        init_controller=True,
+        host="localhost",
+        port=8888,
+        ssl_certificate=SSL_CERT,
+        ssl_key=SSL_KEY,
+    )
 
     print(f"wait for {remote_proc} process to be started...")
     g.wait_process(remote_proc)

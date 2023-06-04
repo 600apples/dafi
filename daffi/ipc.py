@@ -2,6 +2,7 @@ import os
 import sys
 from itertools import chain
 from logging import Logger
+from asyncio.exceptions import CancelledError
 from inspect import iscoroutinefunction
 from threading import Thread, Event
 from concurrent.futures import ThreadPoolExecutor
@@ -27,12 +28,15 @@ from daffi.utils.misc import (
     iterable,
 )
 from daffi.utils.func_validation import pretty_callbacks
+from daffi.registry._base import BaseRegistry
+from daffi.decorators._base import Decorator
 from daffi.settings import LOCAL_CALLBACK_MAPPING, WELL_KNOWN_CALLBACKS, clear_method_type_stores
 
 
 class Ipc(Thread):
     def __init__(
         self,
+        g: "Global",
         process_name: str,
         init_controller: bool,
         init_node: bool,
@@ -47,6 +51,7 @@ class Ipc(Thread):
         logger: Logger = None,
     ):
         super().__init__()
+        self.g = g
         self.process_name = process_name
         self.init_controller = init_controller
         self.init_node = init_node
@@ -66,7 +71,8 @@ class Ipc(Thread):
         self.controller = self.node = None
         self.task_waiter = TaskWaiter(process_name)
 
-        AsyncResult._ipc = self
+        AsyncResult._ipc = BaseRegistry._ipc = self
+        BaseRegistry._g = Decorator._g = self.g
 
         if not (self.init_controller or self.init_node):
             InitializationError("At least one of 'init_controller' or 'init_node' must be True.").fire()
@@ -115,6 +121,12 @@ class Ipc(Thread):
         receiver: Optional[str] = None,
     ):
         self._check_node()
+
+        if not self.is_running:
+            # In case IPC thread is not initialized yet and fetchers cannot be used at this moment.
+            self.logger.info("Wait IPC initialization...")
+            self.global_condition_event.wait_any_status()
+
         data = search_remote_callback_in_mapping(self.node.node_callback_mapping, func_name, exclude=self.process_name)
 
         if not data:
@@ -208,11 +220,12 @@ class Ipc(Thread):
         else:
             backend_options = {"use_uvloop": True}
         c_future = n_future = tw_future = None
-        with resilent(RuntimeError):
+        with resilent((RuntimeError, CancelledError)):
             Controller.components.clear()
             with start_blocking_portal(backend="asyncio", backend_options=backend_options) as portal:
                 if self.init_controller:
                     self.controller = Controller(
+                        g=self.g,
                         process_name=self.process_name,
                         host=self.host,
                         port=self.port,
@@ -231,6 +244,7 @@ class Ipc(Thread):
 
                 if self.init_node:
                     self.node = Node(
+                        g=self.g,
                         process_name=self.process_name,
                         host=self.host,
                         port=self.port,
@@ -265,10 +279,7 @@ class Ipc(Thread):
                 # Wait pending futures to complete their tasks
                 for future in filter(None, (c_future, n_future, tw_future)):
                     if not future.done():
-                        try:
-                            future.cancel()
-                        except:
-                            ...
+                        future.cancel()
 
         if not self.global_condition_event.success:
             self.global_condition_event.mark_fail()
@@ -278,86 +289,81 @@ class Ipc(Thread):
     def stream(self, func_name: str, receiver: Optional[str], args: Tuple) -> NoReturn:
         from daffi.registry._fetcher import Args
 
-        if self.is_running:
-            self._check_node()
+        if len(args) != 1:
+            InitializationError(
+                "Pass exactly 1 positional argument to initialize stream."
+                f" It can be list, tuple generator or any iterable. Provided args: {args}. Provided args len: {len(args)}"
+            ).fire()
+        stream_items = args[0]
+        if not iterable(stream_items):
+            if isinstance(stream_items, AsyncGenerator):
+                InitializationError(f"Async generators are not supported yet.").fire()
+            InitializationError(
+                f"Stream support only iterable objects like lists, tuples, generators etc. "
+                f"You provided {stream_items} as argument."
+            ).fire()
 
-            if len(args) != 1:
-                InitializationError(
-                    "Pass exactly 1 positional argument to initialize stream."
-                    f" It can be list, tuple generator or any iterable. Provided args: {args}. Provided args len: {len(args)}"
-                ).fire()
-            stream_items = args[0]
-            if not iterable(stream_items):
-                if isinstance(stream_items, AsyncGenerator):
-                    InitializationError(f"Async generators are not supported yet.").fire()
-                InitializationError(
-                    f"Stream support only iterable objects like lists, tuples, generators etc. "
-                    f"You provided {stream_items} as argument."
-                ).fire()
+        stream_items = iter(stream_items)
+        try:
+            first_item = next(stream_items)
+        except StopIteration:
+            InitializationError("Stream is empty").fire()
 
-            stream_items = iter(stream_items)
-            try:
-                first_item = next(stream_items)
-            except StopIteration:
-                InitializationError("Stream is empty").fire()
+        data = search_remote_callback_in_mapping(self.node.node_callback_mapping, func_name, exclude=self.process_name)
+        _, remote_callback = data
+        if remote_callback.is_generator:
+            InitializationError(
+                f"Stream don't work with remote callback which are generators."
+                f" Check {remote_callback.alias} to fix this issue."
+            ).fire()
 
-            data = search_remote_callback_in_mapping(
-                self.node.node_callback_mapping, func_name, exclude=self.process_name
+        args, kwargs = Args._aggregate_args(args=first_item)
+        remote_callback.validate_provided_arguments(*args, **kwargs)
+        stream_items = chain([first_item], stream_items)
+
+        msg = RpcMessage(
+            flag=MessageFlag.INIT_STREAM,
+            transmitter=self.process_name,
+            func_name=func_name,
+        )
+        # Register result in order to obtain all available receivers
+        result = self.node.send_and_register_result(msg=msg)
+
+        self.logger.debug("Wait available stream receivers")
+        receivers = result.get()
+        if not receivers:
+            InitializationError("Unable to find receivers for stream.").fire()
+        elif receiver and receiver not in receivers:
+            InitializationError(
+                f"Provided receiver is not in the list of available receivers for fuction {func_name}."
+                f" Available receivers = {receivers}"
+            ).fire()
+        elif receiver:
+            receivers = [receiver]
+
+        # Register the same result second time to track stream errors (If happened)
+        result = result._clone_and_register()
+        stream_pair_was_closed = False
+        with self.node.stream_store.request_multi_connection(
+            receivers=receivers, msg_uuid=str(msg.uuid)
+        ) as stream_pair_group:
+            for stream_item in stream_items:
+                if stream_pair_group.closed:
+                    stream_pair_was_closed = True
+                    break
+                # Convert stream item to args, kwargs
+                args, kwargs = Args._aggregate_args(args=stream_item)
+                for msg in ServiceMessage.build_stream_message(data=(args, kwargs)):
+                    stream_pair_group.send_threadsave(msg)
+        # Wait all receivers to finish stream processing.
+        self.logger.debug("Stream closed. Wait for confirmation from receivers...")
+
+        result.get()
+        if stream_pair_was_closed:
+            raise GlobalContextError(
+                "Stream was closed unexpectedly. Seems payload is too big."
+                " Please adjust payload size or consider using unary exec modifiers FG, BG etc."
             )
-            _, remote_callback = data
-            if remote_callback.is_generator:
-                InitializationError(
-                    f"Stream don't work with remote callback which are generators."
-                    f" Check {remote_callback.alias} to fix this issue."
-                ).fire()
-
-            args, kwargs = Args._aggregate_args(args=first_item)
-            remote_callback.validate_provided_arguments(*args, **kwargs)
-            stream_items = chain([first_item], stream_items)
-
-            msg = RpcMessage(
-                flag=MessageFlag.INIT_STREAM,
-                transmitter=self.process_name,
-                func_name=func_name,
-            )
-            # Register result in order to obtain all available receivers
-            result = self.node.send_and_register_result(msg=msg)
-
-            self.logger.debug("Wait available stream receivers")
-            receivers = result.get()
-            if not receivers:
-                InitializationError("Unable to find receivers for stream.").fire()
-            elif receiver and receiver not in receivers:
-                InitializationError(
-                    f"Provided receiver is not in the list of available receivers for fuction {func_name}."
-                    f" Available receivers = {receivers}"
-                ).fire()
-            elif receiver:
-                receivers = [receiver]
-
-            # Register the same result second time to track stream errors (If happened)
-            result = result._clone_and_register()
-            stream_pair_was_closed = False
-            with self.node.stream_store.request_multi_connection(
-                receivers=receivers, msg_uuid=str(msg.uuid)
-            ) as stream_pair_group:
-                for stream_item in stream_items:
-                    if stream_pair_group.closed:
-                        stream_pair_was_closed = True
-                        break
-                    # Convert stream item to args, kwargs
-                    args, kwargs = Args._aggregate_args(args=stream_item)
-                    for msg in ServiceMessage.build_stream_message(data=(args, kwargs)):
-                        stream_pair_group.send_threadsave(msg)
-            # Wait all receivers to finish stream processing.
-            self.logger.debug("Stream closed. Wait for confirmation from receivers...")
-
-            result.get()
-            if stream_pair_was_closed:
-                raise GlobalContextError(
-                    "Stream was closed unexpectedly. Seems payload is too big."
-                    " Please adjust payload size or consider using unary exec modifiers FG, BG etc."
-                )
 
     def update_callbacks(self) -> NoReturn:
         if self.node:
@@ -446,6 +452,9 @@ class Ipc(Thread):
 
         self.global_terminate_event.set()
         self.join()
+        # reset all class variables
+        AsyncResult._ipc = BaseRegistry._ipc = None
+        BaseRegistry._g = Decorator._g = None
 
     def _check_node(self) -> NoReturn:
         if not self.node:

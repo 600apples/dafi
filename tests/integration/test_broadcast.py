@@ -6,20 +6,20 @@ from subprocess import Popen
 
 
 expected = {
-    "node-1": "node-1.broadcast_test",
-    "node-4": "node-4.broadcast_test",
-    "node-3": "node-3.broadcast_test",
-    "node-5": "node-5.broadcast_test",
-    "node-6": "node-6.broadcast_test",
-    "node-7": "node-7.broadcast_test",
-    "node-8": "node-8.broadcast_test",
-    "node-2": "node-2.broadcast_test",
-    "node-9": "node-9.broadcast_test",
+    "broadcast-node-1": "broadcast-node-1.broadcast_test",
+    "broadcast-node-4": "broadcast-node-4.broadcast_test",
+    "broadcast-node-3": "broadcast-node-3.broadcast_test",
+    "broadcast-node-5": "broadcast-node-5.broadcast_test",
+    "broadcast-node-6": "broadcast-node-6.broadcast_test",
+    "broadcast-node-7": "broadcast-node-7.broadcast_test",
+    "broadcast-node-8": "broadcast-node-8.broadcast_test",
+    "broadcast-node-2": "broadcast-node-2.broadcast_test",
+    "broadcast-node-9": "broadcast-node-9.broadcast_test",
 }
 
 
 @pytest.mark.skipif(sys.platform == "win32", reason="Unix sockets dont work on windows")
-async def test_callback_per_node_unix(remote_callbacks_path, g):
+async def test_callback_per_node_unix(remote_callbacks_path, g, stop_components):
     @fetcher(BROADCAST(return_result=True, timeout=10))
     def broadcast_callback(value: str):
         __body_unknown__(value)
@@ -33,7 +33,7 @@ async def test_callback_per_node_unix(remote_callbacks_path, g):
         remote_callbacks_path(
             filename=f"{i}.py",
             template_name="broadcast.jinja2",
-            process_name=f"node-{i}",
+            process_name=f"broadcast-node-{i}",
         )
         for i in range_
     ]
@@ -42,16 +42,16 @@ async def test_callback_per_node_unix(remote_callbacks_path, g):
     for exc in executable_files:
         remotes.append(Popen([sys.executable, exc]))
     for i in range_:
-        g.wait_process(f"node-{i}")
+        g.wait_process(f"broadcast-node-{i}")
 
-    result = broadcast_callback(value="broadcast_test")
-    assert result == expected
+    try:
+        result = broadcast_callback(value="broadcast_test")
+        assert result == expected
+    finally:
+        await stop_components(remotes, g)
 
-    g.stop()
-    [p.terminate() for p in remotes]
 
-
-async def test_callback_per_node_tcp(remote_callbacks_path, g):
+async def test_callback_per_node_tcp(remote_callbacks_path, g, stop_components):
     @fetcher(BROADCAST(return_result=True, timeout=10))
     def broadcast_callback(value: str):
         __body_unknown__(value)
@@ -65,7 +65,7 @@ async def test_callback_per_node_tcp(remote_callbacks_path, g):
         remote_callbacks_path(
             filename=f"{i}.py",
             template_name="broadcast.jinja2",
-            process_name=f"node-{i}",
+            process_name=f"broadcast-node-{i}",
             host="localhost",
             port=g.port,
         )
@@ -76,9 +76,10 @@ async def test_callback_per_node_tcp(remote_callbacks_path, g):
     for exc in executable_files:
         remotes.append(Popen([sys.executable, exc]))
     for i in range_:
-        g.wait_process(f"node-{i}")
+        g.wait_process(f"broadcast-node-{i}")
 
-    result = broadcast_callback(value="broadcast_test")
-    assert result == expected
-    g.stop()
-    [p.terminate() for p in remotes]
+    try:
+        result = broadcast_callback(value="broadcast_test")
+        assert result == expected
+    finally:
+        await stop_components(remotes, g)

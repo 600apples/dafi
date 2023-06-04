@@ -1,35 +1,28 @@
 import os
 import sys
-import time
-from dataclasses import dataclass, field
-from threading import Event
+from dataclasses import dataclass
+from threading import Event, Thread
 from typing import (
-    Callable,
-    Any,
-    Optional,
-    List,
-    Dict,
     Union,
     NoReturn,
     Coroutine,
     Tuple,
 )
 from anyio import sleep
-from tenacity import retry, retry_if_exception_type, wait_fixed, stop_after_attempt
-
 from daffi.utils import colors
 from daffi.utils.logger import get_daffi_logger
-from daffi.decorators import callback
-from daffi.exceptions import InitializationError, GlobalContextError
+from daffi.exceptions import InitializationError
 from daffi.ipc import Ipc
 from daffi.remote_call import LazyRemoteCall
 from daffi.utils.misc import Singleton, string_uuid
 from daffi.utils.func_validation import pretty_callbacks
-from daffi.registry._base import BaseRegistry
+
+# Register well known callbacks
+from daffi.well_known_callbacks import *
 
 logger = get_daffi_logger("global", colors.blue)
 
-__all__ = ["Global", "get_g"]
+__all__ = ["Global"]
 
 
 @dataclass
@@ -52,7 +45,7 @@ class Global(metaclass=Singleton):
        on_node_disconnect: Function that will be executed each time when connection to Controller is lost
     """
 
-    process_name: Optional[str] = field(default_factory=string_uuid)
+    process_name: Optional[str] = None
     init_controller: Optional[bool] = False
     init_node: Optional[bool] = True
     host: Optional[str] = None
@@ -60,9 +53,15 @@ class Global(metaclass=Singleton):
     unix_sock_path: Optional[os.PathLike] = None
     ssl_certificate: Optional[os.PathLike] = None
     ssl_key: Optional[os.PathLike] = None
-    on_init: Optional[Callable[["Global"], Any]] = None
-    on_node_connect: Optional[Callable[["Global", str], Any]] = None
-    on_node_disconnect: Optional[Callable[["Global", str], Any]] = None
+
+    # Lifecycle callback events
+    on_init: Optional[Callable[["Global", str], Any]] = None  # on global init (executed once)
+    on_node_connect: Optional[
+        Callable[["Global", str], Any]
+    ] = None  # on node connect (executed each time node is connected)
+    on_node_disconnect: Optional[
+        Callable[["Global", str], Any]
+    ] = None  # on node disconnect (executed each time node is disconnected)
 
     def __post_init__(self):
         if self.process_name is None:
@@ -95,6 +94,7 @@ class Global(metaclass=Singleton):
 
         self._global_terminate_event = Event()
         self.ipc = Ipc(
+            g=self,
             process_name=self.process_name,
             init_controller=self.init_controller,
             init_node=self.init_node,
@@ -108,8 +108,6 @@ class Global(metaclass=Singleton):
             on_node_disconnect=self.on_node_disconnect,
             logger=logger,
         )
-
-        BaseRegistry._ipc = self.ipc
         self.ipc.start()
         if not self.ipc.wait():
             self.stop()
@@ -117,9 +115,7 @@ class Global(metaclass=Singleton):
             return
         self.port = self.ipc.port
         if self.on_init and callable(self.on_init):
-            self.on_init(self)
-        # Give some extra time for nodes to connect before using fetchers.
-        time.sleep(2)
+            Thread(target=self.on_init, args=(self, self.process_name)).start()
 
     def __enter__(self):
         return self
@@ -255,129 +251,3 @@ class Global(metaclass=Singleton):
         Find out task uuid you can using `get_scheduled_tasks` method.
         """
         return self.ipc.cancel_scheduler(remote_process=remote_process, msg_uuid=uuid)
-
-
-def get_g() -> Global:
-    """Get `g` object from any place in code."""
-    return Singleton._get_self("Global")
-
-
-# ----------------------------------------------------------------------------------------------------------------------
-# Well known callbacks
-# ----------------------------------------------------------------------------------------------------------------------
-
-
-@callback
-def __transfer_and_call(func: Callable[..., Any], *args, **kwargs) -> Any:
-    return func(*args, **kwargs)
-
-
-@callback
-async def __async_transfer_and_call(func: Callable[..., Any], *args, **kwargs) -> Any:
-    return await func(*args, **kwargs)
-
-
-@callback
-@retry(
-    wait=wait_fixed(0.1),
-    stop=stop_after_attempt(7),
-    retry=retry_if_exception_type(
-        RuntimeError,
-    ),
-    reraise=True,
-)
-async def __cancel_scheduled_task(msg_uuid: str, process_name: str, func_name: Optional[str] = None) -> bool:
-    from daffi.components.scheduler import (
-        logger,
-        SCHEDULER_PERIODICAL_TASKS,
-        SCHEDULER_AT_TIME_TASKS,
-        FINISHED_TASKS,
-        TaskIdent,
-    )
-
-    task_found = False
-    if msg_uuid and func_name and process_name:
-        task_ident = TaskIdent(process_name, func_name, msg_uuid)
-        period_task = SCHEDULER_PERIODICAL_TASKS.pop(task_ident, None)
-        if period_task:
-            period_task.cancel()
-            FINISHED_TASKS.append(task_ident.msg_uuid)
-            logger.warning(f"Task {func_name!r} (condition=period, executor={process_name}) has been canceled.")
-            task_found = True
-        else:
-            at_time_tasks = SCHEDULER_AT_TIME_TASKS.pop(task_ident, None)
-            if at_time_tasks:
-                for at_time_task in at_time_tasks:
-                    if at_time_task is not None:
-                        at_time_task.cancel()
-                        FINISHED_TASKS.append(task_ident.msg_uuid)
-                logger.warning(
-                    f"Task group {func_name!r} (condition=period, executor={process_name}) has been canceled."
-                )
-                task_found = True
-
-    elif msg_uuid:
-        for task_ident, period_task in SCHEDULER_PERIODICAL_TASKS.items():
-            if task_ident.msg_uuid == msg_uuid:
-                period_task.cancel()
-                SCHEDULER_PERIODICAL_TASKS.pop(task_ident, None)
-                FINISHED_TASKS.append(msg_uuid)
-                logger.warning(
-                    f"Task {task_ident.func_name!r} (condition=period, executor={task_ident.process_name}) has been canceled."
-                )
-                task_found = True
-                break
-        else:
-            for task_ident, at_time_tasks in SCHEDULER_AT_TIME_TASKS.items():
-                if task_ident.msg_uuid == msg_uuid and at_time_tasks:
-                    for at_time_task in at_time_tasks:
-                        if at_time_task is not None:
-                            at_time_task.cancel()
-                    SCHEDULER_AT_TIME_TASKS.pop(task_ident, None)
-                    FINISHED_TASKS.append(msg_uuid)
-                    logger.warning(
-                        f"Task group {task_ident.func_name!r} (condition=period, executor={task_ident.process_name}) has been canceled."
-                    )
-                    task_found = True
-                    break
-    if not task_found:
-        if msg_uuid in FINISHED_TASKS:
-            return False
-        GlobalContextError(f"Unable to find task by uuid: {msg_uuid}").fire()
-    return True
-
-
-@callback
-@retry(
-    wait=wait_fixed(0.1),
-    stop=stop_after_attempt(7),
-    retry=retry_if_exception_type(
-        RuntimeError,
-    ),
-    reraise=True,
-)
-async def __get_all_period_tasks(process_name: str) -> List[Dict]:
-    from daffi.components.scheduler import SCHEDULER_PERIODICAL_TASKS, SCHEDULER_AT_TIME_TASKS
-
-    res = []
-    for task_ident in SCHEDULER_PERIODICAL_TASKS:
-        if task_ident.process_name == process_name:
-            res.append(
-                {
-                    "condition": "period",
-                    "func_name": task_ident.func_name,
-                    "uuid": task_ident.msg_uuid,
-                }
-            )
-
-    for task_ident, at_time_tasks in SCHEDULER_AT_TIME_TASKS.items():
-        if task_ident.process_name == process_name:
-            res.append(
-                {
-                    "condition": "at_time",
-                    "func_name": task_ident.func_name,
-                    "uuid": task_ident.msg_uuid,
-                    "number_of_active_tasks": list(filter(None, at_time_tasks)),
-                }
-            )
-    return res
