@@ -1,0 +1,912 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+      
+      
+        <link rel="canonical" href="https://600apples.github.io/daffi/global-object/">
+      
+      <link rel="icon" href="../images/logo.png">
+      <meta name="generator" content="mkdocs-1.4.2, mkdocs-material-8.5.9">
+    
+    
+      
+        <title>Global object - daffi</title>
+      
+    
+    
+      <link rel="stylesheet" href="../assets/stylesheets/main.20d9efc8.min.css">
+      
+        
+        <link rel="stylesheet" href="../assets/stylesheets/palette.08040f6c.min.css">
+        
+      
+      
+
+    
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+      <link rel="stylesheet" href="../assets/_mkdocstrings.css">
+    
+      <link rel="stylesheet" href="../stylesheets/extra.css">
+    
+    <script>__md_scope=new URL("..",location),__md_hash=e=>[...e].reduce((e,_)=>(e<<5)-e+_.charCodeAt(0),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo">
+  
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&"object"==typeof palette.color)for(var key of Object.keys(palette.color))document.body.setAttribute("data-md-color-"+key,palette.color[key])</script>
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#global-object-initialization" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+      <div data-md-component="outdated" hidden>
+        
+      </div>
+    
+    
+      
+
+<header class="md-header" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href=".." title="daffi" class="md-header__button md-logo" aria-label="daffi" data-md-component="logo">
+      
+  <img src="../images/logo.png" alt="logo">
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3V6m0 5h18v2H3v-2m0 5h18v2H3v-2Z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            daffi
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Global object
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      <form class="md-header__option" data-md-component="palette">
+        
+          
+          
+          
+          <input class="md-option" data-md-color-media="" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Switch to dark mode"  type="radio" name="__palette" id="__palette_1">
+          
+            <label class="md-header__button md-icon" title="Switch to dark mode" for="__palette_2" hidden>
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a4 4 0 0 0-4 4 4 4 0 0 0 4 4 4 4 0 0 0 4-4 4 4 0 0 0-4-4m0 10a6 6 0 0 1-6-6 6 6 0 0 1 6-6 6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12 20 8.69Z"/></svg>
+            </label>
+          
+        
+          
+          
+          
+          <input class="md-option" data-md-color-media="" data-md-color-scheme="slate" data-md-color-primary="black" data-md-color-accent="red"  aria-label="Switch to light mode"  type="radio" name="__palette" id="__palette_2">
+          
+            <label class="md-header__button md-icon" title="Switch to light mode" for="__palette_1" hidden>
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 18c-.89 0-1.74-.2-2.5-.55C11.56 16.5 13 14.42 13 12c0-2.42-1.44-4.5-3.5-5.45C10.26 6.2 11.11 6 12 6a6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12 20 8.69Z"/></svg>
+            </label>
+          
+        
+      </form>
+    
+    
+    
+      <label class="md-header__button md-icon" for="__search">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.516 6.516 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5Z"/></svg>
+      </label>
+      <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.516 6.516 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5Z"/></svg>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11h12Z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12 19 6.41Z"/></svg>
+        </button>
+      </nav>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+    
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+  
+
+<nav class="md-nav md-nav--primary md-nav--integrated" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href=".." title="daffi" class="md-nav__button md-logo" aria-label="daffi" data-md-component="logo">
+      
+  <img src="../images/logo.png" alt="logo">
+
+    </a>
+    daffi
+  </label>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+      
+
+  
+  
+  
+    <li class="md-nav__item">
+      <a href=".." class="md-nav__link">
+        Overview
+      </a>
+    </li>
+  
+
+    
+      
+      
+      
+
+  
+  
+  
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+      
+        <input class="md-nav__toggle md-toggle" data-md-toggle="__nav_2" type="checkbox" id="__nav_2" >
+      
+      
+      
+      
+        <label class="md-nav__link" for="__nav_2">
+          Usage
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <nav class="md-nav" aria-label="Usage" data-md-level="1">
+        <label class="md-nav__title" for="__nav_2">
+          <span class="md-nav__icon md-icon"></span>
+          Usage
+        </label>
+        <ul class="md-nav__list" data-md-scrollfix>
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../usage/basic-example/" class="md-nav__link">
+        basic example
+      </a>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../usage/fetchers-with-body/" class="md-nav__link">
+        fetchers with function body
+      </a>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../usage/callback-additional-arguments/" class="md-nav__link">
+        additional arguments for callback instantiation
+      </a>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../usage/private-methods/" class="md-nav__link">
+        private methods
+      </a>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../usage/aliased-methods/" class="md-nav__link">
+        aliased methods
+      </a>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../usage/named-processes/" class="md-nav__link">
+        named processes
+      </a>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../usage/stream-fetcher-to-callback/" class="md-nav__link">
+        stream from fetcher to callback
+      </a>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../usage/stream-callback-to-fetcher/" class="md-nav__link">
+        stream from callback to fetcher
+      </a>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../usage/function-transfer/" class="md-nav__link">
+        function transfer
+      </a>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../usage/bidirectional-communication/" class="md-nav__link">
+        bidirectional communication
+      </a>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../usage/ssl-certificates/" class="md-nav__link">
+        SSL certificates
+      </a>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../usage/lifecycle-events/" class="md-nav__link">
+        lifecycle events
+      </a>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../usage/asynchronous-execution/" class="md-nav__link">
+        asynchronous execution
+      </a>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../usage/broadcasting/" class="md-nav__link">
+        broadcasting
+      </a>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../usage/scheduling-tasks/" class="md-nav__link">
+        task scheduling and batch delayed execution
+      </a>
+    </li>
+  
+
+            
+          
+        </ul>
+      </nav>
+    </li>
+  
+
+    
+      
+      
+      
+
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../node-and-controller/" class="md-nav__link">
+        Node and Controller
+      </a>
+    </li>
+  
+
+    
+      
+      
+      
+
+  
+  
+    
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" data-md-toggle="toc" type="checkbox" id="__toc">
+      
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          Global object
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        Global object
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#global-object-initialization" class="md-nav__link">
+    Global object initialization
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#execution-workflow" class="md-nav__link">
+    Execution workflow
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#waiting-for-nodes-or-methods-to-be-available" class="md-nav__link">
+    waiting for nodes or methods to be available
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#transfer-and-execute-function-on-remote-node" class="md-nav__link">
+    Transfer and execute function on remote Node
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#working-with-scheduled-tasks" class="md-nav__link">
+    Working with scheduled tasks
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+    
+      
+      
+      
+
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../async-apps/" class="md-nav__link">
+        Asynchronous applications
+      </a>
+    </li>
+  
+
+    
+      
+      
+      
+
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../execution-modifiers/" class="md-nav__link">
+        Execution modifiers
+      </a>
+    </li>
+  
+
+    
+      
+      
+      
+
+  
+  
+  
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+      
+        <input class="md-nav__toggle md-toggle" data-md-toggle="__nav_7" type="checkbox" id="__nav_7" >
+      
+      
+      
+      
+        <label class="md-nav__link" for="__nav_7">
+          Code reference
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <nav class="md-nav" aria-label="Code reference" data-md-level="1">
+        <label class="md-nav__title" for="__nav_7">
+          <span class="md-nav__icon md-icon"></span>
+          Code reference
+        </label>
+        <ul class="md-nav__list" data-md-scrollfix>
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../code-reference/global/" class="md-nav__link">
+        Global
+      </a>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../code-reference/callback/" class="md-nav__link">
+        callback
+      </a>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../code-reference/fetcher/" class="md-nav__link">
+        fetcher
+      </a>
+    </li>
+  
+
+            
+          
+        </ul>
+      </nav>
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+  <h1>Global object</h1>
+
+<p><a href="../code-reference/global/">Global</a> is the main initialization daffi entrypoint.</p>
+<h4 id="global-object-initialization">Global object initialization<a class="headerlink" href="#global-object-initialization" title="Permanent link">&para;</a></h4>
+<p>You can initialize <a href="../code-reference/global/">Global</a> object using the following syntax:
+<div class="highlight"><pre><span></span><code><span class="kn">from</span> <span class="nn">daffi</span> <span class="kn">import</span> <span class="n">Global</span>
+<span class="n">g</span> <span class="o">=</span> <span class="n">Global</span><span class="p">(</span><span class="n">process_name</span><span class="o">=</span><span class="s1">&#39;my awersome process&#39;</span><span class="p">,</span> <span class="n">init_controller</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">host</span><span class="o">=</span><span class="s1">&#39;localhost&#39;</span><span class="p">,</span> <span class="n">port</span><span class="o">=</span><span class="mi">8888</span><span class="p">)</span>
+</code></pre></div></p>
+<p>where:</p>
+<p>The <code>process_name</code> argument serves as an optional identifier for the process, 
+allowing other processes to identify the initialized node by its given process_name.</p>
+<p>If the process_name argument is not provided, a randomly generated name will be used. 
+However, assigning meaningful names to nodes can be beneficial in certain scenarios. 
+For example, one process may need to wait for another process by its specified name.</p>
+<div class="highlight"><pre><span></span><code><span class="n">g</span><span class="o">.</span><span class="n">wait_process</span><span class="p">(</span><span class="s1">&#39;node name here&#39;</span><span class="p">)</span>
+</code></pre></div>
+<p><code>init_controller=True</code> Means we want to start <code>Controller</code> in this process.</p>
+<p><code>init_node</code> argument is True
+by default so if you want to start only controller in particular process you should be explicit:</p>
+<div class="highlight"><pre><span></span><code><span class="n">g</span> <span class="o">=</span> <span class="n">Global</span><span class="p">(</span><span class="n">process_name</span><span class="o">=</span><span class="n">process_name</span><span class="p">,</span> <span class="n">init_controller</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">init_node</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">host</span><span class="o">=</span><span class="s1">&#39;localhost&#39;</span><span class="p">,</span> <span class="n">port</span><span class="o">=</span><span class="mi">8888</span><span class="p">)</span>
+</code></pre></div>
+<p><code>host</code> and <code>port</code> arguments give <code>Controller</code> and <code>Node</code> information how to connect and communicate.</p>
+<p><code>host</code> and <code>port</code> arguments are also optional.
+For instance you can specify only <code>host</code>. In this case <code>Controller</code>/<code>Node</code> or both will be connected to random port</p>
+<p>You can also skip these two arguments:
+<div class="highlight"><pre><span></span><code><span class="n">g</span> <span class="o">=</span> <span class="n">Global</span><span class="p">(</span><span class="n">process_name</span><span class="o">=</span><span class="n">process_name</span><span class="p">,</span> <span class="n">init_controller</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+</code></pre></div>
+In this case <code>Controller</code>/<code>Node</code> will be connected using UNIX socket. By default UNIX socket is created within path
+<div class="highlight"><pre><span></span><code>&lt;<span class="w"> </span>temp<span class="w"> </span>directory<span class="w"> </span>&gt;/daffi/.sock
+</code></pre></div>
+Where <code>&lt; temp directory &gt;</code> is temporary directory of machine where 
+<code>Controller</code>/<code>Node</code> is running. For instance it is going to be <code>/tmp/daffi/.sock</code> on Ubuntu.</p>
+<p>You can also provide your own directory for UNIX socket:</p>
+<div class="highlight"><pre><span></span><code><span class="n">g</span> <span class="o">=</span> <span class="n">Global</span><span class="p">(</span><span class="n">process_name</span><span class="o">=</span><span class="n">process_name</span><span class="p">,</span> <span class="n">init_controller</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">unix_sock_path</span><span class="o">=</span><span class="s2">&quot;/foo/bar/biz&quot;</span><span class="p">)</span>
+</code></pre></div>
+<h4 id="execution-workflow">Execution workflow<a class="headerlink" href="#execution-workflow" title="Permanent link">&para;</a></h4>
+<p>After initialization <a href="../code-reference/global/">Global</a> object starts <code>Controller</code>/<code>Node</code> or both in separate thread.</p>
+<p>You can join this thread to main process using <code>.join</code> of <code>.join_async</code> methods of Global</p>
+<div class="highlight"><pre><span></span><code><span class="n">g</span> <span class="o">=</span> <span class="n">Global</span><span class="p">(</span><span class="n">process_name</span><span class="o">=</span><span class="n">process_name</span><span class="p">,</span> <span class="n">init_controller</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">init_node</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">host</span><span class="o">=</span><span class="s1">&#39;localhost&#39;</span><span class="p">,</span> <span class="n">port</span><span class="o">=</span><span class="mi">8888</span><span class="p">)</span>
+<span class="n">g</span><span class="o">.</span><span class="n">join</span><span class="p">()</span>
+
+<span class="c1">#--- or `join_async` if your application is asynchronous</span>
+<span class="k">await</span> <span class="n">g</span><span class="o">.</span><span class="n">join_async</span><span class="p">()</span> 
+</code></pre></div>
+<p><code>Controller</code>/<code>Node</code> or both can be terminated by calling the <code>stop</code> method. 
+This method is particularly useful for short-lived jobs, 
+such as starting a Daffi process, triggering a few callbacks on other nodes, and then terminating the process.</p>
+<div class="highlight"><pre><span></span><code><span class="n">g</span> <span class="o">=</span> <span class="n">Global</span><span class="p">(</span><span class="n">process_name</span><span class="o">=</span><span class="n">process_name</span><span class="p">,</span> <span class="n">init_controller</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">init_node</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">host</span><span class="o">=</span><span class="s1">&#39;localhost&#39;</span><span class="p">,</span> <span class="n">port</span><span class="o">=</span><span class="mi">8888</span><span class="p">)</span>
+<span class="c1"># .....</span>
+<span class="c1"># Execute remote callbacks ...</span>
+<span class="n">g</span><span class="o">.</span><span class="n">stop</span><span class="p">()</span> 
+</code></pre></div>
+<p>For this reason <a href="../code-reference/global/">Global</a> can be used as context manager. <code>stop</code> method is executed explicitly
+on exit from context manager scope.</p>
+<div class="highlight"><pre><span></span><code><span class="k">with</span> <span class="n">Global</span><span class="p">(</span><span class="n">process_name</span><span class="o">=</span><span class="n">process_name</span><span class="p">,</span> <span class="n">init_controller</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">init_node</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">host</span><span class="o">=</span><span class="s1">&#39;localhost&#39;</span><span class="p">,</span> <span class="n">port</span><span class="o">=</span><span class="mi">8888</span><span class="p">)</span> <span class="k">as</span> <span class="n">g</span><span class="p">:</span>
+    <span class="c1"># .....</span>
+    <span class="c1"># Execute remote callbacks ...</span>
+</code></pre></div>
+<div class="admonition warning">
+<p class="admonition-title">Warning</p>
+<p>Dont use <code>.stop</code> method to stop daffi components in long living applications eg web servers, background workers etc.
+start/stop daffi components requires some initialization time and resources.</p>
+</div>
+<h4 id="waiting-for-nodes-or-methods-to-be-available">waiting for nodes or methods to be available<a class="headerlink" href="#waiting-for-nodes-or-methods-to-be-available" title="Permanent link">&para;</a></h4>
+<p>Sometimes nodes start at different times and because of this, some remote callbacks may not be available immediately.</p>
+<p><a href="../code-reference/global/">Global</a> has several methods to control waiting for callbacks availability.</p>
+<p>The 2 examples below illustrate waiting for a remote process to be available:</p>
+<p><div class="highlight"><pre><span></span><code><span class="n">g</span><span class="o">.</span><span class="n">wait_process</span><span class="p">(</span><span class="s1">&#39;name of remote node&#39;</span><span class="p">)</span>
+</code></pre></div>
+or</p>
+<div class="highlight"><pre><span></span><code><span class="k">await</span> <span class="n">g</span><span class="o">.</span><span class="n">wait_process_async</span><span class="p">(</span><span class="s1">&#39;name of remote node&#39;</span><span class="p">)</span>
+</code></pre></div>
+<p><a href="../code-reference/global/">Global</a> can also wait a specific callback to be available by its name:</p>
+<p><div class="highlight"><pre><span></span><code><span class="n">g</span><span class="o">.</span><span class="n">wait_function</span><span class="p">(</span><span class="s1">&#39;name of remote callback&#39;</span><span class="p">)</span>
+</code></pre></div>
+or</p>
+<div class="highlight"><pre><span></span><code><span class="k">await</span> <span class="n">g</span><span class="o">.</span><span class="n">wait_function_async</span><span class="p">(</span><span class="s1">&#39;name of remote callback&#39;</span><span class="p">)</span>
+</code></pre></div>
+<p>Waiting by callback name criteria can be useful when many nodes contain a callback with the same name and we need to wait for the presence of one of them</p>
+<h4 id="transfer-and-execute-function-on-remote-node">Transfer and execute function on remote Node<a class="headerlink" href="#transfer-and-execute-function-on-remote-node" title="Permanent link">&para;</a></h4>
+<p>This option is suitable when you want to create remote callback dynamically and execute them on remote nodes.</p>
+<p>Example:</p>
+<p>process 1
+<div class="highlight"><pre><span></span><code><span class="kn">import</span> <span class="nn">logging</span>
+<span class="kn">from</span> <span class="nn">daffi</span> <span class="kn">import</span> <span class="n">Global</span>
+
+<span class="n">logging</span><span class="o">.</span><span class="n">basicConfig</span><span class="p">(</span><span class="n">level</span><span class="o">=</span><span class="n">logging</span><span class="o">.</span><span class="n">INFO</span><span class="p">)</span>
+
+
+<span class="k">def</span> <span class="nf">main</span><span class="p">():</span>
+    <span class="n">Global</span><span class="p">(</span><span class="n">process_name</span><span class="o">=</span><span class="s2">&quot;other_process&quot;</span><span class="p">,</span> <span class="n">init_controller</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">host</span><span class="o">=</span><span class="s2">&quot;localhost&quot;</span><span class="p">,</span> <span class="n">port</span><span class="o">=</span><span class="mi">8888</span><span class="p">)</span><span class="o">.</span><span class="n">join</span><span class="p">()</span>
+
+
+<span class="k">if</span> <span class="vm">__name__</span> <span class="o">==</span> <span class="s2">&quot;__main__&quot;</span><span class="p">:</span>
+    <span class="n">main</span><span class="p">()</span>
+</code></pre></div>
+(This script is complete, it should run "as is")</p>
+<p>process 2
+<div class="highlight"><pre><span></span><code><span class="kn">import</span> <span class="nn">logging</span>
+<span class="kn">from</span> <span class="nn">daffi</span> <span class="kn">import</span> <span class="n">Global</span>
+
+<span class="n">logging</span><span class="o">.</span><span class="n">basicConfig</span><span class="p">(</span><span class="n">level</span><span class="o">=</span><span class="n">logging</span><span class="o">.</span><span class="n">INFO</span><span class="p">)</span>
+
+
+<span class="k">async</span> <span class="k">def</span> <span class="nf">func_to_transfer</span><span class="p">():</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Return pid id of remote process&quot;&quot;&quot;</span>
+    <span class="kn">import</span> <span class="nn">os</span>
+
+    <span class="k">return</span> <span class="n">os</span><span class="o">.</span><span class="n">getpid</span><span class="p">()</span>
+
+
+<span class="k">def</span> <span class="nf">main</span><span class="p">():</span>
+
+    <span class="k">with</span> <span class="n">Global</span><span class="p">(</span><span class="n">host</span><span class="o">=</span><span class="s2">&quot;localhost&quot;</span><span class="p">,</span> <span class="n">port</span><span class="o">=</span><span class="mi">8888</span><span class="p">)</span> <span class="k">as</span> <span class="n">g</span><span class="p">:</span>
+
+        <span class="n">remote_pid</span> <span class="o">=</span> <span class="n">g</span><span class="o">.</span><span class="n">transfer_and_call</span><span class="p">(</span><span class="n">remote_process</span><span class="o">=</span><span class="s2">&quot;other_process&quot;</span><span class="p">,</span> <span class="n">func</span><span class="o">=</span><span class="n">func_to_transfer</span><span class="p">)</span>
+        <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Remote process pid: </span><span class="si">{</span><span class="n">remote_pid</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+
+
+<span class="k">if</span> <span class="vm">__name__</span> <span class="o">==</span> <span class="s2">&quot;__main__&quot;</span><span class="p">:</span>
+    <span class="n">main</span><span class="p">()</span>
+</code></pre></div>
+(This script is complete, it should run "as is")</p>
+<p>On example above we transfer function <code>func_to_transfer</code> from process2 to process1 and execute it.
+The result of function execution will be returned to process2. </p>
+<div class="admonition warning">
+<p class="admonition-title">Warning</p>
+<p>You should make sure all imports that are using in function body are available on remote process.
+Otherwise you should consider import modules in function body (like <code>import os</code> in example above).</p>
+</div>
+<h4 id="working-with-scheduled-tasks">Working with scheduled tasks<a class="headerlink" href="#working-with-scheduled-tasks" title="Permanent link">&para;</a></h4>
+<p><a href="../code-reference/global/">Global</a> has methods <code>get_scheduled_tasks</code> and <code>cancel_scheduled_task_by_uuid</code> 
+to works with scheduled tasks (see <a href="../usage/scheduling-tasks/">scheduling tasks</a>) on remote process.</p>
+<ul>
+<li>
+<p><code>get_scheduled_tasks</code> get all scheduled tasks on remote process by process name.The method returns all task UUIDs that are currently scheduled on the remote process.</p>
+</li>
+<li>
+<p><code>cancel_scheduled_task_by_uuid</code> cancel one scheduled task on remote process by its UUID. All UUIDs can be obtained using <code>get_scheduled_tasks</code> method.</p>
+</li>
+</ul>
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+        </div>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+    
+    <nav class="md-footer__inner md-grid" aria-label="Footer" >
+      
+        
+        <a href="../node-and-controller/" class="md-footer__link md-footer__link--prev" aria-label="Previous: Node and Controller" rel="prev">
+          <div class="md-footer__button md-icon">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11h12Z"/></svg>
+          </div>
+          <div class="md-footer__title">
+            <div class="md-ellipsis">
+              <span class="md-footer__direction">
+                Previous
+              </span>
+              Node and Controller
+            </div>
+          </div>
+        </a>
+      
+      
+        
+        <a href="../async-apps/" class="md-footer__link md-footer__link--next" aria-label="Next: Asynchronous applications" rel="next">
+          <div class="md-footer__title">
+            <div class="md-ellipsis">
+              <span class="md-footer__direction">
+                Next
+              </span>
+              Asynchronous applications
+            </div>
+          </div>
+          <div class="md-footer__button md-icon">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M4 11v2h12l-5.5 5.5 1.42 1.42L19.84 12l-7.92-7.92L10.5 5.5 16 11H4Z"/></svg>
+          </div>
+        </a>
+      
+    </nav>
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    <script id="__config" type="application/json">{"base": "..", "features": ["toc.integrate"], "search": "../assets/javascripts/workers/search.16e2a7d4.min.js", "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.config.lang": "en", "search.config.pipeline": "trimmer, stopWordFilter", "search.config.separator": "[\\s\\-]+", "search.placeholder": "Search", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version.title": "Select version"}, "version": {"provider": "mike"}}</script>
+    
+    
+      <script src="../assets/javascripts/bundle.d6c3db9e.min.js"></script>
+      
+        <script src="../js/extra.js"></script>
+      
+    
+  </body>
+</html>

@@ -1,0 +1,45 @@
+* {
+    font-family: Verdana, Geneva, Tahoma, sans-serif !important;
+}
+
+header {
+background: linear-gradient(51deg, rgb(225, 225, 242) 0%, rgba(53,53,68,1) 70%);
+}
+
+header:after{
+    z-index:-1;
+    position:absolute;
+	bottom: 0;
+	right: 0;
+    content: url('../images/bg.jpg');
+	transform: scale(2, 1.005);
+    opacity:0.15;
+}
+
+.hll {
+    background: rgb(237,237,246) !important;
+}
+
+.md-main {
+	width: 99%;
+}
+
+.md-search__input {
+    border: 1px solid #2b8ff3;
+}
+
+.admonition.info {
+    background-color: #6f6ff1 !important;
+    color: white !important;
+}
+
+.admonition-title {
+    background-color: #b3b3f1d6 !important;
+}
+
+a[href$=".png"]>img {
+  clear: both;
+  float: left;
+  width: 50%;
+  margin: 0 3rem 0.4rem 0.4rem;
+}
