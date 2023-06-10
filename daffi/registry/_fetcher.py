@@ -97,7 +97,7 @@ class Fetcher(BaseRegistry):
                 is_generator=is_generator,
             )
             LOCAL_FETCHER_MAPPING[f"{cls.__name__}-{origin_method_name}"] = cb
-            logger.info(f"fetcher {origin_method_name!r} is registered. (proxy={is_proxy})")
+            logger.info(f"fetcher {origin_method_name!r} <class {cls.__name__}> is registered. (proxy={is_proxy})")
 
         return instance_or_type
 
@@ -112,6 +112,10 @@ class Fetcher(BaseRegistry):
         from daffi.decorators import callback
 
         is_async = is_generator = is_proxy = False
+
+        if hasattr(fn, "__func__"):
+            # Bypass staticmethod/classmethod decorators
+            fn = fn.__func__
 
         if isinstance(fn, callback):
             is_async = fn._fn.is_async

@@ -1,6 +1,7 @@
 import logging
 from trio import run, sleep
-from daffi import Global, RemoteStoppedUnexpectedly
+from daffi import Global
+from daffi.exceptions import RemoteStoppedUnexpectedly
 from daffi.decorators import callback, fetcher
 
 

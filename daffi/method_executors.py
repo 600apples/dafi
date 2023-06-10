@@ -138,8 +138,8 @@ class ClassCallbackExecutor(NamedTuple):
 
 def f__call__(self, *args, **kwargs) -> RemoteResult:
     """Trigger executor with assigned execution modifier."""
-    # Get remote call by name
-    remote_call = getattr(_g().call, self.alias)
+    g = Singleton._get_self("Global")
+    remote_call = getattr(g.call, self.alias)
     # Set fetcher
     remote_call._fetcher = self
     # Execute remote call
@@ -149,15 +149,12 @@ def f__call__(self, *args, **kwargs) -> RemoteResult:
 def call(self, *args, exec_modifier: Union[FG, BG, BROADCAST, PERIOD] = FG, **kwargs):
     """Trigger executor with execution modifier provided in arguments."""
     # Get remote call by name
-    remote_call = getattr(_g().call, self.alias)
+    g = Singleton._get_self("Global")
+    remote_call = getattr(g.call, self.alias)
     # Set fetcher
     remote_call._fetcher = self
     # Execute remote call
     return (remote_call & exec_modifier)(*args, **kwargs)
-
-
-def _g() -> "Global":
-    return Singleton._get_self("Global")
 
 
 @property

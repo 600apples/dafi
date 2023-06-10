@@ -1,6 +1,5 @@
 The Callback class allows users to include extra initialization arguments.
-By default, any subclass of Callback is automatically initialized without any additional input.
-To turn off this default behavior, users can set the `auto_init` flag to False.
+For this reason you need to set `auto_init` flag to False (or omit it as it is default behavior).
 
 In this scenario, it is the user's responsibility to explicitly create an instance of the class.
 
@@ -15,7 +14,6 @@ logging.basicConfig(level=logging.INFO)
 
 
 class CalculatorService(Callback):
-
     auto_init = False
 
     def __init__(self, multiplier):

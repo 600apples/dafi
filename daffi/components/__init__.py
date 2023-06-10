@@ -9,18 +9,19 @@ from random import randint
 from abc import abstractmethod
 from itertools import count
 from cached_property import cached_property
-from threading import Event as thEvent
-from typing import Optional, NoReturn, Callable, ClassVar, List
+from threading import Event as thEvent, Thread
+from typing import Optional, NoReturn, Callable, ClassVar, List, Any, Set
 from contextlib import asynccontextmanager
 from tempfile import gettempdir
 
-from grpc import aio, ChannelConnectivity
+
+from grpc import aio, ChannelConnectivity, ssl_channel_credentials, ssl_server_credentials
 from anyio.abc import TaskStatus
 from grpc.aio._call import AioRpcError
 from anyio import TASK_STATUS_IGNORED
 from tenacity import AsyncRetrying, wait_fixed, retry_if_exception_type, RetryCallState, wait_none
 
-from daffi.exceptions import StopComponentError
+from daffi.exceptions import StopComponentError, ControllerUnavailable, RemoteCallError
 from daffi.interface import ComponentI
 from daffi.components.proto import messager_pb2_grpc as grpc_messager
 from daffi.utils.misc import string_uuid
@@ -29,8 +30,15 @@ from daffi.utils.misc import string_uuid
 class UnixBase(ComponentI, grpc_messager.MessagerServiceServicer):
     SOCK_FILE = ".sock"
 
-    def __init__(self, unix_sock_path: Optional[os.PathLike]):
+    def __init__(
+        self,
+        unix_sock_path: Optional[os.PathLike],
+        ssl_certificate: Optional[os.PathLike],
+        ssl_key: Optional[os.PathLike],
+    ):
         self.unix_sock_path = unix_sock_path
+        self.ssl_certificate = ssl_certificate
+        self.ssl_key = ssl_key
 
     def info(self) -> str:
         return f"unix socket: [ {self.unix_socket!r} ]"
@@ -51,21 +59,41 @@ class UnixBase(ComponentI, grpc_messager.MessagerServiceServicer):
 
     @asynccontextmanager
     async def connect_listener(self):
-        async with aio.insecure_channel(self.unix_socket, options=self.client_options) as aio_channel:
-            yield aio_channel
+        """UNIX Client"""
+        if self.ssl_certificate and self.ssl_key:
+            with open(self.ssl_certificate, "rb") as f:
+                creds = ssl_channel_credentials(f.read())
+            async with aio.secure_channel(self.unix_socket, creds) as aio_channel:
+                yield aio_channel
+        else:
+            async with aio.insecure_channel(self.unix_socket) as aio_channel:
+                yield aio_channel
 
     async def create_listener(self) -> NoReturn:
+        """UNIX Server"""
         server = aio.server()
         grpc_messager.add_MessagerServiceServicer_to_server(self, server)
-        server.add_insecure_port(self.unix_socket)
+        if self.ssl_certificate and self.ssl_key:
+            with open(self.ssl_key, "rb") as f:
+                private_key = f.read()
+            with open(self.ssl_certificate, "rb") as f:
+                certificate_chain = f.read()
+            server_credentials = ssl_server_credentials(((private_key, certificate_chain),))
+            server.add_secure_port(self.unix_socket, server_credentials)
+        else:
+            server.add_insecure_port(self.unix_socket)
         await server.start()
         return server
 
 
 class TcpBase(ComponentI, grpc_messager.MessagerServiceServicer):
-    def __init__(self, host: str, port: Optional[int]):
+    def __init__(
+        self, host: str, port: Optional[int], ssl_certificate: Optional[os.PathLike], ssl_key: Optional[os.PathLike]
+    ):
         self.host = host
         self.port = port
+        self.ssl_certificate = ssl_certificate
+        self.ssl_key = ssl_key
         if self.host in ("localhost", "0.0.0.0", "127.0.0.1", "192.168.0.1"):
             self.host = "[::]"
 
@@ -74,18 +102,34 @@ class TcpBase(ComponentI, grpc_messager.MessagerServiceServicer):
 
     @asynccontextmanager
     async def connect_listener(self):
-        async with aio.insecure_channel(f"{self.host}:{self.port}", options=self.client_options) as aio_channel:
-            yield aio_channel
+        """TCP Client"""
+        listen_addr = f"{self.host}:{self.port}"
+        if self.ssl_certificate and self.ssl_key:
+            with open(self.ssl_certificate, "rb") as f:
+                creds = ssl_channel_credentials(f.read())
+            async with aio.secure_channel(listen_addr, creds) as aio_channel:
+                yield aio_channel
+        else:
+            async with aio.insecure_channel(listen_addr) as aio_channel:
+                yield aio_channel
 
-    async def create_listener(self, task_status: TaskStatus = TASK_STATUS_IGNORED) -> NoReturn:
+    async def create_listener(self) -> NoReturn:
+        """TCP Server"""
         if not self.port:
             await self.find_random_port()
         server = aio.server()
         grpc_messager.add_MessagerServiceServicer_to_server(self, server)
         listen_addr = f"{self.host}:{self.port}"
-        server.add_insecure_port(listen_addr)
+        if self.ssl_certificate and self.ssl_key:
+            with open(self.ssl_key, "rb") as f:
+                private_key = f.read()
+            with open(self.ssl_certificate, "rb") as f:
+                certificate_chain = f.read()
+            server_credentials = ssl_server_credentials(((private_key, certificate_chain),))
+            server.add_secure_port(listen_addr, server_credentials)
+        else:
+            server.add_insecure_port(listen_addr)
         await server.start()
-        task_status.started()
         return server
 
     async def find_random_port(self, min_port: Optional[int] = 49152, max_port: Optional[int] = 65536) -> NoReturn:
@@ -105,42 +149,53 @@ class TcpBase(ComponentI, grpc_messager.MessagerServiceServicer):
 
 
 class ComponentsBase(UnixBase, TcpBase):
-    RETRY_TIMEOUT = 2  # 2 sec
+    RETRY_TIMEOUT = 1  # 1 sec
     IMMEDIATE_ACTION_ERRORS = (AioRpcError,)
-    NON_IMMEDIATE_ACTION_ERRORS = (AioRpcError, RuntimeError)
+    NON_IMMEDIATE_ACTION_ERRORS = (AioRpcError, RuntimeError, ControllerUnavailable)
     STOP_ACTION_ERRORS = (StopComponentError,)
 
     logger: logging.Logger = None
-    components: ClassVar[List[Callable]] = []
+    components: ClassVar[Set[Callable]] = set()
 
     def __init__(
         self,
+        g: "Global",
         process_name: str,
         host: Optional[str] = None,
         port: Optional[int] = None,
         unix_sock_path: Optional[os.PathLike] = None,
+        ssl_certificate: Optional[os.PathLike] = None,
+        ssl_key: Optional[os.PathLike] = None,
         async_backend: Optional[str] = None,
         global_terminate_event: Optional[thEvent] = None,
+        on_node_connect: Optional[Callable[["Global", str], Any]] = None,
+        on_node_disconnect: Optional[Callable[["Global", str], Any]] = None,
     ):
         self._set_keyboard_interrupt_handler()
 
+        self.g = g
         self.process_name = process_name
         self.async_backend = async_backend or "asyncio"
         self.operations = None
         self.ident = string_uuid()
         self.global_terminate_event = global_terminate_event
+        self.on_node_connect_cbs = [self.on_node_connect, on_node_connect]
+        self.on_node_disconnect_cbs = [self.on_node_disconnect, on_node_disconnect]
         self._stopped = self._connected = False
         self.stop_event: bool = False
         self.stop_callbacks: List[Callable] = []
 
-        self.components.append(self)
+        self.components.add(self)
 
         if host:  # Check only host. Full host/port validation already took place before.
             self._base = TcpBase
-            self._base.__init__(self, host, port)
+            self._base.__init__(self, host, port, ssl_certificate, ssl_key)
         else:
             self._base = UnixBase
-            self._base.__init__(self, unix_sock_path)
+            self._base.__init__(self, unix_sock_path, ssl_certificate, ssl_key)
+
+    def __hash__(self):
+        return hash(self.__class__.__name__)
 
     @abstractmethod
     async def on_init(self) -> NoReturn:
@@ -156,21 +211,37 @@ class ComponentsBase(UnixBase, TcpBase):
 
     async def on_stop(self) -> NoReturn:
         while not self.stop_event:
-            await asyncio.sleep(0.1)
+            await asyncio.sleep(0.3)
+
+    def on_node_connect(self, _, process_name: str):
+        """
+        Default on node connect event handler.
+        executed each time when connection to Controller is established
+        """
+        self.logger.info(f"Node {process_name!r} has been connected to Controller")
+
+    def on_node_disconnect(self, _, process_name: str):
+        """
+        Default on node disconnect event handler.
+        executed each time when connection to Controller is lost
+        """
+        self.logger.info(f"Node {process_name!r} has been disconnected")
+
+    async def on_terminate(self):
+        self.logger.info(f"{self.__class__.__name__} stopped.")
+        self._stopped = True
+        self.components.discard(self)
+        if not self.components:
+            # Cancel all existing asyncio tasks if component is the last one in termination chain. Eg if controller
+            # is running along with node then controller will be in charge of cleaning.
+            self.logger.debug("Cleaning asyncio tasks...")
+            tasks = [task for task in asyncio.all_tasks(asyncio.get_running_loop()) if not task.done()]
+            for task in tasks:
+                task.cancel()
 
     @abstractmethod
-    def on_error(self) -> NoReturn:
+    def on_error(self, exception: Exception) -> NoReturn:
         raise NotImplementedError
-
-    @cached_property
-    def client_options(self):
-        """Grpc client options"""
-        # GRPC_ARG_KEEPALIVE_TIME_MS   "grpc.keepalive_time_ms"
-        #   After a duration of this time the client/server pings its peer to see if the transport is still alive.
-        # GRPC_ARG_KEEPALIVE_TIMEOUT_MS   "grpc.keepalive_timeout_ms"
-        #   After waiting for a duration of this time, if the keepalive ping
-        #   sender does not receive the ping ack, it will close the transport.
-        return [("grpc.keepalive_timeout_ms", 1000), ("grpc.keepalive_time_ms", 360000)]
 
     @cached_property
     def info(self) -> str:
@@ -201,22 +272,45 @@ class ComponentsBase(UnixBase, TcpBase):
         self._connected = True
         return listener
 
+    async def execute_on_connect(self):
+        """Execute `on_connect` lifecycle handler in separate thread to prevent blocking main message handler."""
+
+        def _on_connect_wrapper():
+            # In case IPC is not ready yet.
+            self.g.ipc.global_condition_event.wait_any_status()
+            for cb in filter(None, self.on_node_connect_cbs):
+                try:
+                    cb(self.g, self.process_name)
+                except Exception as e:
+                    self.logger.error(
+                        f"Exception occurred while execution `on_node_connect` handler: {e}, type: {type(e)}"
+                    )
+
+        Thread(target=_on_connect_wrapper).start()
+
+    async def execute_on_disconnect(self, process_name):
+        def _on_disconnect_wrapper():
+            for cb in filter(None, self.on_node_disconnect_cbs):
+                try:
+                    cb(self.g, process_name)
+                except Exception as e:
+                    self.logger.error(
+                        f"Exception occurred while execution `on_node_disconnect` handler: {e}, type: {type(e)}"
+                    )
+
+        Thread(target=_on_disconnect_wrapper).start()
+
     def after_exception(self, retry_state: RetryCallState):
         """return the result of the last call attempt"""
 
-        self.on_error()
         retry_object = retry_state.retry_object
         attempt = retry_state.attempt_number
         exception = retry_state.outcome.exception()
+        self.on_error(exception)
 
         if type(exception) in self.IMMEDIATE_ACTION_ERRORS:
             if type(exception) == AioRpcError:
-                if "Cancelling all calls" in str(exception):
-                    self.logger.debug("Cancelling all tasks and stop.")
-                    self.stop()
-                    self.check_stopped_components()
-                    return
-                elif "Deadline Exceeded" in str(exception) or "Controller is down!" in str(exception):
+                if "Deadline Exceeded" in str(exception):
                     retry_object.begin()
                     retry_object.wait = wait_none()
                     return
@@ -229,7 +323,7 @@ class ComponentsBase(UnixBase, TcpBase):
 
         if type(exception) in self.NON_IMMEDIATE_ACTION_ERRORS:
             retry_object.wait = wait_fixed(self.RETRY_TIMEOUT)
-            if attempt == 3 or not attempt % 5:
+            if attempt == 3 or not attempt % 6:
                 self.logger.error(
                     f"Unable to connect {self.__class__.__name__}"
                     f" {self.process_name!r}. Error = {type(exception)} {exception}. Retrying..."
@@ -247,8 +341,6 @@ class ComponentsBase(UnixBase, TcpBase):
             self.global_terminate_event.set()
 
     async def handle(self, task_status: TaskStatus = TASK_STATUS_IGNORED) -> NoReturn:
-        # Register on_stop actions
-        stop_task = asyncio.create_task(self.on_stop())
         await self.on_init()
 
         async for attempt in AsyncRetrying(
@@ -257,13 +349,18 @@ class ComponentsBase(UnixBase, TcpBase):
             after=self.after_exception,
         ):
             with attempt:
-                if self.stop_event:
-                    return
+                if self.stop_event or self.global_terminate_event.is_set():
+                    break
 
                 await self.before_connect()
-                await self.handle_operations(task_status)
 
-        await stop_task
+                stop_task = asyncio.create_task(self.on_stop())
+                try:
+                    await asyncio.gather(self.handle_operations(task_status), stop_task)
+                finally:
+                    stop_task.cancel()
+
+        await self.on_terminate()
 
     def _set_keyboard_interrupt_handler(self) -> NoReturn:
         # Creating a handler
@@ -276,9 +373,7 @@ class ComponentsBase(UnixBase, TcpBase):
             self.logger.error("Unhandled exception:", exc_info=(exc_type, exc_value, exc_traceback))
             for component in self.components:
                 component.stop()
-
-            if all(c.stop_event for c in self.components) and self.global_terminate_event:
-                self.global_terminate_event.set()
+            self.check_stopped_components()
 
         # Assign the excepthook to the handler
         sys.excepthook = handle_unhandled_exception

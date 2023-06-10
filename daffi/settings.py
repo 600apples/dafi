@@ -25,7 +25,6 @@ WELL_KNOWN_CALLBACKS: Set[str] = {
     "__transfer_and_call",
     "__async_transfer_and_call",
     "__cancel_scheduled_task",
-    "__kill_all",
     "__get_all_period_tasks",
     "<unknown>",
 }

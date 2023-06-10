@@ -11,6 +11,7 @@ from daffi.components.proto.message import RpcMessage
 from daffi.exceptions import RemoteError, TimeoutError, InitializationError
 from daffi.utils.custom_types import RemoteResult, SchedulerTaskType
 from daffi.store import TttStore
+from daffi.utils.misc import run_in_threadpool
 
 
 __all__ = ["AsyncResult", "SchedulerTask"]
@@ -191,10 +192,6 @@ class IterableAsyncResult(AsyncResult):
     def __post_init__(self):
         self._queue = Queue()
 
-    def __iter__(self):
-        """Iterate over result items."""
-        yield from self.get()
-
     @property
     def ready(self):
         raise NotImplementedError()
@@ -231,11 +228,36 @@ class IterableAsyncResult(AsyncResult):
                     yield result
 
         finally:
-            self.result = self._awaited_results.pop(self.uuid)
+            self.result = self._awaited_results.pop(self.uuid, None)
 
-    def get_async(self, timeout: Union[int, float] = None) -> RemoteResult:
-        # TODO need to find better way to handle queue items across threads for async applications.
-        raise NotImplementedError()
+    async def get_async(self, timeout: Union[int, float] = None) -> RemoteResult:
+        # `timeout` from arguments take precedence over class attribute `_timeout`
+        timeout = timeout or self._timeout
+
+        if self.result:
+            InitializationError("Generator has already been used").fire()
+
+        self.result = True
+        if timeout:
+            timeout_sentinel = time.time() + timeout
+        try:
+            while True:
+                wait = None if timeout is None else timeout_sentinel - time.time()
+                try:
+                    result, completed = await run_in_threadpool(self._queue.get, timeout=wait)
+                except Empty:
+                    TimeoutError(f"Function {self.func_name} result timed out").fire()
+                else:
+                    if isinstance(result, RemoteError):
+                        result.raise_with_trackeback()
+
+                    if completed:
+                        break
+
+                    yield result
+
+        finally:
+            self.result = self._awaited_results.pop(self.uuid)
 
     @classmethod
     def _set_and_trigger(cls, msg_uuid: int, result: Any, completed: Optional[bool] = True) -> NoReturn:
@@ -247,7 +269,9 @@ class IterableAsyncResult(AsyncResult):
 
 def get_result_type(
     is_period: bool, is_generator: bool
-) -> Type[Union[AsyncResult, SchedulerTask, IterableAsyncResult]]:
+) -> Tuple[Type[Union[AsyncResult, SchedulerTask, IterableAsyncResult]], bool]:
     if is_generator:
-        return IterableAsyncResult
-    return SchedulerTask if is_period else AsyncResult
+        # Computed results for `IterableAsyncResult` are prohibited.
+        return IterableAsyncResult, False
+    res_type = SchedulerTask if is_period else AsyncResult
+    return res_type, True

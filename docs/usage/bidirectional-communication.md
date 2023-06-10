@@ -15,6 +15,7 @@ PROCESS_NAME = "shopping service"
 
 
 class ShoppingService(Callback):
+    auto_init = True
 
     def __post_init__(self):
         self.shop_items = ["orange", "bread", "cheese"]
@@ -54,6 +55,7 @@ PROCESS_NAME = "calculator service"
 
 
 class CalculatorService(Callback):
+    auto_init = True
 
     def calculate_sum(self, *numbers):
         return sum(numbers)

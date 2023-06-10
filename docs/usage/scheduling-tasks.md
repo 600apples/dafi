@@ -19,6 +19,7 @@ it is possible to initiate recurring callback executions or schedule a group of 
     
     
     class Scheduler(Callback):
+        auto_init = True
     
         def long_running_task1(self):
             print("Start long running task 1")

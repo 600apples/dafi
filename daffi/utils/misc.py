@@ -1,7 +1,6 @@
 """
 A library of various helpers functions and classes
 """
-import re
 import types
 import inspect
 import asyncio
@@ -12,6 +11,7 @@ from datetime import datetime
 from queue import Queue
 from contextlib import contextmanager
 from collections.abc import Iterable
+from threading import Event
 from typing import (
     Callable,
     Any,
@@ -80,6 +80,7 @@ class ConditionEvent:
     def __init__(self):
         self._cond_q = Queue(maxsize=1)
         self._is_success = False
+        self._done_event = Event()
 
     @property
     def success(self) -> bool:
@@ -93,7 +94,11 @@ class ConditionEvent:
 
     def wait(self) -> bool:
         self._is_success = self._cond_q.get()
+        self._done_event.set()
         return self._is_success
+
+    def wait_any_status(self):
+        self._done_event.wait()
 
 
 class Singleton(type):
@@ -228,6 +233,7 @@ def contains_explicit_return(fn: Callable[..., Any]) -> bool:
     # Get source code
     source = inspect.getsource(fn)
     if doc := fn.__doc__:
+        # Remove `docs` part from source code.
         code = source.split(doc)
         source = code[1]
     refined_source = [line.strip() for line in source.split("\n")]

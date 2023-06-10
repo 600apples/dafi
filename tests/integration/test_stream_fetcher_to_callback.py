@@ -9,7 +9,7 @@ logging.basicConfig(level=logging.DEBUG)
 
 
 @pytest.mark.skipif(sys.platform == "win32", reason="Unix sockets dont work on windows")
-async def test_stream_per_node_unix(remote_callbacks_path, g):
+async def test_stream_per_node_unix(remote_callbacks_path, g, stop_components):
     g = g()
     start_range = 1
     end_range = 6
@@ -25,7 +25,7 @@ async def test_stream_per_node_unix(remote_callbacks_path, g):
         remote_callbacks_path(
             filename=f"{i}.py",
             template_name="stream.jinja2",
-            process_name=f"node-{i}",
+            process_name=f"stream1-node-{i}",
             cb_name=i,
         )
         for i in range_
@@ -35,21 +35,19 @@ async def test_stream_per_node_unix(remote_callbacks_path, g):
     for exc in executable_files:
         remotes.append(Popen([sys.executable, exc]))
     for i in range_:
-        g.wait_process(f"node-{i}")
+        g.wait_process(f"stream1-node-{i}")
 
     try:
         process_stream()
         for i in range_:
             processed_arr = getattr(g.call, f"stream_result_{i}")() & FG(timeout=10)
             assert set(stream_values) == set(processed_arr)
-        g.stop(True)
-
     finally:
-        [p.terminate() for p in remotes]
+        await stop_components(remotes, g)
 
 
 @pytest.mark.skipif(sys.platform == "win32", reason="Unix sockets dont work on windows")
-async def test_stream_per_node_unix_using_remote_decorator(remote_callbacks_path, g):
+async def test_stream_per_node_unix_using_remote_decorator(remote_callbacks_path, g, stop_components):
     @fetcher
     def process_stream(stream):
         yield from iter(stream)
@@ -64,7 +62,7 @@ async def test_stream_per_node_unix_using_remote_decorator(remote_callbacks_path
         remote_callbacks_path(
             filename=f"{i}.py",
             template_name="stream.jinja2",
-            process_name=f"node-{i}",
+            process_name=f"stream2-node-{i}",
             cb_name=i,
         )
         for i in range_
@@ -74,7 +72,7 @@ async def test_stream_per_node_unix_using_remote_decorator(remote_callbacks_path
     for exc in executable_files:
         remotes.append(Popen([sys.executable, exc]))
     for i in range_:
-        g.wait_process(f"node-{i}")
+        g.wait_process(f"stream2-node-{i}")
 
     try:
         process_stream(stream_values)
@@ -82,13 +80,11 @@ async def test_stream_per_node_unix_using_remote_decorator(remote_callbacks_path
         for i in range_:
             processed_arr = getattr(g.call, f"stream_result_{i}")() & FG(timeout=10)
             assert set(stream_values) == set(processed_arr)
-
-        g.stop(True)
     finally:
-        [p.terminate() for p in remotes]
+        await stop_components(remotes, g)
 
 
-async def test_stream_per_node_tcp(remote_callbacks_path, g):
+async def test_stream_per_node_tcp(remote_callbacks_path, g, stop_components):
     @fetcher
     def process_stream(stream):
         yield from iter(stream)
@@ -103,7 +99,7 @@ async def test_stream_per_node_tcp(remote_callbacks_path, g):
         remote_callbacks_path(
             filename=f"{i}.py",
             template_name="stream.jinja2",
-            process_name=f"node-{i}",
+            process_name=f"stream3-node-{i}",
             cb_name=i,
             host="localhost",
             port=g.port,
@@ -115,7 +111,7 @@ async def test_stream_per_node_tcp(remote_callbacks_path, g):
     for exc in executable_files:
         remotes.append(Popen([sys.executable, exc]))
     for i in range_:
-        g.wait_process(f"node-{i}")
+        g.wait_process(f"stream3-node-{i}")
 
     try:
         process_stream(stream_values)
@@ -124,6 +120,5 @@ async def test_stream_per_node_tcp(remote_callbacks_path, g):
             processed_arr = getattr(g.call, f"stream_result_{i}")() & FG(timeout=10)
             assert set(stream_values) == set(processed_arr)
 
-        g.stop(True)
     finally:
-        [p.terminate() for p in remotes]
+        await stop_components(remotes, g)

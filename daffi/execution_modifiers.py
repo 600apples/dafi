@@ -18,6 +18,7 @@ __all__ = [
 @dataclass
 class FG:
     timeout: Optional[TimeUnits] = None
+    receiver: Optional[str] = None
 
 
 @dataclass
@@ -25,12 +26,14 @@ class BG:
     timeout: Optional[TimeUnits] = None
     eta: Optional[TimeUnits] = None
     return_result: Optional[bool] = True
+    receiver: Optional[str] = None
 
 
 @dataclass
 class PERIOD:
     at_time: Optional[Union[List[TimeUnits], TimeUnits]] = None
     interval: Optional[TimeUnits] = None
+    receiver: Optional[str] = None
 
 
 @dataclass

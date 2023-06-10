@@ -2,6 +2,7 @@ import os
 import inspect
 from typing import Callable, Any, Dict
 from daffi.utils.custom_types import P
+from daffi.exceptions import InitializationError
 
 
 def get_class_methods(klass):
@@ -87,14 +88,8 @@ def func_info(func: Callable[P, Any]):
     elif hasattr(func, "origin_name_"):
         name = func.origin_name_
     else:
-        name = "unknown"
-    # Hack to detect functions not defined at the module-level
-    if hasattr(func, "func_globals") and name in func.func_globals:
-        if func.func_globals[name] is not func:
-            name = "%s-alias" % name
-    if inspect.ismethod(func):
-        # We need to add the name of the class
-        if hasattr(func, "im_class"):
-            klass = func.im_class
-            module.append(klass.__name__)
+        raise InitializationError(
+            "Unable to retrieve fetcher/callback name. If you have applied additional decorators"
+            " to the decorated function consider modifying the order of the decorators."
+        )
     return module, name

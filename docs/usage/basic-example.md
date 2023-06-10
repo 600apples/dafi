@@ -12,6 +12,7 @@ Example provides a basic and fundamental understanding of client-server communic
     
     
     class CalculatorService(Callback):
+        auto_init = True
     
         def calculate_sum(self, *numbers):
             return sum(numbers)

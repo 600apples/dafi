@@ -44,6 +44,10 @@ class StopComponentError(Exception):
     ...
 
 
+class ControllerUnavailable(Exception):
+    ...
+
+
 @dataclass
 class RemoteError:
     """It is not Exception itself but container to transfer exceptions from remove executor to caller."""
@@ -70,8 +74,4 @@ class RemoteError:
         if self.unpickled_trackeback:
             RemoteCallError(self.info).with_traceback(self.unpickled_trackeback).fire()
         else:
-            err = self._awaited_error_type(self.info)
-            if hasattr(err, "fire"):
-                err.fire()
-            else:
-                raise err
+            raise self._awaited_error_type(self.info)

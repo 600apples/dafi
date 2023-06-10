@@ -1,8 +1,6 @@
 import logging
 import asyncio
-from typing import Dict
-
-from anyio import sleep
+from typing import Dict, Callable, Any, Optional
 
 from daffi.settings import WELL_KNOWN_CALLBACKS, DEBUG
 from daffi.utils.custom_types import K, GlobalCallback
@@ -30,33 +28,40 @@ class ControllerOperations:
         self.awaited_broadcast_procs = OneToManyCallStore()
         self.awaited_stream_procs = OneToManyCallStore()
 
-    async def wait_all_requests_done(self):
-        while self.awaited_procs or self.awaited_broadcast_procs or self.awaited_stream_procs:
-            await sleep(0.1)
-
     async def on_controller_stopped(self, proc_name):
         async for proc, chan in self.channel_store.iterate():
             if proc != proc_name:
                 # Send updated self.controller_callback_mapping to all processes except transmitter process.
                 await chan.send(ServiceMessage(flag=MessageFlag.CONTROLLER_STOPPED_UNEXPECTEDLY, receiver=proc))
 
-    async def on_channel_close(self, channel: ChannelPipe, process_identificator: str):
+    async def on_channel_close(
+        self, channel: ChannelPipe, process_identificator: str, on_disconnect: Callable[[str], Any]
+    ):
         self.logger.debug(f"Channel {channel} (process={process_identificator}) is locked before closing")
         channel.lock()
         # Give 5 seconds to reconnect. If process unable to recconect within 5 seconds then channel will be
         # deleted and all other processes will be notified channel is not available anymore.
         if process_identificator not in self.closed_procs:
             self.closed_procs[process_identificator] = await call_after(
-                5, self._on_channel_close, channel=channel, process_identificator=process_identificator
+                5,
+                self._on_channel_close,
+                channel=channel,
+                process_identificator=process_identificator,
+                on_disconnect=on_disconnect,
             )
 
     async def on_all_channels_close(self):
         async for proc, chan in self.channel_store.iterate():
             await self._on_channel_close(chan, chan.ident)
 
-    async def _on_channel_close(self, channel: ChannelPipe, process_identificator: str):
+    async def _on_channel_close(
+        self, channel: ChannelPipe, process_identificator: str, on_disconnect: Optional[Callable[[str], Any]] = None
+    ):
+        self.logger.debug(f"Lock expired. Channel {channel} (process={process_identificator}) is about to be deleted.")
         self.closed_procs.pop(process_identificator, None)
         del_proc = await self.channel_store.find_process_name_by_channel(channel)
+        if on_disconnect:
+            await on_disconnect(del_proc)
         await self.channel_store.delete_channel(del_proc)
         self.controller_callback_mapping.pop(del_proc, None)
         FreezableQueue.factory_remove(process_identificator)
@@ -247,20 +252,20 @@ class ControllerOperations:
                     )
                 msg.set_error(RemoteError(info=info))
                 await chan.send(msg)
-                self.logger.error(info)
+                self.logger.debug(info)
 
         else:
             if chan := await self.channel_store.get_chan(transmitter):
                 await chan.send(msg)
             else:
-                logging.error(f"Unable to send calculated result. Process {transmitter!r}.")
+                logging.debug(f"Unable to send result. Process {transmitter!r}.")
 
     async def on_scheduler_error(self, msg: RpcMessage):
         # Dont care about RpcMessage uuid. Scheduler tasks are long running processes. Sheduler can report about error
         # multiple times.
         self.awaited_procs.pop(msg.uuid, None)
         if not (chan := await self.channel_store.get_chan(msg.receiver)):
-            logging.error(f"Unable to send calculated result. Process {msg.receiver!r} is disconnected.")
+            logging.error(f"Unable to send result. Process {msg.receiver!r} is disconnected.")
         else:
             msg.flag = MessageFlag.SUCCESS
             await chan.send(msg)
@@ -337,6 +342,15 @@ class ControllerOperations:
     async def on_stream_throttle(self, msg: ServiceMessage):
         if chan := await self.channel_store.get_chan(msg.receiver):
             await chan.send(msg)
+
+    async def on_ping(self):
+        msg = ServiceMessage(flag=MessageFlag.PING)
+        while True:
+            # Send ping message every 12 seconds
+            async for _, chan in self.channel_store.iterate():
+                # Send ping message to all processes.
+                await chan.send(msg)
+            await asyncio.sleep(5)
 
     async def on_receiver_error(self, msg: ServiceMessage):
         """

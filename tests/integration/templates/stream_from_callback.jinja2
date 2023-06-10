@@ -10,6 +10,7 @@ def process_stream(end: int):
 
 
 class Streamer(Callback):
+    auto_init = True
 
     def process_class_stream(self, end: int):
         for i in range(end):

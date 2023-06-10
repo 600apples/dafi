@@ -1,7 +1,8 @@
 import time
 import asyncio
 import logging
-from daffi import Global, RemoteStoppedUnexpectedly
+from daffi import Global
+from daffi.exceptions import RemoteStoppedUnexpectedly
 from daffi.decorators import callback, fetcher
 
 logging.basicConfig(level=logging.INFO)

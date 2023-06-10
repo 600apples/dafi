@@ -1,10 +1,10 @@
 import pytest
+import asyncio
 from pathlib import Path
 import socketserver
 
 from daffi import Global
 from jinja2 import FileSystemLoader, Environment
-
 
 THIS = Path(__file__)
 
@@ -52,7 +52,19 @@ def g():
 
 @pytest.fixture
 def free_port() -> int:
-
     with socketserver.TCPServer(("localhost", 0), None) as s:
         free_port = s.server_address[1]
         return free_port
+
+
+@pytest.fixture
+def stop_components():
+    async def stop_process(prop):
+        prop.terminate()
+        prop.wait()
+
+    async def dec(remotes, g):
+        await asyncio.gather(*(stop_process(prop=p) for p in remotes))
+        g.stop()
+
+    yield dec

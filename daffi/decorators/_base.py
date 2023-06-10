@@ -12,6 +12,7 @@ class Decorator(Generic[GlobalCallback]):
 
     _fn: GlobalCallback = None
     _store: dict
+    _g: "Global" = None
 
     @abstractmethod
     def __init__(self, fn: Callable[P, Any]):
@@ -48,3 +49,7 @@ class Decorator(Generic[GlobalCallback]):
         self._fn.alias = val
         # Take updated namedtuple instance from store
         self._fn = self._store[val]
+
+    @property
+    def g(self):
+        return self._g

@@ -29,6 +29,7 @@ The resulting output takes on a dictionary structure, with keys representing the
     
     
     class BurgerMenu(Callback):
+        auto_init = True
     
         def get_menu(self):
             return ["The IceBurg", "The Grill Thrill", "Burger Mania", "Chicha Burger"]

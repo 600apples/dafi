@@ -1,7 +1,6 @@
 import asyncio
 from typing import NoReturn
 
-import grpc
 from anyio.abc import TaskStatus
 from anyio import create_task_group, move_on_after
 
@@ -9,7 +8,7 @@ from anyio import create_task_group, move_on_after
 from daffi.utils import colors
 from daffi.utils.logger import get_daffi_logger
 from daffi.components import ComponentsBase
-from daffi.exceptions import GlobalContextError
+from daffi.exceptions import GlobalContextError, StopComponentError
 from daffi.components.proto.message import MessageFlag, messager_pb2, ServiceMessage
 from daffi.components.operations.controller_operations import ControllerOperations
 from daffi.components.operations.channel_store import ChannelPipe, MessageIterator, FreezableQueue
@@ -48,23 +47,21 @@ class Controller(ComponentsBase):
         self.logger.debug("On stop event triggered")
         # Notify all nodes that controller has been terminated.
         await self.operations.on_controller_stopped(self.process_name)
-
         async with create_task_group() as sg:
-            with move_on_after(2):
-                sg.start_soon(FreezableQueue.clear_all)
-                await self.operations.wait_all_requests_done()
-            with move_on_after(2):
+            with move_on_after(0.5):
                 if self.listener:
-                    sg.start_soon(self.listener.stop, 2)
-        self.logger.info(f"{self.__class__.__name__} stopped.")
-        self._stopped = True
+                    sg.start_soon(self.listener.stop, 1)
+        await FreezableQueue.clear_all()
+        raise StopComponentError()
 
     async def before_connect(self) -> NoReturn:
         await FreezableQueue.clear_all()
         self.listener = None
+        if not getattr(self, "ping", None):
+            self.ping = asyncio.create_task(self.operations.on_ping())
 
-    def on_error(self) -> NoReturn:
-        pass
+    def on_error(self, exception: Exception) -> NoReturn:
+        self.logger.debug(f"{self.__class__.__name__} experienced error: {exception}. {type(exception)}")
 
     # ------------------------------------------------------------------------------------------------------------------
     # Message operations
@@ -96,7 +93,7 @@ class Controller(ComponentsBase):
             elif msg.flag == MessageFlag.SCHEDULER_ERROR:
                 await self.operations.on_scheduler_error(msg)
 
-            elif msg.flag in (MessageFlag.BROADCAST, MessageFlag.STOP_REQUEST):
+            elif msg.flag == MessageFlag.BROADCAST:
                 await self.operations.on_broadcast(msg, self.process_name)
 
             elif msg.flag == MessageFlag.INIT_STREAM:
@@ -108,7 +105,7 @@ class Controller(ComponentsBase):
             elif msg.flag == MessageFlag.RECEIVER_ERROR:
                 await self.operations.on_receiver_error(msg)
 
-        await self.operations.on_channel_close(channel, process_identificator)
+        await self.operations.on_channel_close(channel, process_identificator, self.execute_on_disconnect)
 
     async def communicate(self, request_iterator, context):
         try:

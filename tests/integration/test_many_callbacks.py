@@ -8,7 +8,6 @@ from subprocess import Popen
 import pytest
 from daffi import FG, BG, PERIOD
 
-
 timings = []
 remote_type = "callback_func_", "async_callback_func_"
 
@@ -40,7 +39,6 @@ async def call_remote(g, _range, exec_type):
 
 
 async def call_remote_no_return(g, num, exec_type, path):
-
     for i in range(5):
         func_args = dict(path=str(path), text=str(i))
         start = datetime.utcnow().timestamp()
@@ -56,7 +54,7 @@ async def call_remote_no_return(g, num, exec_type, path):
 
 @pytest.mark.parametrize("exec_type", [BG, FG])
 @pytest.mark.skipif(sys.platform == "win32", reason="Unix sockets dont work on windows")
-async def test_many_callbacks_unix(remote_callbacks_path, exec_type, g):
+async def test_many_callbacks_unix(remote_callbacks_path, exec_type, g, stop_components):
     timings.clear()
     g = g()
     process_name = "test_node"
@@ -76,13 +74,12 @@ async def test_many_callbacks_unix(remote_callbacks_path, exec_type, g):
         assert max_time < 1
 
     finally:
-        g.stop(True)
-        [p.terminate() for p in remotes]
+        await stop_components(remotes, g)
 
 
 @pytest.mark.parametrize("exec_type", [PERIOD, BG])
 @pytest.mark.skipif(sys.platform == "win32", reason="Unix sockets dont work on windows")
-async def test_many_callbacks_unix_no_return(remote_callbacks_path, exec_type, g):
+async def test_many_callbacks_unix_no_return(remote_callbacks_path, exec_type, g, stop_components):
     timings.clear()
     g = g()
     process_name = "test_node"
@@ -116,12 +113,11 @@ async def test_many_callbacks_unix_no_return(remote_callbacks_path, exec_type, g
         print(f"Exeption while execution : {type(e)}, {e}")
 
     finally:
-        g.stop(True)
-        [p.terminate() for p in remotes]
+        await stop_components(remotes, g)
 
 
 @pytest.mark.parametrize("exec_type", [BG, FG])
-async def test_many_callbacks_tcp(remote_callbacks_path, exec_type, g):
+async def test_many_callbacks_tcp(remote_callbacks_path, exec_type, g, stop_components):
     timings.clear()
     g = g(host="localhost")
     process_name = "test_node"
@@ -143,12 +139,11 @@ async def test_many_callbacks_tcp(remote_callbacks_path, exec_type, g):
         max_time = max(timings)
         assert max_time < 1
     finally:
-        g.stop(True)
-        [p.terminate() for p in remotes]
+        await stop_components(remotes, g)
 
 
 @pytest.mark.parametrize("exec_type", [PERIOD, BG])
-async def test_many_callbacks_tcp_no_return(remote_callbacks_path, exec_type, g):
+async def test_many_callbacks_tcp_no_return(remote_callbacks_path, exec_type, g, stop_components):
     timings.clear()
     g = g(host="0.0.0.0")
     process_name = "test_node"
@@ -179,5 +174,4 @@ async def test_many_callbacks_tcp_no_return(remote_callbacks_path, exec_type, g)
         for file in all_files:
             assert set(file.read_text()) == set("01234")
     finally:
-        g.stop(True)
-        [p.terminate() for p in remotes]
+        await stop_components(remotes, g)
