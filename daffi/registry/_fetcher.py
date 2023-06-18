@@ -13,12 +13,13 @@ from daffi.utils.misc import is_lambda_function, contains_explicit_return
 from daffi.settings import LOCAL_FETCHER_MAPPING
 from daffi.execution_modifiers import FG, BG, BROADCAST, PERIOD
 
+__all__ = ["Fetcher", "FetcherMethod", "Args"]
 
-__all__ = ["Fetcher", "Args"]
+
+PROTECTED_METHODS = ["make_fetcher_method"]
 
 
 class Fetcher(BaseRegistry):
-
     # Default execution modifier for all Fetcher's methods
     exec_modifier: ClassVar[Union[FG, BG, BROADCAST, PERIOD]] = FG
 
@@ -26,21 +27,76 @@ class Fetcher(BaseRegistry):
         return LOCAL_FETCHER_MAPPING.get(f"{id(self)}-{item}", super().__getattribute__(item))
 
     @staticmethod
-    def _init_class(cls, instance_or_type) -> Union[Type, "Callback"]:
+    def make_fetcher_method(exec_modifier: Union[FG, BG, BROADCAST, PERIOD] = None):
+        """
+        Create static fetcher method from `FetcherMethod` property
+        Example:
+            >>> class T(Fetcher):
+            >>>
+            >>>     def __post_init__(self):
+            >>>         self.my_fetcher = self.make_fetcher_method()
+        """
+        return FetcherMethod(exec_modifier=exec_modifier)
+
+    def __setattr__(self, key, value):
+        if isinstance(value, FetcherMethod):
+
+            def fetcher_method(*args, **kwargs):
+                ...
+
+            setattr(self.__class__, key, staticmethod(fetcher_method))
+            getattr(self.__class__, key).__name__ = key
+
+            cb = ClassFetcherExecutor(
+                klass=self,
+                origin_name_=key,
+                origin_method=key,
+                is_async=False,
+                is_static=True,
+                proxy_=True,
+                exec_modifier_=value.exec_modifier or self.__class__.exec_modifier,
+                is_generator=False,
+            )
+            LOCAL_FETCHER_MAPPING[f"{id(self)}-{key}"] = cb
+            logger.info(f"fetcher {key!r} <class {self.__class__.__name__}> is registered. (proxy=False)")
+
+        else:
+            super().__setattr__(key, value)
+
+    @staticmethod
+    def _init_class(cls, instance_or_type) -> Union[Type, "Fetcher"]:
         """
         Register all public methods of class as fetchers.
         Args:
             instance_or_type: class type or class instance. This argument depends on `auto_init` value of base class
                 if `auto_init` == True then class instance will be instantiated implicitly.
         """
-        from daffi.registry._callback import Callback
+
+        exec_modifiers_mapping = dict()
+
+        for attr_name in dir(cls):
+            attr = getattr(cls, attr_name)
+            if isinstance(attr, FetcherMethod):
+
+                def fetcher_method(*args, **kwargs):
+                    ...
+
+                setattr(cls, attr_name, staticmethod(fetcher_method))
+                getattr(cls, attr_name).__name__ = attr_name
+                # Custom exec modifier will be using with fetcher method. if exec_modifier is None then
+                # default exec modifier will be assigned from class
+                exec_modifiers_mapping[attr_name] = attr.exec_modifier
 
         # Iterate over all methods of class.
         for method in get_class_methods(cls):
             _, method_alias = func_info(method)
             origin_method_name = method.__name__
 
-            if origin_method_name.startswith("_") or hasattr(method, "local"):
+            if (
+                origin_method_name.startswith("_")
+                or hasattr(method, "local")
+                or origin_method_name in PROTECTED_METHODS
+            ):
                 # Ignore methods which starts with `_` and methods decorated with `local` decorator.
                 continue
 
@@ -54,20 +110,7 @@ class Fetcher(BaseRegistry):
             if isasyncgenfunction(method):
                 InitializationError(f"Method {method} has wrong type. Async generators are not supported yet.").fire()
 
-            has_callback_parent = Callback in cls.__daffi_mro__
-            is_generator = isgeneratorfunction(method) and not has_callback_parent
-
-            if has_callback_parent:
-                # If method is shared as callback and fetcher at once then for fetcher `proxy` must be True hence
-                # method's body is used by callback.
-                is_proxy = True
-            elif is_generator:
-                # Ignore that method is generator if class inherited from Callback.
-                # Callback execution take precedence over Fetcher
-                # and both of them cannot be generators.
-                # IOW generators are using to initialize streams. Stream can be `to remote or `from remote`
-                # but not `bidirectional`
-                #
+            if is_generator := isgeneratorfunction(method):
                 # Disable proxy for method implicitly. To initialize stream fetcher
                 # should have one or more yield statements and fetcher's body should be used to process this stream
                 is_proxy = False
@@ -93,7 +136,7 @@ class Fetcher(BaseRegistry):
                 # If proxy=True then method works as proxy (without body execution).
                 # IOW when proxy=True all provided arguments will be passed to remote callback as is.
                 proxy_=is_proxy,
-                exec_modifier_=cls.exec_modifier,
+                exec_modifier_=exec_modifiers_mapping.get(origin_method_name) or cls.exec_modifier,
                 is_generator=is_generator,
             )
             LOCAL_FETCHER_MAPPING[f"{cls.__name__}-{origin_method_name}"] = cb
@@ -184,6 +227,17 @@ class Fetcher(BaseRegistry):
                 LOCAL_FETCHER_MAPPING[f"{id(self)}-{origin_method_name}"] = info._replace(
                     klass=self, origin_method=origin_method
                 )
+
+
+class FetcherMethod:
+    def __init__(self, exec_modifier: Union[FG, BG, BROADCAST, PERIOD] = None):
+        self.exec_modifier = exec_modifier
+
+    def __call__(self, *args, **kwargs):
+        raise InitializationError(
+            "Ensure that `FetcherMethod` is a property at the class level,"
+            " and not instantiated within __init__, __post_init__, or any other instance methods."
+        )
 
 
 class Args:

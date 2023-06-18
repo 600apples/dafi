@@ -12,8 +12,6 @@
 ![coverage](https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/600apples/c64b2cee548575858e40834754432018/raw/covbadge.json)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/ambv/black)
-[![Linux](https://svgshare.com/i/Zhy.svg)](https://svgshare.com/i/Zhy.svg)
-[![macOS](https://svgshare.com/i/ZjP.svg)](https://svgshare.com/i/ZjP.svg)
 [![Downloads](https://static.pepy.tech/badge/daffi/month)](https://pepy.tech/project/daffi)
 
 Daffi facilitates remote computing and enables remote procedure calls between multiple endpoints.
@@ -81,55 +79,38 @@ if __name__ == '__main__':
 ```python
 import logging
 from daffi import Global
-from daffi.decorators import alias
-from daffi.registry import Fetcher
+from daffi.registry import Fetcher, FetcherMethod
 
 logging.basicConfig(level=logging.INFO)
 
 
 class Shopper(Fetcher):
-    """
-    Note: Functions without a body are treated as proxies for remote callbacks.
-    All arguments provided to this function will be sent to the remote service as-is.
-    """
-
-    def get_items(self):
-        """Return all items that are currently present in shopping list."""
-        pass
-
-    def add_item(self, item):
-        """Add new item to shopping list."""
-        pass
-
-    def clear_items(self):
-        """Clear shopping list"""
-        pass
-
-    @alias("add_item")
-    def add_many_items(self, *items):
-        """
-        Alias for `add_item` callback.
-        This function shows streaming capabilities for transferring data from one service to another.
-        """
-        for item in items:
-            yield item
+    # Ensure that the names of the fetcher methods align with the names of the ShoppingService being exposed.
+    get_items = FetcherMethod()
+    add_item = FetcherMethod()
+    clear_items = FetcherMethod()
 
 
 if __name__ == '__main__':
     g = Global(host="localhost", port=8888)
 
     shopper = Shopper()
+    
+    print("current shoping list items:")
     items = shopper.get_items()
     print(items)
-
+    
+    print("adding 'orange' to shopping list and getting updated list from remote")
     shopper.add_item("orange")
     items = shopper.get_items()
     print(items)
-
-    shopper.add_many_items("bread", "cheese")
+    
+    print("adding 'milk' to shopping list and getting updated list from remote")
+    shopper.add_item("milk")
     items = shopper.get_items()
     print(items)
-
+    
+    print("cleaning shopping list and geting updated list from remote")
     shopper.clear_items()
     items = shopper.get_items()
     print(items)
@@ -144,20 +125,26 @@ To check the full example, you need to execute two scripts in separate terminals
 python3 shopping_service.py
 
 ...
-INFO 2023-03-27 19:49:45 | controller[0x91adb83e] | Controller has been started successfully. Process identificator: '0x91adb83e'. Connection info: tcp: [ host '[::]', port: 8888 ]
-INFO 2023-03-27 19:49:45 | node[0x91adb83e] | Node has been started successfully. Process identificator: '0x91adb83e'. Connection info: tcp: [ host '[::]', port: 8888 ]
+INFO:    2023-06-18 22:40:34 | controller[0x24d2ab36] | Controller has been started successfully. Process identificator: '0x24d2ab36'. Connection info: tcp: [ host '[::]', port: 8888 ]
+INFO:    2023-06-18 22:40:34 | node[0x24d2ab36] | Node has been started successfully. Process identificator: '0x24d2ab36'. Connection info: tcp: [ host '[::]', port: 8888 ]
+INFO:    2023-06-18 22:40:34 | node[0x24d2ab36] | Node '0x24d2ab36' has been connected to Controller
 ```
 
 ```bash
 python3 shopper.py
 
 ...
-INFO 2023-03-27 19:53:15 | node[0xd7e5d488] | Node has been started successfully. Process identificator: '0xd7e5d488'. Connection info: tcp: [ host '[::]', port: 8888 ]
+INFO:    2023-06-18 22:46:14 | node[0xe1f8d8a3] | Node has been started successfully. Process identificator: '0xe1f8d8a3'. Connection info: tcp: [ host '[::]', port: 8888 ]
+INFO:    2023-06-18 22:46:14 | node[0xe1f8d8a3] | Node '0xe1f8d8a3' has been connected to Controller
+current shoping list items:
 []
+adding 'orange' to shopping list and getting updated list from remote
 ['orange']
-['orange', 'bread', 'cheese']
+adding 'milk' to shopping list and getting updated list from remote
+['orange', 'milk']
+cleaning shopping list and geting updated list from remote
 []
-INFO 2023-03-27 19:53:15 | node[0xd7e5d488] | Node stopped.
+INFO:    2023-06-18 22:46:14 | node[0xe1f8d8a3] | Node stopped.
 ```
 
 ### Decorators base approach
@@ -205,7 +192,7 @@ Note: Functions without a body are treated as proxies for remote callbacks.
 """
 import logging
 from daffi import Global
-from daffi.decorators import alias, fetcher
+from daffi.decorators import fetcher
 
 logging.basicConfig(level=logging.INFO)
 
@@ -228,31 +215,24 @@ def clear_items():
     pass
 
 
-@alias("add_item")
-@fetcher
-def add_many_items(*items):
-    """
-    Alias for `add_item` callback.
-    This function shows streaming capabilities for transferring data from one service to another.
-    """
-    for item in items:
-        yield item
-
-
 if __name__ == '__main__':
     g = Global(host="localhost", port=8888)
 
+    print("current shoping list items:")
     items = get_items()
     print(items)
 
+    print("adding 'orange' to shopping list and getting updated list from remote")
     add_item("orange")
     items = get_items()
     print(items)
 
-    add_many_items("bread", "cheese")
+    print("adding 'milk' to shopping list and getting updated list from remote")
+    add_item("milk")
     items = get_items()
     print(items)
 
+    print("cleaning shopping list and geting updated list from remote")
     clear_items()
     items = get_items()
     print(items)
@@ -267,18 +247,24 @@ To check the full example, you need to execute two scripts in separate terminals
 python3 shopping_service.py
 
 ...
-INFO 2023-03-27 20:31:27 | controller[0xbac16ef4] | Controller has been started successfully. Process identificator: '0xbac16ef4'. Connection info: tcp: [ host '[::]', port: 8888 ]
-INFO 2023-03-27 20:31:27 | node[0xbac16ef4] | Node has been started successfully. Process identificator: '0xbac16ef4'. Connection info: tcp: [ host '[::]', port: 8888 ]
+INFO:    2023-06-18 22:40:34 | controller[0x24d2ab36] | Controller has been started successfully. Process identificator: '0x24d2ab36'. Connection info: tcp: [ host '[::]', port: 8888 ]
+INFO:    2023-06-18 22:40:34 | node[0x24d2ab36] | Node has been started successfully. Process identificator: '0x24d2ab36'. Connection info: tcp: [ host '[::]', port: 8888 ]
+INFO:    2023-06-18 22:40:34 | node[0x24d2ab36] | Node '0x24d2ab36' has been connected to Controller
 ```
 
 ```bash
 python3 shopper.py
 
 ...
-INFO 2023-03-27 20:31:43 | node[0xb9e10444] | Node has been started successfully. Process identificator: '0xb9e10444'. Connection info: tcp: [ host '[::]', port: 8888 ]
+INFO:    2023-06-18 22:52:06 | node[0xabe27200] | Node has been started successfully. Process identificator: '0xabe27200'. Connection info: tcp: [ host '[::]', port: 8888 ]
+INFO:    2023-06-18 22:52:06 | node[0xabe27200] | Node '0xabe27200' has been connected to Controller
+current shoping list items:
 []
+adding 'orange' to shopping list and getting updated list from remote
 ['orange']
-['orange', 'bread', 'cheese']
+adding 'milk' to shopping list and getting updated list from remote
+['orange', 'milk']
+cleaning shopping list and geting updated list from remote
 []
-INFO 2023-03-27 20:31:44 | node[0xb9e10444] | Node stopped.
+INFO:    2023-06-18 22:52:07 | node[0xabe27200] | Node stopped.
 ```
