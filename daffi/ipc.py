@@ -30,7 +30,11 @@ from daffi.utils.misc import (
 from daffi.utils.func_validation import pretty_callbacks
 from daffi.registry._base import BaseRegistry
 from daffi.decorators._base import Decorator
-from daffi.settings import LOCAL_CALLBACK_MAPPING, WELL_KNOWN_CALLBACKS, clear_method_type_stores
+from daffi.settings import (
+    LOCAL_CALLBACK_MAPPING,
+    WELL_KNOWN_CALLBACKS,
+    clear_method_type_stores,
+)
 
 
 class Ipc(Thread):
@@ -75,12 +79,18 @@ class Ipc(Thread):
         BaseRegistry._g = Decorator._g = self.g
 
         if not (self.init_controller or self.init_node):
-            InitializationError("At least one of 'init_controller' or 'init_node' must be True.").fire()
+            InitializationError(
+                "At least one of 'init_controller' or 'init_node' must be True."
+            ).fire()
 
         if self.on_node_connect and iscoroutinefunction(self.on_node_connect):
-            raise InitializationError("`on_node_connect` callback should not be an asynchronous function.")
+            raise InitializationError(
+                "`on_node_connect` callback should not be an asynchronous function."
+            )
         if self.on_node_disconnect and iscoroutinefunction(self.on_node_disconnect):
-            raise InitializationError("`on_node_disconnect` callback should not be an asynchronous function.")
+            raise InitializationError(
+                "`on_node_disconnect` callback should not be an asynchronous function."
+            )
 
         set_signal_handler(self.stop)
 
@@ -127,12 +137,16 @@ class Ipc(Thread):
             self.logger.info("Wait IPC initialization...")
             self.global_condition_event.wait_any_status()
 
-        data = search_remote_callback_in_mapping(self.node.node_callback_mapping, func_name, exclude=self.process_name)
+        data = search_remote_callback_in_mapping(
+            self.node.node_callback_mapping, func_name, exclude=self.process_name
+        )
 
         if not data:
             # Get all callbacks without local
             available_callbacks = pretty_callbacks(
-                mapping=self.node.node_callback_mapping, exclude_proc=self.process_name, format="string"
+                mapping=self.node.node_callback_mapping,
+                exclude_proc=self.process_name,
+                format="string",
             )
             msg = (
                 f"function {func_name!r} not found on remote. "
@@ -157,7 +171,9 @@ class Ipc(Thread):
             # Stream has special initialization and validation process.
             if async_:
                 # Start stream process in background without blocking main process execution.
-                stream_thread = Thread(target=self.stream, args=(func_name, args), daemon=True)
+                stream_thread = Thread(
+                    target=self.stream, args=(func_name, args), daemon=True
+                )
                 return stream_thread.start()
             # Block main process execution until stream is completed.
             return self.stream(func_name, receiver, args)
@@ -166,8 +182,12 @@ class Ipc(Thread):
         remote_callback.validate_provided_arguments(*args, **kwargs)
         result = None
 
-        if remote_callback.is_generator and (broadcast or not return_result or func_period or async_):
-            InitializationError("Remote callback which are generators works only with FG execution modifier!")
+        if remote_callback.is_generator and (
+            broadcast or not return_result or func_period or async_
+        ):
+            InitializationError(
+                "Remote callback which are generators works only with FG execution modifier!"
+            )
 
         wait_in_task_waiter = async_ and not return_result and not func_period
 
@@ -222,7 +242,9 @@ class Ipc(Thread):
         c_future = n_future = tw_future = None
         with resilent((RuntimeError, CancelledError)):
             Controller.components.clear()
-            with start_blocking_portal(backend="asyncio", backend_options=backend_options) as portal:
+            with start_blocking_portal(
+                backend="asyncio", backend_options=backend_options
+            ) as portal:
                 if self.init_controller:
                     self.controller = Controller(
                         g=self.g,
@@ -240,7 +262,9 @@ class Ipc(Thread):
                         name=Controller.__class__.__name__,
                     )
                     self.port = getattr(self.controller, "port", None)
-                    self.unix_sock_path = getattr(self.controller, "unix_sock_path", None)
+                    self.unix_sock_path = getattr(
+                        self.controller, "unix_sock_path", None
+                    )
 
                 if self.init_node:
                     self.node = Node(
@@ -309,7 +333,9 @@ class Ipc(Thread):
         except StopIteration:
             InitializationError("Stream is empty").fire()
 
-        data = search_remote_callback_in_mapping(self.node.node_callback_mapping, func_name, exclude=self.process_name)
+        data = search_remote_callback_in_mapping(
+            self.node.node_callback_mapping, func_name, exclude=self.process_name
+        )
         _, remote_callback = data
         if remote_callback.is_generator:
             InitializationError(
@@ -368,7 +394,9 @@ class Ipc(Thread):
     def update_callbacks(self) -> NoReturn:
         if self.node:
             local_mapping_without_well_known_callbacks = {
-                k: v.simplified() for k, v in LOCAL_CALLBACK_MAPPING.items() if k not in WELL_KNOWN_CALLBACKS
+                k: v.simplified()
+                for k, v in LOCAL_CALLBACK_MAPPING.items()
+                if k not in WELL_KNOWN_CALLBACKS
             }
             self.node.send_threadsave(
                 ServiceMessage(
@@ -379,16 +407,24 @@ class Ipc(Thread):
                 0,
             )
 
-    def transfer_and_call(self, remote_process: str, func: Callable[..., Any], *args, **kwargs) -> Any:
+    def transfer_and_call(
+        self, remote_process: str, func: Callable[..., Any], *args, **kwargs
+    ) -> Any:
         if self.is_running:
             self._check_node()
             if not callable(func):
                 InitializationError("Provided func is not callable.").fire()
 
             if remote_process not in self.node.node_callback_mapping:
-                InitializationError(f"Seems process {remote_process!r} is not running.").fire()
+                InitializationError(
+                    f"Seems process {remote_process!r} is not running."
+                ).fire()
 
-            func_name = "__async_transfer_and_call" if iscoroutinefunction(func) else "__transfer_and_call"
+            func_name = (
+                "__async_transfer_and_call"
+                if iscoroutinefunction(func)
+                else "__transfer_and_call"
+            )
             msg = RpcMessage(
                 flag=MessageFlag.REQUEST,
                 transmitter=self.process_name,
@@ -399,16 +435,24 @@ class Ipc(Thread):
             )
             return self.node.send_and_register_result(msg=msg).get()
 
-    async def async_transfer_and_call(self, remote_process: str, func: Callable[..., Any], *args, **kwargs) -> Any:
+    async def async_transfer_and_call(
+        self, remote_process: str, func: Callable[..., Any], *args, **kwargs
+    ) -> Any:
         if self.is_running:
             self._check_node()
             if not callable(func):
                 InitializationError("Provided func is not callable.").fire()
 
             if remote_process not in self.node.node_callback_mapping:
-                InitializationError(f"Seems process {remote_process!r} is not running.").fire()
+                InitializationError(
+                    f"Seems process {remote_process!r} is not running."
+                ).fire()
 
-            func_name = "__async_transfer_and_call" if iscoroutinefunction(func) else "__transfer_and_call"
+            func_name = (
+                "__async_transfer_and_call"
+                if iscoroutinefunction(func)
+                else "__transfer_and_call"
+            )
             msg = RpcMessage(
                 flag=MessageFlag.REQUEST,
                 transmitter=self.process_name,
@@ -419,7 +463,9 @@ class Ipc(Thread):
             )
             return await self.node.send_and_register_result(msg=msg).get()
 
-    def cancel_scheduler(self, remote_process: str, msg_uuid: str, func_name: Optional[str] = None) -> NoReturn:
+    def cancel_scheduler(
+        self, remote_process: str, msg_uuid: str, func_name: Optional[str] = None
+    ) -> NoReturn:
         if self.is_running:
             self._check_node()
             msg = RpcMessage(

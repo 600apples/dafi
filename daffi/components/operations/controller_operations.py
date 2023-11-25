@@ -6,8 +6,17 @@ from daffi.settings import WELL_KNOWN_CALLBACKS, DEBUG
 from daffi.utils.custom_types import K, GlobalCallback
 from daffi.utils.misc import search_remote_callback_in_mapping, call_after
 from daffi.components.operations.streams_store import StreamPairStore
-from daffi.components.operations.channel_store import ChannelStore, ChannelPipe, FreezableQueue
-from daffi.components.proto.message import RpcMessage, ServiceMessage, MessageFlag, RemoteError
+from daffi.components.operations.channel_store import (
+    ChannelStore,
+    ChannelPipe,
+    FreezableQueue,
+)
+from daffi.components.proto.message import (
+    RpcMessage,
+    ServiceMessage,
+    MessageFlag,
+    RemoteError,
+)
 from daffi.components.operations.ttl_store import OneToOneCallStore, OneToManyCallStore
 
 
@@ -32,12 +41,21 @@ class ControllerOperations:
         async for proc, chan in self.channel_store.iterate():
             if proc != proc_name:
                 # Send updated self.controller_callback_mapping to all processes except transmitter process.
-                await chan.send(ServiceMessage(flag=MessageFlag.CONTROLLER_STOPPED_UNEXPECTEDLY, receiver=proc))
+                await chan.send(
+                    ServiceMessage(
+                        flag=MessageFlag.CONTROLLER_STOPPED_UNEXPECTEDLY, receiver=proc
+                    )
+                )
 
     async def on_channel_close(
-        self, channel: ChannelPipe, process_identificator: str, on_disconnect: Callable[[str], Any]
+        self,
+        channel: ChannelPipe,
+        process_identificator: str,
+        on_disconnect: Callable[[str], Any],
     ):
-        self.logger.debug(f"Channel {channel} (process={process_identificator}) is locked before closing")
+        self.logger.debug(
+            f"Channel {channel} (process={process_identificator}) is locked before closing"
+        )
         channel.lock()
         # Give 5 seconds to reconnect. If process unable to recconect within 5 seconds then channel will be
         # deleted and all other processes will be notified channel is not available anymore.
@@ -55,9 +73,14 @@ class ControllerOperations:
             await self._on_channel_close(chan, chan.ident)
 
     async def _on_channel_close(
-        self, channel: ChannelPipe, process_identificator: str, on_disconnect: Optional[Callable[[str], Any]] = None
+        self,
+        channel: ChannelPipe,
+        process_identificator: str,
+        on_disconnect: Optional[Callable[[str], Any]] = None,
     ):
-        self.logger.debug(f"Lock expired. Channel {channel} (process={process_identificator}) is about to be deleted.")
+        self.logger.debug(
+            f"Lock expired. Channel {channel} (process={process_identificator}) is about to be deleted."
+        )
         self.closed_procs.pop(process_identificator, None)
         del_proc = await self.channel_store.find_process_name_by_channel(channel)
         if on_disconnect:
@@ -87,7 +110,9 @@ class ControllerOperations:
                             transmitter=del_proc,
                             receiver=proc,
                             uuid=msg_uuid,
-                            error=RemoteError(info=f"Remote process {del_proc} stopped unexpectedly."),
+                            error=RemoteError(
+                                info=f"Remote process {del_proc} stopped unexpectedly."
+                            ),
                         )
                     )
 
@@ -98,7 +123,9 @@ class ControllerOperations:
             if awaited_messages:
                 for msg_uuid in awaited_messages:
                     _, aggregated_result = self.awaited_broadcast_procs[msg_uuid]
-                    aggregated_result[del_proc] = RemoteError(info=f"Remote process {del_proc} stopped unexpectedly.")
+                    aggregated_result[del_proc] = RemoteError(
+                        info=f"Remote process {del_proc} stopped unexpectedly."
+                    )
                     if all(res != RESULT_EMPTY for res in aggregated_result.values()):
                         await chan.send(
                             RpcMessage(
@@ -117,7 +144,9 @@ class ControllerOperations:
                 if awaited_messages:
                     for msg_uuid in awaited_messages:
                         _, aggregated_result = self.awaited_stream_procs[msg_uuid]
-                        err = RemoteError(info=f"Remote process {del_proc} stopped unexpectedly.")
+                        err = RemoteError(
+                            info=f"Remote process {del_proc} stopped unexpectedly."
+                        )
                         await chan.send(
                             RpcMessage(
                                 flag=MessageFlag.STREAM_ERROR,
@@ -129,7 +158,9 @@ class ControllerOperations:
                         )
                         self.awaited_broadcast_procs.pop(msg_uuid, None)
 
-    async def on_handshake(self, msg: ServiceMessage, channel: ChannelPipe, process_identificator: str):
+    async def on_handshake(
+        self, msg: ServiceMessage, channel: ChannelPipe, process_identificator: str
+    ):
         msg.loads()
         transmitter = msg.transmitter
         self.controller_callback_mapping[transmitter] = msg.data
@@ -141,15 +172,21 @@ class ControllerOperations:
 
         msg.set_data(self.controller_callback_mapping)
         # Send handshake (callbacks info) to all connected nodes if it is initial handshake (not re-connection)
-        await self.channel_store.add_channel(channel=channel, process_name=msg.transmitter)
-        if not (on_close_chan_task := self.closed_procs.pop(process_identificator, None)):
+        await self.channel_store.add_channel(
+            channel=channel, process_name=msg.transmitter
+        )
+        if not (
+            on_close_chan_task := self.closed_procs.pop(process_identificator, None)
+        ):
             async for proc, chan in self.channel_store.iterate():
                 # Send updated self.controller_callback_mapping to all processes.
                 await chan.send(msg.copy(transmitter=msg.transmitter, receiver=proc))
         else:
             # Process re-connected within 5 seconds. Cancel on_channel_close task.
             on_close_chan_task.cancel()
-            await channel.send(msg.copy(transmitter=msg.transmitter, receiver=msg.receiver))
+            await channel.send(
+                msg.copy(transmitter=msg.transmitter, receiver=msg.receiver)
+            )
 
     async def on_request(self, msg: RpcMessage):
 
@@ -169,13 +206,19 @@ class ControllerOperations:
             if chan := await self.channel_store.get_chan(receiver):
                 if msg.return_result:
                     # Assign transmitter to RpcMessage id in order to redirect result after processing.
-                    await self.awaited_procs.set(key=msg.uuid, value=(transmitter, receiver), ttl=msg.timeout)
+                    await self.awaited_procs.set(
+                        key=msg.uuid, value=(transmitter, receiver), ttl=msg.timeout
+                    )
 
                 await chan.send(msg)
                 if msg.period and trans_chan:
                     # Return back to transmitter info that scheduled task was accepted.
                     await trans_chan.send(
-                        msg.copy(flag=MessageFlag.SCHEDULER_ACCEPT, transmitter=receiver, receiver=transmitter)
+                        msg.copy(
+                            flag=MessageFlag.SCHEDULER_ACCEPT,
+                            transmitter=receiver,
+                            receiver=transmitter,
+                        )
                     )
             else:
                 msg.flag = MessageFlag.UNABLE_TO_FIND_CANDIDATE
@@ -186,7 +229,9 @@ class ControllerOperations:
                 self.logger.error(info)
         else:
             msg.flag = MessageFlag.UNABLE_TO_FIND_CANDIDATE
-            info = f"Unable to find remote process candidate to execute {msg.func_name!r}"
+            info = (
+                f"Unable to find remote process candidate to execute {msg.func_name!r}"
+            )
             msg.set_error(RemoteError(info=info))
             if trans_chan:
                 await trans_chan.send(msg)
@@ -265,7 +310,9 @@ class ControllerOperations:
         # multiple times.
         self.awaited_procs.pop(msg.uuid, None)
         if not (chan := await self.channel_store.get_chan(msg.receiver)):
-            logging.error(f"Unable to send result. Process {msg.receiver!r} is disconnected.")
+            logging.error(
+                f"Unable to send result. Process {msg.receiver!r} is disconnected."
+            )
         else:
             msg.flag = MessageFlag.SUCCESS
             await chan.send(msg)
@@ -278,7 +325,9 @@ class ControllerOperations:
         return_result = msg.return_result
         if return_result:
             aggregated = dict()
-            await self.awaited_broadcast_procs.set(key=msg.uuid, value=(transmitter, aggregated), ttl=msg.timeout)
+            await self.awaited_broadcast_procs.set(
+                key=msg.uuid, value=(transmitter, aggregated), ttl=msg.timeout
+            )
 
         if msg.func_name in WELL_KNOWN_CALLBACKS:
             async for receiver, chan in self.channel_store.iterate():
@@ -290,7 +339,10 @@ class ControllerOperations:
                 await chan.send(msg.copy(receiver=receiver))
         else:
             if data := search_remote_callback_in_mapping(
-                self.controller_callback_mapping, msg.func_name, exclude=transmitter, take_all=True
+                self.controller_callback_mapping,
+                msg.func_name,
+                exclude=transmitter,
+                take_all=True,
             ):
                 for receiver, _ in data:
                     # Take socket of destination process where function/method will be triggered.
@@ -298,7 +350,9 @@ class ControllerOperations:
                         if return_result:
                             aggregated[receiver] = RESULT_EMPTY
                         await chan.send(msg.copy(receiver=receiver))
-                self.logger.debug(f"receivers: {sorted(list(aggregated))} found for callback {msg.func_name}")
+                self.logger.debug(
+                    f"receivers: {sorted(list(aggregated))} found for callback {msg.func_name}"
+                )
 
             else:
                 info = f"Unable to find remote process candidate to execute {msg.func_name!r}"
@@ -318,19 +372,32 @@ class ControllerOperations:
         self.logger.debug(f"Received stream request from transmitter: {transmitter}")
 
         aggregated = dict()
-        await self.awaited_stream_procs.set(key=msg.uuid, value=(transmitter, aggregated), ttl=msg.timeout)
+        await self.awaited_stream_procs.set(
+            key=msg.uuid, value=(transmitter, aggregated), ttl=msg.timeout
+        )
 
         if data := search_remote_callback_in_mapping(
-            self.controller_callback_mapping, msg.func_name, exclude=msg.transmitter, take_all=True
+            self.controller_callback_mapping,
+            msg.func_name,
+            exclude=msg.transmitter,
+            take_all=True,
         ):
             for receiver, _ in data:
                 if chan := await self.channel_store.get_chan(receiver):
                     await chan.send(msg.copy(receiver=receiver))
                     aggregated[receiver] = RESULT_EMPTY
-            await trans_chan.send(msg.copy(flag=MessageFlag.SUCCESS, func_args=(list(aggregated),), data=None))
-            self.logger.debug(f"Found next stream receiver candidates: {list(aggregated)}")
+            await trans_chan.send(
+                msg.copy(
+                    flag=MessageFlag.SUCCESS, func_args=(list(aggregated),), data=None
+                )
+            )
+            self.logger.debug(
+                f"Found next stream receiver candidates: {list(aggregated)}"
+            )
         else:
-            info = f"Unable to find remote process candidate to execute {msg.func_name!r}"
+            info = (
+                f"Unable to find remote process candidate to execute {msg.func_name!r}"
+            )
             self.awaited_stream_procs.pop(msg.uuid, None)
             msg.flag = MessageFlag.UNABLE_TO_FIND_CANDIDATE
 
@@ -382,7 +449,9 @@ class ControllerOperations:
             if DEBUG:
                 info += f"{'-':>10} message represents broadcast operation\n"
                 _, aggregated_result = self.awaited_broadcast_procs[uuid]
-                info += f"{'-':>10} message receivers = {', '.join(aggregated_result)}\n"
+                info += (
+                    f"{'-':>10} message receivers = {', '.join(aggregated_result)}\n"
+                )
                 for receiver, result in aggregated_result.items():
                     if result != RESULT_EMPTY:
                         info += f"{'-':>10} receiver {receiver!r} already delivered result to controller\n"

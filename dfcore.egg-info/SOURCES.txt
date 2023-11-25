@@ -1,0 +1,8 @@
+LICENSE.txt
+README.md
+setup.py
+core/core.zig
+dfcore.egg-info/PKG-INFO
+dfcore.egg-info/SOURCES.txt
+dfcore.egg-info/dependency_links.txt
+dfcore.egg-info/top_level.txt

@@ -34,26 +34,36 @@ class MessageIterator(QueueMixin):
                         yield chunk
                 except Exception as e:
                     if not ResultInf._set_and_trigger(
-                        message.uuid, RemoteError(info=str(e), _origin_traceback=e.__traceback__), completed=True
+                        message.uuid,
+                        RemoteError(info=str(e), _origin_traceback=e.__traceback__),
+                        completed=True,
                     ):
                         traceback.print_exc()
 
-    def send_threadsave(self, message: Message, eta: Optional[Union[int, float]] = None) -> NoReturn:
+    def send_threadsave(
+        self, message: Message, eta: Optional[Union[int, float]] = None
+    ) -> NoReturn:
         self.q.send_threadsave((message, eta))
 
-    async def send(self, message: Message, eta: Optional[Union[int, float]] = None) -> NoReturn:
+    async def send(
+        self, message: Message, eta: Optional[Union[int, float]] = None
+    ) -> NoReturn:
         await self.q.send((message, eta))
 
 
 class ChannelPipe:
-    def __init__(self, send_iterator: MessageIterator, receive_iterator: Generator, ident: str):
+    def __init__(
+        self, send_iterator: MessageIterator, receive_iterator: Generator, ident: str
+    ):
         self.send_iterator = send_iterator
         self.receive_iterator = receive_iterator
         self.ident = ident
         self._locked = False
 
     # create an instance of the iterator
-    async def __aiter__(self) -> Generator[Union[RpcMessage, ServiceMessage], None, None]:
+    async def __aiter__(
+        self,
+    ) -> Generator[Union[RpcMessage, ServiceMessage], None, None]:
         try:
             async for msg in Message.from_message_iterator(self.receive_iterator):
                 yield msg
@@ -63,7 +73,9 @@ class ChannelPipe:
     def lock(self):
         self._locked = True
 
-    def send_threadsave(self, message: Message, eta: Optional[Union[int, float]] = None):
+    def send_threadsave(
+        self, message: Message, eta: Optional[Union[int, float]] = None
+    ):
         self.send_iterator.send_threadsave(message, eta)
 
     async def send(self, message: Message, eta: Optional[Union[int, float]] = None):

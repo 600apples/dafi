@@ -6,7 +6,7 @@ import inspect
 import asyncio
 from uuid import uuid4
 from random import choice
-from functools import partial
+from functools import partial, wraps
 from datetime import datetime
 from queue import Queue
 from contextlib import contextmanager
@@ -47,12 +47,16 @@ class Period(NamedTuple):
             ).fire()
 
         if self.at_time is not None and self.interval is not None:
-            InitializationError("Only 1 time unit is allowed. Provide either 'at_time' or 'interval' argument").fire()
+            InitializationError(
+                "Only 1 time unit is allowed. Provide either 'at_time' or 'interval' argument"
+            ).fire()
 
         if self.at_time is not None:
             now = datetime.utcnow().timestamp()
             if len(self.at_time) > 1000:
-                InitializationError("Too many scheduled at time periods. Provide no more then 1000 timestamps.").fire()
+                InitializationError(
+                    "Too many scheduled at time periods. Provide no more then 1000 timestamps."
+                ).fire()
             if any(i <= now for i in self.at_time):
                 InitializationError(
                     "One or mote timestamps in 'at_time' argument "
@@ -106,7 +110,9 @@ class Singleton(type):
 
     def __call__(cls, *args, **kwargs):
         if cls.__name__ not in cls._instances:
-            cls._instances[cls.__name__] = super(Singleton, cls).__call__(*args, **kwargs)
+            cls._instances[cls.__name__] = super(Singleton, cls).__call__(
+                *args, **kwargs
+            )
         return cls._instances[cls.__name__]
 
     @classmethod
@@ -160,7 +166,9 @@ async def run_in_threadpool(func: Callable[..., Any], *args, **kwargs) -> Any:
     return await to_thread.run_sync(func, *args)
 
 
-async def run_from_working_thread(backend: str, func: Callable[..., Any], *args, **kwargs) -> Any:
+async def run_from_working_thread(
+    backend: str, func: Callable[..., Any], *args, **kwargs
+) -> Any:
     if kwargs:  # no cov
         # run doesn't accept 'kwargs', so bind them in here
         func = partial(func, **kwargs)
@@ -171,7 +179,9 @@ async def run_from_working_thread(backend: str, func: Callable[..., Any], *args,
     return await to_thread.run_sync(dec)
 
 
-async def call_after(eta: int, func: Callable[..., Any], *args, **kwargs) -> asyncio.Task:
+async def call_after(
+    eta: int, func: Callable[..., Any], *args, **kwargs
+) -> asyncio.Task:
     async def _dec():
         await asyncio.sleep(eta)
         result = func(*args, **kwargs)
@@ -208,7 +218,9 @@ def search_remote_callback_in_mapping(
     func_name: str,
     exclude: Optional[Union[str, Sequence]] = None,
     take_all: Optional[bool] = False,
-) -> Optional[Union[Tuple[str, "CallbackExecutor"], List[Tuple[str, "CallbackExecutor"]]]]:
+) -> Optional[
+    Union[Tuple[str, "CallbackExecutor"], List[Tuple[str, "CallbackExecutor"]]]
+]:
 
     if isinstance(exclude, str):
         exclude = [exclude]
@@ -238,3 +250,16 @@ def contains_explicit_return(fn: Callable[..., Any]) -> bool:
         source = code[1]
     refined_source = [line.strip() for line in source.split("\n")]
     return any(exp.startswith("return") for exp in refined_source)
+
+
+def only_once(func):
+    "A decorator that runs a function only once."
+
+    def decorated(*args, **kwargs):
+        try:
+            return decorated._once_result
+        except AttributeError:
+            decorated._once_result = func(*args, **kwargs)
+            return decorated._once_result
+
+    return decorated

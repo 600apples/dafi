@@ -89,7 +89,7 @@ def func_info(func: Callable[P, Any]):
         name = func.origin_name_
     else:
         raise InitializationError(
-            "Unable to retrieve fetcher/callback name. If you have applied additional decorators"
+            "Unable to retrieve callback name. If you have applied additional decorators"
             " to the decorated function consider modifying the order of the decorators."
         )
     return module, name

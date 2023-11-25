@@ -61,7 +61,13 @@ class Scheduler:
                 for ind, ts in enumerate(msg.period.at_time)
             ]
 
-    async def on_interval(self, interval: int, channel: ChannelPipe, msg: RpcMessage, task_ident: TaskIdent):
+    async def on_interval(
+        self,
+        interval: int,
+        channel: ChannelPipe,
+        msg: RpcMessage,
+        task_ident: TaskIdent,
+    ):
         while True:
             await sleep(interval)
             if not await self._remote_func_executor(channel, msg, "interval"):
@@ -73,7 +79,14 @@ class Scheduler:
                 FINISHED_TASKS.append(task_ident.msg_uuid)
                 break
 
-    async def on_at_time(self, ts: int, channel: ChannelPipe, msg: RpcMessage, task_ident: TaskIdent, task_index: int):
+    async def on_at_time(
+        self,
+        ts: int,
+        channel: ChannelPipe,
+        msg: RpcMessage,
+        task_ident: TaskIdent,
+        task_index: int,
+    ):
         now = datetime.utcnow().timestamp()
         delta = ts - now
         if delta < 0:
@@ -111,7 +124,9 @@ class Scheduler:
                 # Remove at time tasks list only when last task is completed
                 SCHEDULER_AT_TIME_TASKS.pop(task_ident, None)
 
-    async def _remote_func_executor(self, channel: ChannelPipe, msg: RpcMessage, condition: str) -> bool:
+    async def _remote_func_executor(
+        self, channel: ChannelPipe, msg: RpcMessage, condition: str
+    ) -> bool:
         error = None
         success = True
         remote_callback = LOCAL_CALLBACK_MAPPING.get(msg.func_name)
@@ -123,12 +138,20 @@ class Scheduler:
 
         try:
             if remote_callback.is_async:
-                await run_from_working_thread(self.async_backend, remote_callback, *args, **kwargs)
+                await run_from_working_thread(
+                    self.async_backend, remote_callback, *args, **kwargs
+                )
             else:
                 await run_in_threadpool(remote_callback, *args, **kwargs)
-            logger.info(f"Callback {msg.func_name!r} was completed successfully (condition={condition!r}).")
+            logger.info(
+                f"Callback {msg.func_name!r} was completed successfully (condition={condition!r})."
+            )
         except TypeError as e:
-            if "were given" in str(e) or "got an unexpected" in str(e) or "missing" in str(e):
+            if (
+                "were given" in str(e)
+                or "got an unexpected" in str(e)
+                or "missing" in str(e)
+            ):
                 info = f"{e}. Function signature is: {msg.func_name}{remote_callback.signature}: ..."
                 success = False
             else:

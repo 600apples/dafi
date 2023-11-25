@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Title</title>
+    <script src="io.js"></script>
+</head>
+<body>
+
+<h1 id="elem">Hello from the script!</h1>
+
+<script>
+
+
+// add an appropriate event listener
+// {#window.addEventListener("animalfound", (e) => console.log(e.detail.name));#}
+function delay(ms) {
+    return new Promise(resolve => {
+        setTimeout(resolve, ms);
+    });
+}
+
+
+function getPromiseFromEvent(item, event) {
+  return new Promise((resolve) => {
+    const listener = (tt) => {
+
+      const detail = tt.detail;
+      if (detail.name !== "zzzzzz") {
+        console.log('wrong event')
+        return;
+      }
+
+      item.removeEventListener(event, listener);
+      return resolve(detail);
+    }
+    item.addEventListener(event, listener);
+  })
+}
+
+async function waitForButtonClick() {
+  return  getPromiseFromEvent(window, "animalfound")
+}
+
+async function wt() {
+    const name = await waitForButtonClick()
+    console.log("fond name", name);
+}
+
+wt().then(ev => console.log(ev))
+
+
+console.log("Hello")
+
+
+
+const catFound = new CustomEvent("animalfound", {
+  detail: {
+    name: "cat",
+  },
+});
+const dogFound = new CustomEvent("animalfound", {
+    detail: {
+        name: "dog",
+    },
+});
+
+const zfound = new CustomEvent("animalfound", {
+  detail: {
+    name: "zzzzzz",
+  },
+});
+// dispatch the events
+window.dispatchEvent(catFound);
+
+window.dispatchEvent(dogFound);
+window.dispatchEvent(zfound);
+
+
+
+
+
+
+
+// {#waitForButtonClick()#}
+
+
+</script>
+
+</body>
+</html>

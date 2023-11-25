@@ -1,2 +1,4 @@
 /.lh/*
 /.history/*
+/core/zig-cache/
+/venv/

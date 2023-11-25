@@ -11,7 +11,11 @@ from daffi.components import ComponentsBase
 from daffi.exceptions import GlobalContextError, StopComponentError
 from daffi.components.proto.message import MessageFlag, messager_pb2, ServiceMessage
 from daffi.components.operations.controller_operations import ControllerOperations
-from daffi.components.operations.channel_store import ChannelPipe, MessageIterator, FreezableQueue
+from daffi.components.operations.channel_store import (
+    ChannelPipe,
+    MessageIterator,
+    FreezableQueue,
+)
 
 
 class Controller(ComponentsBase):
@@ -61,7 +65,9 @@ class Controller(ComponentsBase):
             self.ping = asyncio.create_task(self.operations.on_ping())
 
     def on_error(self, exception: Exception) -> NoReturn:
-        self.logger.debug(f"{self.__class__.__name__} experienced error: {exception}. {type(exception)}")
+        self.logger.debug(
+            f"{self.__class__.__name__} experienced error: {exception}. {type(exception)}"
+        )
 
     # ------------------------------------------------------------------------------------------------------------------
     # Message operations
@@ -105,7 +111,9 @@ class Controller(ComponentsBase):
             elif msg.flag == MessageFlag.RECEIVER_ERROR:
                 await self.operations.on_receiver_error(msg)
 
-        await self.operations.on_channel_close(channel, process_identificator, self.execute_on_disconnect)
+        await self.operations.on_channel_close(
+            channel, process_identificator, self.execute_on_disconnect
+        )
 
     async def communicate(self, request_iterator, context):
         try:
@@ -116,7 +124,11 @@ class Controller(ComponentsBase):
             GlobalContextError("Process name is not provided in metadata.").fire()
 
         message_iterator = MessageIterator(await FreezableQueue.factory(ident))
-        channel = ChannelPipe(receive_iterator=request_iterator, send_iterator=message_iterator, ident=ident)
+        channel = ChannelPipe(
+            receive_iterator=request_iterator,
+            send_iterator=message_iterator,
+            ident=ident,
+        )
 
         asyncio.create_task(self.handle_commands(channel, ident))
         async for message in channel.send_iterator:
@@ -134,7 +146,9 @@ class Controller(ComponentsBase):
         msg_uuid = next(v for k, v in context.invocation_metadata() if k == "uuid")
         converted_msg_uuid = int(msg_uuid)
 
-        with self.stream_store.get_or_create_stream_pair_cm(receiver, msg_uuid) as stream_pair:
+        with self.stream_store.get_or_create_stream_pair_cm(
+            receiver, msg_uuid
+        ) as stream_pair:
             async for msg in request_iterator:
 
                 q_size = stream_pair.q.size
@@ -152,11 +166,15 @@ class Controller(ComponentsBase):
                         )
                         await self.operations.on_stream_throttle(stream_throttle_msg)
                 else:
-                    throttle_time, zerro_marker = divmod(q_size, throttle_threshold_step)
+                    throttle_time, zerro_marker = divmod(
+                        q_size, throttle_threshold_step
+                    )
                     throttle_time /= 15
                     if zerro_marker == 0 and prev_throttle_time != throttle_time:
                         prev_throttle_time = throttle_time
-                        data = self.operations.awaited_stream_procs.get(converted_msg_uuid)
+                        data = self.operations.awaited_stream_procs.get(
+                            converted_msg_uuid
+                        )
                         if data:
                             transmitter, _ = data
                             stream_throttle_msg = ServiceMessage(
@@ -166,7 +184,9 @@ class Controller(ComponentsBase):
                                 uuid=converted_msg_uuid,
                                 data=throttle_time,
                             )
-                            await self.operations.on_stream_throttle(stream_throttle_msg)
+                            await self.operations.on_stream_throttle(
+                                stream_throttle_msg
+                            )
 
                 await stream_pair.send(msg)
             await stream_pair.stop()
@@ -178,6 +198,8 @@ class Controller(ComponentsBase):
         receiver = next(v for k, v in context.invocation_metadata() if k == "receiver")
         msg_uuid = next(v for k, v in context.invocation_metadata() if k == "uuid")
 
-        with self.stream_store.get_or_create_stream_pair_cm(receiver, msg_uuid) as stream_pair:
+        with self.stream_store.get_or_create_stream_pair_cm(
+            receiver, msg_uuid
+        ) as stream_pair:
             async for msg in stream_pair.q.iterate():
                 yield msg

@@ -4,9 +4,8 @@ from typing import Callable
 from typing import Any
 
 from daffi.utils import colors
-from daffi.settings import DEBUG
 
-logging.getLogger("grpc._cython.cygrpc").setLevel(logging.ERROR)
+logging.basicConfig(level=logging.INFO)
 
 
 class DaffiLoggerAdapter(logging.LoggerAdapter):

@@ -39,6 +39,12 @@ with_debug_trace = retry(
     reraise=True,
     retry_error_callback=write_exception_trace,
     retry=retry_if_not_exception_type(
-        (EndOfStream, StopIteration, StopAsyncIteration, StopComponentError, AioRpcError)
+        (
+            EndOfStream,
+            StopIteration,
+            StopAsyncIteration,
+            StopComponentError,
+            AioRpcError,
+        )
     ),
 )

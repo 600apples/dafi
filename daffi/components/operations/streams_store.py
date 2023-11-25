@@ -74,16 +74,22 @@ class StreamPairStore(dict):
             self.delete_stream_pair(*strings)
 
     @contextmanager
-    def request_multi_connection(self, receivers: Union[str, List[str]], msg_uuid: str) -> NoReturn:
+    def request_multi_connection(
+        self, receivers: Union[str, List[str]], msg_uuid: str
+    ) -> NoReturn:
         # Create stream pair group (contains one or more stream pair)
         if isinstance(receivers, str):
             receivers = [receivers]
         stream_pair_group = StreamPairGroup(
-            [self.get_or_create_stream_pair(receiver, msg_uuid) for receiver in receivers]
+            [
+                self.get_or_create_stream_pair(receiver, msg_uuid)
+                for receiver in receivers
+            ]
         )
         # Send all stream pairs to side which accepts connection
         asyncio.run_coroutine_threadsafe(
-            self.stream_pairs_queue.put((stream_pair_group, receivers, msg_uuid)), self.loop
+            self.stream_pairs_queue.put((stream_pair_group, receivers, msg_uuid)),
+            self.loop,
         ).result()
         try:
             self.stream_pair_group_store[msg_uuid] = stream_pair_group

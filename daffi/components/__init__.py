@@ -15,11 +15,22 @@ from contextlib import asynccontextmanager
 from tempfile import gettempdir
 
 
-from grpc import aio, ChannelConnectivity, ssl_channel_credentials, ssl_server_credentials
+from grpc import (
+    aio,
+    ChannelConnectivity,
+    ssl_channel_credentials,
+    ssl_server_credentials,
+)
 from anyio.abc import TaskStatus
 from grpc.aio._call import AioRpcError
 from anyio import TASK_STATUS_IGNORED
-from tenacity import AsyncRetrying, wait_fixed, retry_if_exception_type, RetryCallState, wait_none
+from tenacity import (
+    AsyncRetrying,
+    wait_fixed,
+    retry_if_exception_type,
+    RetryCallState,
+    wait_none,
+)
 
 from daffi.exceptions import StopComponentError, ControllerUnavailable, RemoteCallError
 from daffi.interface import ComponentI
@@ -52,7 +63,9 @@ class UnixBase(ComponentI, grpc_messager.MessagerServiceServicer):
     @cached_property
     def unix_socket(self) -> str:
         self.unix_sock_path = self.base_dir
-        sock = "unix:///" + os.path.join(self.base_dir, self.SOCK_FILE).strip("unix:///")
+        sock = "unix:///" + os.path.join(self.base_dir, self.SOCK_FILE).strip(
+            "unix:///"
+        )
         if os.path.exists(sock):
             os.remove(sock)
         return sock
@@ -78,7 +91,9 @@ class UnixBase(ComponentI, grpc_messager.MessagerServiceServicer):
                 private_key = f.read()
             with open(self.ssl_certificate, "rb") as f:
                 certificate_chain = f.read()
-            server_credentials = ssl_server_credentials(((private_key, certificate_chain),))
+            server_credentials = ssl_server_credentials(
+                ((private_key, certificate_chain),)
+            )
             server.add_secure_port(self.unix_socket, server_credentials)
         else:
             server.add_insecure_port(self.unix_socket)
@@ -88,7 +103,11 @@ class UnixBase(ComponentI, grpc_messager.MessagerServiceServicer):
 
 class TcpBase(ComponentI, grpc_messager.MessagerServiceServicer):
     def __init__(
-        self, host: str, port: Optional[int], ssl_certificate: Optional[os.PathLike], ssl_key: Optional[os.PathLike]
+        self,
+        host: str,
+        port: Optional[int],
+        ssl_certificate: Optional[os.PathLike],
+        ssl_key: Optional[os.PathLike],
     ):
         self.host = host
         self.port = port
@@ -125,14 +144,18 @@ class TcpBase(ComponentI, grpc_messager.MessagerServiceServicer):
                 private_key = f.read()
             with open(self.ssl_certificate, "rb") as f:
                 certificate_chain = f.read()
-            server_credentials = ssl_server_credentials(((private_key, certificate_chain),))
+            server_credentials = ssl_server_credentials(
+                ((private_key, certificate_chain),)
+            )
             server.add_secure_port(listen_addr, server_credentials)
         else:
             server.add_insecure_port(listen_addr)
         await server.start()
         return server
 
-    async def find_random_port(self, min_port: Optional[int] = 49152, max_port: Optional[int] = 65536) -> NoReturn:
+    async def find_random_port(
+        self, min_port: Optional[int] = 49152, max_port: Optional[int] = 65536
+    ) -> NoReturn:
         """
         Bind this controller to a random port in a range.
         If the port range is unspecified, the system will choose the port.
@@ -187,7 +210,9 @@ class ComponentsBase(UnixBase, TcpBase):
 
         self.components.add(self)
 
-        if host:  # Check only host. Full host/port validation already took place before.
+        if (
+            host
+        ):  # Check only host. Full host/port validation already took place before.
             self._base = TcpBase
             self._base.__init__(self, host, port, ssl_certificate, ssl_key)
         else:
@@ -235,7 +260,11 @@ class ComponentsBase(UnixBase, TcpBase):
             # Cancel all existing asyncio tasks if component is the last one in termination chain. Eg if controller
             # is running along with node then controller will be in charge of cleaning.
             self.logger.debug("Cleaning asyncio tasks...")
-            tasks = [task for task in asyncio.all_tasks(asyncio.get_running_loop()) if not task.done()]
+            tasks = [
+                task
+                for task in asyncio.all_tasks(asyncio.get_running_loop())
+                if not task.done()
+            ]
             for task in tasks:
                 task.cancel()
 
@@ -330,7 +359,9 @@ class ComponentsBase(UnixBase, TcpBase):
                 )
         else:
             retry_object.wait = wait_fixed(self.RETRY_TIMEOUT)
-            self.logger.error(f"Unpredictable error during {self.__class__.__name__} execution")
+            self.logger.error(
+                f"Unpredictable error during {self.__class__.__name__} execution"
+            )
             traceback.print_tb(exception.__traceback__)
             self.stop()
             self.check_stopped_components()
@@ -370,7 +401,9 @@ class ComponentsBase(UnixBase, TcpBase):
                 sys.__excepthook__(exc_type, exc_value, exc_traceback)
                 return
                 # Create a critical level log message with info from the except hook.
-            self.logger.error("Unhandled exception:", exc_info=(exc_type, exc_value, exc_traceback))
+            self.logger.error(
+                "Unhandled exception:", exc_info=(exc_type, exc_value, exc_traceback)
+            )
             for component in self.components:
                 component.stop()
             self.check_stopped_components()

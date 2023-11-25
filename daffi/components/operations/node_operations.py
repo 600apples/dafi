@@ -13,17 +13,32 @@ from grpc.aio._call import AioRpcError
 
 from daffi.async_result import ResultInf
 from daffi.utils.custom_types import GlobalCallback, K
-from daffi.components.proto.message import RpcMessage, ServiceMessage, MessageFlag, RemoteError, messager_pb2, Message
+from daffi.components.proto.message import (
+    RpcMessage,
+    ServiceMessage,
+    MessageFlag,
+    RemoteError,
+    messager_pb2,
+    Message,
+)
 
 from daffi.components.scheduler import Scheduler
-from daffi.utils.misc import run_in_threadpool, run_from_working_thread, iterate_in_threadpool
+from daffi.utils.misc import (
+    run_in_threadpool,
+    run_from_working_thread,
+    iterate_in_threadpool,
+)
 
 from daffi.settings import (
     LOCAL_CALLBACK_MAPPING,
     WELL_KNOWN_CALLBACKS,
 )
 from daffi.components.operations.channel_store import ChannelPipe
-from daffi.exceptions import StopComponentError, GlobalContextError, RemoteStoppedUnexpectedly
+from daffi.exceptions import (
+    StopComponentError,
+    GlobalContextError,
+    RemoteStoppedUnexpectedly,
+)
 from daffi.components.operations.streams_store import StreamPairStore
 
 import tblib.pickling_support
@@ -55,7 +70,9 @@ class NodeOperations:
     async def send_handshake(self, process_name: str):
         """Send initial handshake message"""
         local_mapping_without_well_known_callbacks = {
-            k: v.simplified() for k, v in LOCAL_CALLBACK_MAPPING.items() if k not in WELL_KNOWN_CALLBACKS
+            k: v.simplified()
+            for k, v in LOCAL_CALLBACK_MAPPING.items()
+            if k not in WELL_KNOWN_CALLBACKS
         }
         await self.channel.send(
             ServiceMessage(
@@ -66,7 +83,12 @@ class NodeOperations:
         )
 
     async def on_handshake(
-        self, msg: ServiceMessage, task_status: TaskStatus, process_name: str, info: str, on_connect: Callable[[], Any]
+        self,
+        msg: ServiceMessage,
+        task_status: TaskStatus,
+        process_name: str,
+        info: str,
+        on_connect: Callable[[], Any],
     ):
         try:
             msg.loads()
@@ -76,7 +98,11 @@ class NodeOperations:
                 raise StopComponentError()
         else:
             self.node_callback_mapping = msg.data
-            if msg.transmitter == process_name and msg.flag == MessageFlag.HANDSHAKE and not self.handshake_ts:
+            if (
+                msg.transmitter == process_name
+                and msg.flag == MessageFlag.HANDSHAKE
+                and not self.handshake_ts
+            ):
                 self.handshake_ts = time.time()
                 self.logger.info(
                     f"Node has been started successfully. Process identificator: {process_name!r}. Connection info: {info}"
@@ -111,7 +137,9 @@ class NodeOperations:
                     uuid=msg.uuid,
                     func_name=msg.func_name,
                     return_result=msg.return_result,
-                    error=RemoteError(info=info.replace("locally", "on remote process")),
+                    error=RemoteError(
+                        info=info.replace("locally", "on remote process")
+                    ),
                 )
             )
             self.logger.error(info)
@@ -122,7 +150,9 @@ class NodeOperations:
         else:
             with CancelScope(shield=True):
                 _executor = (
-                    self._remote_func_generator_executor if remote_callback.is_generator else self._remote_func_executor
+                    self._remote_func_generator_executor
+                    if remote_callback.is_generator
+                    else self._remote_func_executor
                 )
                 sg.start_soon(
                     _executor,
@@ -260,7 +290,8 @@ class NodeOperations:
     ):
         message_iterator = Message.from_message_iterator(
             stub.stream_from_controller(
-                messager_pb2.Empty(), metadata=[("receiver", message.receiver), ("uuid", str(message.uuid))]
+                messager_pb2.Empty(),
+                metadata=[("receiver", message.receiver), ("uuid", str(message.uuid))],
             )
         )
         error = None
@@ -303,7 +334,9 @@ class NodeOperations:
                         await self.channel.send(msg)
 
                     else:
-                        throttle_time, zerro_marker = divmod(q_size, throttle_threshold_step)
+                        throttle_time, zerro_marker = divmod(
+                            q_size, throttle_threshold_step
+                        )
                         throttle_time /= 5
                         if zerro_marker == 0 and prev_throttle_time != throttle_time:
                             prev_throttle_time = throttle_time
@@ -325,11 +358,11 @@ class NodeOperations:
         stream_poller = asyncio.create_task(_stream_poller())
         try:
             await run_in_threadpool(_stream_executor)
-            self.logger.debug(f"Stop streaming process for function: {message.func_name}. Process = {process_name}")
-        except Exception as e:
-            err_msg = (
-                f"Exception while streaming to function {message.func_name!r} on remote executor [{process_name}]. {e}"
+            self.logger.debug(
+                f"Stop streaming process for function: {message.func_name}. Process = {process_name}"
             )
+        except Exception as e:
+            err_msg = f"Exception while streaming to function {message.func_name!r} on remote executor [{process_name}]. {e}"
             error = RemoteError(info=err_msg, traceback=pickle.dumps(sys.exc_info()))
             self.logger.error(err_msg)
         finally:
@@ -365,11 +398,17 @@ class NodeOperations:
 
         try:
             if remote_callback.is_async:
-                result = await run_from_working_thread(self.async_backend, remote_callback, *fn_args, **fn_kwargs)
+                result = await run_from_working_thread(
+                    self.async_backend, remote_callback, *fn_args, **fn_kwargs
+                )
             else:
                 result = await run_in_threadpool(remote_callback, *fn_args, **fn_kwargs)
         except TypeError as e:
-            if "were given" in str(e) or "got an unexpected" in str(e) or "missing" in str(e):
+            if (
+                "were given" in str(e)
+                or "got an unexpected" in str(e)
+                or "missing" in str(e)
+            ):
                 info = f"{e}. Function signature is: {message.func_name}{remote_callback.signature}: ..."
             else:
                 info = f"Exception while processing function {message.func_name!r} on remote executor [{process_name}]. {e}"
@@ -383,7 +422,9 @@ class NodeOperations:
             try:
                 message_to_return = RpcMessage(
                     **_default_msg_kwargs,
-                    func_args=(result,) if (message.return_result and not error) else None,
+                    func_args=(result,)
+                    if (message.return_result and not error)
+                    else None,
                     return_result=message.return_result,
                     error=error,
                 )
@@ -418,7 +459,9 @@ class NodeOperations:
             if remote_callback.is_async:
                 raise GlobalContextError("Asynchronous generators are not supported")
             else:
-                async for result in iterate_in_threadpool(remote_callback(*fn_args, **fn_kwargs)):
+                async for result in iterate_in_threadpool(
+                    remote_callback(*fn_args, **fn_kwargs)
+                ):
                     try:
                         message_to_return = RpcMessage(
                             **_default_msg_kwargs,
@@ -428,7 +471,9 @@ class NodeOperations:
                     except TypeError as e:
                         info = f"Unsupported return type {type(result)}."
                         self.logger.error(info + f" {e}")
-                        error = RemoteError(info=info, traceback=pickle.dumps(sys.exc_info()))
+                        error = RemoteError(
+                            info=info, traceback=pickle.dumps(sys.exc_info())
+                        )
                         message_to_return = RpcMessage(
                             **_default_msg_kwargs,
                             error=error,
@@ -448,7 +493,11 @@ class NodeOperations:
                     return
 
         except TypeError as e:
-            if "were given" in str(e) or "got an unexpected" in str(e) or "missing" in str(e):
+            if (
+                "were given" in str(e)
+                or "got an unexpected" in str(e)
+                or "missing" in str(e)
+            ):
                 info = f"{e}. Function signature is: {message.func_name}{remote_callback.signature}: ..."
             else:
                 info = f"Exception while processing function {message.func_name!r} on remote executor [{process_name}]. {e}"

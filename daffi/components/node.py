@@ -22,7 +22,11 @@ from daffi.exceptions import (
     StopComponentError,
 )
 from daffi.components.operations.node_operations import NodeOperations
-from daffi.components.operations.channel_store import ChannelPipe, MessageIterator, FreezableQueue
+from daffi.components.operations.channel_store import (
+    ChannelPipe,
+    MessageIterator,
+    FreezableQueue,
+)
 
 
 class Node(ComponentsBase):
@@ -46,8 +50,12 @@ class Node(ComponentsBase):
     async def on_init(self) -> NoReturn:
         process_ident = f"{self.__class__.__name__.lower()}[{self.process_name}]"
         self.logger = get_daffi_logger(process_ident, colors.green)
-        self.operations = NodeOperations(logger=self.logger, async_backend=self.async_backend)
-        self.scheduler = Scheduler(process_name=self.process_name, async_backend=self.async_backend)
+        self.operations = NodeOperations(
+            logger=self.logger, async_backend=self.async_backend
+        )
+        self.scheduler = Scheduler(
+            process_name=self.process_name, async_backend=self.async_backend
+        )
 
     async def on_stop(self) -> NoReturn:
         await super().on_stop()
@@ -70,7 +78,9 @@ class Node(ComponentsBase):
 
     def on_error(self, exception: Exception) -> NoReturn:
         self.operations.handshake_ts = None
-        self.logger.debug(f"{self.__class__.__name__} experienced error: {exception}. {type(exception)}")
+        self.logger.debug(
+            f"{self.__class__.__name__} experienced error: {exception}. {type(exception)}"
+        )
         if channel := getattr(self, "channel", None):
             channel.freeze(10)
         self.operations.on_remote_error()
@@ -85,10 +95,14 @@ class Node(ComponentsBase):
             stub = grpc_messager.MessagerServiceStub(aio_listener)
 
             message_iterator = MessageIterator(await FreezableQueue.factory(self.ident))
-            receive_iterator = stub.communicate(message_iterator, metadata=[("ident", self.ident)])
+            receive_iterator = stub.communicate(
+                message_iterator, metadata=[("ident", self.ident)]
+            )
 
             self.channel = ChannelPipe(
-                send_iterator=message_iterator, receive_iterator=receive_iterator, ident=self.ident
+                send_iterator=message_iterator,
+                receive_iterator=receive_iterator,
+                ident=self.ident,
             )
             self.operations.channel = self.channel
 
@@ -108,11 +122,17 @@ class Node(ComponentsBase):
         async for msg in self.channel:
             if msg.flag in (MessageFlag.HANDSHAKE, MessageFlag.UPDATE_CALLBACKS):
                 await self.operations.on_handshake(
-                    msg, task_status, self.process_name, self.info, self.execute_on_connect
+                    msg,
+                    task_status,
+                    self.process_name,
+                    self.info,
+                    self.execute_on_connect,
                 )
 
             elif msg.flag in (MessageFlag.REQUEST, MessageFlag.BROADCAST):
-                await self.operations.on_request(msg, sg, self.process_name, self.scheduler)
+                await self.operations.on_request(
+                    msg, sg, self.process_name, self.scheduler
+                )
 
             elif msg.flag == MessageFlag.SUCCESS:
                 await self.operations.on_success(msg, self.scheduler)
@@ -166,9 +186,15 @@ class Node(ComponentsBase):
 
     async def read_streams(self, sg: TaskGroup, stub):
         while True:
-            stream_pair_group, receivers, msg_uuid = await self.stream_store.accept_multi_connection()
+            (
+                stream_pair_group,
+                receivers,
+                msg_uuid,
+            ) = await self.stream_store.accept_multi_connection()
             for stream_pair, receiver in zip(stream_pair_group, receivers):
                 sg.start_soon(self.fire_stream, stream_pair, msg_uuid, receiver, stub)
 
     async def fire_stream(self, stream_pair, msg_uuid: str, receiver: str, stub):
-        await stub.stream_to_controller(stream_pair, metadata=[("receiver", receiver), ("uuid", msg_uuid)])
+        await stub.stream_to_controller(
+            stream_pair, metadata=[("receiver", receiver), ("uuid", msg_uuid)]
+        )

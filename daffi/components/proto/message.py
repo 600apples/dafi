@@ -1,7 +1,19 @@
 import logging
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field, fields, replace
-from typing import Optional, Tuple, Dict, List, ClassVar, Set, Generator, Union, Any, AsyncIterable, NoReturn
+from typing import (
+    Optional,
+    Tuple,
+    Dict,
+    List,
+    ClassVar,
+    Set,
+    Generator,
+    Union,
+    Any,
+    AsyncIterable,
+    NoReturn,
+)
 
 import dill
 
@@ -53,11 +65,16 @@ class Message(ABC):
 
                 if not merged_message:
                     cls = RpcMessage
-                    payload = {f.name: getattr(realm, f.name) for f in fields(cls) if f.name not in cls.__data_fields__}
+                    payload = {
+                        f.name: getattr(realm, f.name)
+                        for f in fields(cls)
+                        if f.name not in cls.__data_fields__
+                    }
                     payload["data"] = [data]
                     if realm.HasField("period"):
                         payload["period"] = Period(
-                            at_time=realm.period.at_time.value, interval=realm.period.interval.value
+                            at_time=realm.period.at_time.value,
+                            interval=realm.period.interval.value,
                         )
                     else:
                         payload["period"] = None
@@ -71,7 +88,11 @@ class Message(ABC):
 
                 if not merged_message:
                     cls = ServiceMessage
-                    payload = {f.name: getattr(realm, f.name) for f in fields(cls) if f.name not in cls.__data_fields__}
+                    payload = {
+                        f.name: getattr(realm, f.name)
+                        for f in fields(cls)
+                        if f.name not in cls.__data_fields__
+                    }
                     payload["data"] = [data]
                     payload["_loaded"] = False
                     merged_message = cls(**payload)
@@ -83,7 +104,11 @@ class Message(ABC):
                 merged_message = None
 
     def to_dict(self) -> Dict[str, Any]:
-        return {f.name: getattr(self, f.name) for f in fields(self) if f.name not in self.__data_fields__}
+        return {
+            f.name: getattr(self, f.name)
+            for f in fields(self)
+            if f.name not in self.__data_fields__
+        }
 
     def copy(self, **changes):
         return replace(self, **changes)
@@ -122,7 +147,9 @@ class ServiceMessage(Message):
                     f"Size {data_len} is too big for message. Use messages no more then {BYTES_LIMIT} of size."
                 ).fire()
 
-            slices = [slice(i, i + BYTES_CHUNK) for i in range(0, data_len, BYTES_CHUNK)]
+            slices = [
+                slice(i, i + BYTES_CHUNK) for i in range(0, data_len, BYTES_CHUNK)
+            ]
             self.data = [raw_data[sl] for sl in slices]
 
         number_of_chunks = len(self.data)
@@ -164,7 +191,14 @@ class ServiceMessage(Message):
 
 @dataclass
 class RpcMessage(ServiceMessage):
-    __data_fields__: ClassVar[Set[str]] = {"func_args", "func_kwargs", "error", "data", "_loaded", "period"}
+    __data_fields__: ClassVar[Set[str]] = {
+        "func_args",
+        "func_kwargs",
+        "error",
+        "data",
+        "_loaded",
+        "period",
+    }
 
     return_result: Optional[bool] = True
     func_name: Optional[str] = ""
@@ -182,7 +216,9 @@ class RpcMessage(ServiceMessage):
         if not self.data:
             raw_data = dill.dumps((self.func_args, self.func_kwargs, self.error))
             data_len = len(raw_data)
-            slices = [slice(i, i + BYTES_CHUNK) for i in range(0, data_len, BYTES_CHUNK)]
+            slices = [
+                slice(i, i + BYTES_CHUNK) for i in range(0, data_len, BYTES_CHUNK)
+            ]
             self.data = [raw_data[sl] for sl in slices]
 
         number_of_chunks = len(self.data)
@@ -193,14 +229,20 @@ class RpcMessage(ServiceMessage):
             period_condition = (
                 {"at_time": messager_pb2.AtTimeCondition(value=self.period.at_time)}
                 if self.period.at_time
-                else {"interval": messager_pb2.IntervalCondition(value=self.period.interval)}
+                else {
+                    "interval": messager_pb2.IntervalCondition(
+                        value=self.period.interval
+                    )
+                }
             )
         return (
             messager_pb2.Message(
                 rpc_realm=messager_pb2.RpcRealm(
                     **payload,
                     data=fd,
-                    period=messager_pb2.Period(**period_condition) if self.period else None,
+                    period=messager_pb2.Period(**period_condition)
+                    if self.period
+                    else None,
                     complete_marker=ind == number_of_chunks,
                 )
             )
@@ -217,7 +259,9 @@ class RpcMessage(ServiceMessage):
 
     def loads(self):
         if self.data is not None:
-            self.func_args, self.func_kwargs, self.error = dill.loads(b"".join(self.data))
+            self.func_args, self.func_kwargs, self.error = dill.loads(
+                b"".join(self.data)
+            )
             self.data = None
 
     def set_error(self, error: RemoteError) -> NoReturn:

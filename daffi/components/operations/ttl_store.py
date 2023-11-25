@@ -15,7 +15,9 @@ class OneToOneCallStore(TttStore, Mapping[MsgUUID, Tuple[Transmitter, Receiver]]
 
     def on_delete(self, proc: str) -> DefaultDict[Transmitter, List[MsgUUID]]:
         # Find all messages that proc, scheduled for deletion is awaiting
-        awaited_by_del_process = [uuid for uuid, (trans, rec) in self.items() if trans == proc]
+        awaited_by_del_process = [
+            uuid for uuid, (trans, rec) in self.items() if trans == proc
+        ]
 
         # Delete all messages that scheduled for deletion process is awaiting.
         for uuid in awaited_by_del_process:
@@ -24,16 +26,24 @@ class OneToOneCallStore(TttStore, Mapping[MsgUUID, Tuple[Transmitter, Receiver]]
         # Find all transmitters that sent request and currently
         # wait for result from process that are scheduled for deletion
         awaited_transmitters = defaultdict(list)
-        [awaited_transmitters[trans].append(uuid) for uuid, (trans, rec) in self.items() if rec == proc]
+        [
+            awaited_transmitters[trans].append(uuid)
+            for uuid, (trans, rec) in self.items()
+            if rec == proc
+        ]
         return awaited_transmitters
 
 
-class OneToManyCallStore(TttStore, Mapping[MsgUUID, Tuple[Transmitter, Dict[Receiver, MsgResult]]]):
+class OneToManyCallStore(
+    TttStore, Mapping[MsgUUID, Tuple[Transmitter, Dict[Receiver, MsgResult]]]
+):
     """OneToManyCallStore represents communication between one Transmitter and many Receivers (broadcast or stream)"""
 
     def on_delete(self, proc: str) -> DefaultDict[Transmitter, List[MsgUUID]]:
         # Find all messages that proc, scheduled for deletion is awaiting
-        awaited_by_del_process = [uuid for uuid, (trans, _) in self.items() if trans == proc]
+        awaited_by_del_process = [
+            uuid for uuid, (trans, _) in self.items() if trans == proc
+        ]
 
         # Delete all messages that scheduled for deletion process is awaiting.
         for uuid in awaited_by_del_process:
@@ -42,5 +52,9 @@ class OneToManyCallStore(TttStore, Mapping[MsgUUID, Tuple[Transmitter, Dict[Rece
         # Find all transmitters that sent request and currently
         # wait for result from process that are scheduled for deletion
         awaited_transmitters = defaultdict(list)
-        [awaited_transmitters[trans].append(uuid) for uuid, (trans, agg_msg) in self.items() if proc in agg_msg]
+        [
+            awaited_transmitters[trans].append(uuid)
+            for uuid, (trans, agg_msg) in self.items()
+            if proc in agg_msg
+        ]
         return awaited_transmitters

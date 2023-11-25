@@ -31,7 +31,9 @@ class FreezableQueue(AbstractQueue):
 
         self._queue = Queue()
         self._queue._loop = self.loop
-        self._is_frozen = False  # Flag that indicated whether currently queue receiving is frozen.
+        self._is_frozen = (
+            False  # Flag that indicated whether currently queue receiving is frozen.
+        )
         self._closed = False
 
     @property
@@ -55,7 +57,9 @@ class FreezableQueue(AbstractQueue):
             self.t.cancel()
         except AttributeError:
             ...
-        self.t = self.loop.call_later(timeout, callback=lambda: setattr(self, "_is_frozen", False))
+        self.t = self.loop.call_later(
+            timeout, callback=lambda: setattr(self, "_is_frozen", False)
+        )
 
     def proceed(self) -> NoReturn:
         """Deactivate _is_frozen flag in order to continue serving"""
@@ -122,7 +126,9 @@ class FreezableQueue(AbstractQueue):
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
             try:
-                asyncio.run_coroutine_threadsafe(self._queue.put(data), self.loop).result()
+                asyncio.run_coroutine_threadsafe(
+                    self._queue.put(data), self.loop
+                ).result()
             except RuntimeError:
                 ...
 

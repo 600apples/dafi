@@ -71,7 +71,9 @@ def add_MessagerServiceServicer_to_server(servicer, server):
             response_serializer=messager__pb2.Message.SerializeToString,
         ),
     }
-    generic_handler = grpc.method_handlers_generic_handler("MessagerService", rpc_method_handlers)
+    generic_handler = grpc.method_handlers_generic_handler(
+        "MessagerService", rpc_method_handlers
+    )
     server.add_generic_rpc_handlers((generic_handler,))
 
 

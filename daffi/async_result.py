@@ -71,7 +71,9 @@ class AsyncResult(ResultInf):
         self._ready = thEvent()
 
     def __str__(self):
-        return f"{self.__class__.__name__} (func_name={self.func_name}, uuid={self.uuid})"
+        return (
+            f"{self.__class__.__name__} (func_name={self.func_name}, uuid={self.uuid})"
+        )
 
     __repr__ = __str__
 
@@ -177,7 +179,11 @@ class SchedulerTask(AsyncResult):
     _scheduler_type: SchedulerTaskType = None
 
     def cancel(self) -> NoReturn:
-        self._ipc.cancel_scheduler(remote_process=self._transmitter, msg_uuid=self.uuid, func_name=self.func_name)
+        self._ipc.cancel_scheduler(
+            remote_process=self._transmitter,
+            msg_uuid=self.uuid,
+            func_name=self.func_name,
+        )
 
     def get(self) -> "SchedulerTask":
         self._transmitter = super().get()
@@ -244,7 +250,9 @@ class IterableAsyncResult(AsyncResult):
             while True:
                 wait = None if timeout is None else timeout_sentinel - time.time()
                 try:
-                    result, completed = await run_in_threadpool(self._queue.get, timeout=wait)
+                    result, completed = await run_in_threadpool(
+                        self._queue.get, timeout=wait
+                    )
                 except Empty:
                     TimeoutError(f"Function {self.func_name} result timed out").fire()
                 else:
@@ -260,7 +268,9 @@ class IterableAsyncResult(AsyncResult):
             self.result = self._awaited_results.pop(self.uuid)
 
     @classmethod
-    def _set_and_trigger(cls, msg_uuid: int, result: Any, completed: Optional[bool] = True) -> NoReturn:
+    def _set_and_trigger(
+        cls, msg_uuid: int, result: Any, completed: Optional[bool] = True
+    ) -> NoReturn:
         AsyncResult._awaited_results[msg_uuid]._set((result, completed))
 
     def _set(self, item: Tuple):

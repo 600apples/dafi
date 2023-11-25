@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Title</title>
+    <script src="../app.js"></script>
+</head>
+<body>
+<script>
+
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+
+    window.onload = async function () {
+        const df = new DaffiClient("my app");
+        let conn = await df.connect();
+
+        function* my_method() {
+            yield "hello"
+            yield "hello"
+            yield "hello"
+            yield "hello"
+            yield "hello"
+        }
+
+
+                const result = await conn.stream({serde: "raw"}).my_method(my_method);
+                await sleep(30)
+                console.log(result)
+
+
+
+
+    }
+
+
+</script>
+
+</body>
+</html>
